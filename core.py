@@ -25,13 +25,75 @@ import datetime
 from supabase import create_client, Client
 from cryptography.fernet import Fernet
 
+# === 🔑 Secrets フォールバック（Streamlit Secrets → 環境変数 → .env） ===
+# ローカル開発など st.secrets が使えない環境では os.environ / .env を参照する。
 try:
-    supabase: Client = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
-    hasher = hashlib.sha256(st.secrets["MASTER_ENCRYPTION_KEY"].encode('utf-8')).digest()
+    from dotenv import load_dotenv
+    load_dotenv()
+except Exception:
+    pass
+
+def get_secret(key, default=""):
+    """st.secrets が無い環境では os.environ / .env にフォールバックして値を取得する。"""
+    try:
+        if key in st.secrets and st.secrets[key] not in (None, ""):
+            return st.secrets[key]
+    except Exception:
+        pass
+    return os.environ.get(key, default)
+
+# === 🤖 Agent Engine（マルチAI ＆ ツール実行）を読み込む =====================
+# 失敗してもアプリ全体が落ちないよう、フォールバック実装を必ず用意する。
+try:
+    import agent
+    from agent import get_ai_response, run_agent, execute_tool, TOOLS, describe_pending
+    AGENT_AVAILABLE = True
+except Exception as _agent_err:
+    AGENT_AVAILABLE = False
+
+    def get_ai_response(prompt_or_messages, tools=None, model=None, provider=None):
+        """フォールバック：Gemini を直接呼ぶだけの簡易版（agent.py 読込失敗時）。"""
+        try:
+            key = ""
+            try:
+                key = st.session_state.get("global_api_keys", {}).get("gemini", "")
+            except Exception:
+                pass
+            if not key:
+                key = get_secret("GEMINI_API_KEY")
+            if not key:
+                return "⚠️ AIのAPIキーが設定されていません。Settings → Secure Vault で設定してください。"
+            genai.configure(api_key=key)
+            text = prompt_or_messages if isinstance(prompt_or_messages, str) else \
+                "\n".join(m.get("content", "") for m in prompt_or_messages)
+            return genai.GenerativeModel(model or "gemini-2.5-flash").generate_content(text).text
+        except Exception as e:
+            return f"⚠️ AI呼び出しエラー: {e}"
+
+    def run_agent(user_input, chat_history=None):
+        chat_history = chat_history or []
+        resp = get_ai_response(user_input)
+        return resp, chat_history + [
+            {"role": "user", "content": user_input},
+            {"role": "assistant", "content": resp},
+        ], None
+
+    def execute_tool(tool_name, params):
+        return "⚠️ エージェント機能が読み込めませんでした。"
+
+    def describe_pending(pending):
+        return ""
+
+    TOOLS = []
+
+try:
+    supabase: Client = create_client(get_secret("SUPABASE_URL"), get_secret("SUPABASE_KEY"))
+    hasher = hashlib.sha256(get_secret("MASTER_ENCRYPTION_KEY").encode('utf-8')).digest()
     cipher_suite = Fernet(base64.urlsafe_b64encode(hasher))
     DB_CONNECTED = True
 except Exception as e:
     DB_CONNECTED = False
+    supabase = None
 
 def load_vault():
     if not DB_CONNECTED: return {}
@@ -61,6 +123,13 @@ if "global_api_keys" not in st.session_state:
     st.session_state.global_api_keys = {}
     vd = load_vault()
     st.session_state.global_api_keys = vd.get("api_keys", {})
+
+# === 🧠 全ページ共通のAI会話履歴（ページ移動で文脈が消えないようにする） ===
+if "global_chat_history" not in st.session_state:
+    st.session_state.global_chat_history = []
+# 外部に作用する操作（カレンダー登録・通知）の承認待ちアクション
+if "pending_action" not in st.session_state:
+    st.session_state.pending_action = None
 
 st.set_page_config(page_title="AIbou", page_icon="❖", layout="wide")
 
@@ -194,8 +263,9 @@ if st.sidebar.button("Logout"):
 # ==========================================
 # 🧠 3. バックグラウンド接続 (Fail-Safe 実装済)
 # ==========================================
-if "GEMINI_API_KEY" in st.secrets:
-    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+_boot_gemini_key = get_secret("GEMINI_API_KEY")
+if _boot_gemini_key:
+    genai.configure(api_key=_boot_gemini_key)
 
 # 🚨 新機能：スプレッドシートがエラーの時にアプリを落とさない「ダミー生成器」
 class DummySheet:
@@ -477,6 +547,20 @@ def create_calendar_event(service, title, start_time, end_time):
         return True
     except Exception as e:
         return False
+
+# ==========================================
+# 🤖 Agent Engine に道具（カレンダー・シート・DB）を注入
+# ==========================================
+if AGENT_AVAILABLE:
+    try:
+        agent.register_services(
+            sheet=sheet,
+            get_calendar_service=get_calendar_service,
+            create_calendar_event=create_calendar_event,
+            supabase=(supabase if DB_CONNECTED else None),
+        )
+    except Exception:
+        pass
 
 # ==========================================
 # 🖥️ 4. メイン画面の表示 (モジュール・ルーター)

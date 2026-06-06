@@ -84,10 +84,10 @@ st.markdown("""
 
 st.markdown("<h2 class='hub-title'>⬡ THE FORGE OS</h2>", unsafe_allow_html=True)
 
-if "chat_history" not in st.session_state: st.session_state.chat_history = []
+if "global_chat_history" not in st.session_state: st.session_state.global_chat_history = []
 if "ai_voice_base64" not in st.session_state: st.session_state.ai_voice_base64 = None
 if "just_generated_audio" not in st.session_state: st.session_state.just_generated_audio = False
-if "pending_event" not in st.session_state: st.session_state.pending_event = None 
+if "pending_action" not in st.session_state: st.session_state.pending_action = None
 
 v_data = st.session_state.ai_voice_base64 if st.session_state.ai_voice_base64 else ""
 autoplay_attr = "autoplay" if st.session_state.just_generated_audio else ""
@@ -128,8 +128,8 @@ with col_core:
     
     if st.session_state.hub_view_mode == "CORE":
         with st.container(height=280, border=False):
-            for m in st.session_state.chat_history:
-                with st.chat_message(m["role"], avatar=m["avatar"]):
+            for m in st.session_state.global_chat_history:
+                with st.chat_message(m["role"], avatar=m.get("avatar", "🤖")):
                     st.markdown(m["content"])
 
 with col_right:
@@ -150,28 +150,25 @@ with col_right:
             if st.button("Settings ＜", use_container_width=True): st.session_state.current_mode = "Settings"; st.rerun()
 
 # ------------------------------------------
-# 🚨 カレンダー機能・マイク・AIチャット処理
+# 🚨 承認ゲート（外部に作用する操作）・マイク・AIチャット処理
 # ------------------------------------------
-if st.session_state.pending_event:
-    pe = st.session_state.pending_event
-    st.warning(f"📅 以下の予定をカレンダーに登録しますか？\n\n**{pe['title']}**\n開始: {pe['start']}\n終了: {pe['end']}")
+# カレンダー登録・通知送信など「外部に作用する操作」はAIが即実行せず、
+# ここでボスの承認（Approve）を得てから execute_tool() で実行する。
+if st.session_state.pending_action:
+    pa = st.session_state.pending_action
+    st.warning(f"⚠️ 以下の操作を実行しますか？\n\n{describe_pending(pa)}")
     c1, c2 = st.columns(2)
     with c1:
-        if st.button("✅ 登録する (Approve)", use_container_width=True, key="cal_approve"):
-            with st.spinner("カレンダーに登録中..."):
-                cal_json = st.session_state.global_api_keys.get("google_calendar", "")
-                cal_service = get_calendar_service(cal_json)
-                success = create_calendar_event(cal_service, pe['title'], pe['start'], pe['end'])
-                if success:
-                    st.session_state.chat_history.append({"role": "assistant", "avatar": "🤖", "content": f"📅 「{pe['title']}」をカレンダーに登録しました！"})
-                else:
-                    st.session_state.chat_history.append({"role": "assistant", "avatar": "🤖", "content": "❌ カレンダーの登録に失敗しました。VaultのJSON設定を確認してください。"})
-            st.session_state.pending_event = None
+        if st.button("✅ 実行する (Approve)", use_container_width=True, key="agent_approve"):
+            with st.spinner("実行中..."):
+                result = execute_tool(pa["tool"], pa.get("params", {}))
+                st.session_state.global_chat_history.append({"role": "assistant", "avatar": "🤖", "content": result})
+            st.session_state.pending_action = None
             st.rerun()
     with c2:
-        if st.button("❌ キャンセル (Reject)", use_container_width=True, key="cal_reject"):
-            st.session_state.chat_history.append({"role": "assistant", "avatar": "🤖", "content": "登録をキャンセルしました。"})
-            st.session_state.pending_event = None
+        if st.button("❌ キャンセル (Reject)", use_container_width=True, key="agent_reject"):
+            st.session_state.global_chat_history.append({"role": "assistant", "avatar": "🤖", "content": "操作をキャンセルしました。"})
+            st.session_state.pending_action = None
             st.rerun()
 
 st.markdown("""
@@ -187,59 +184,44 @@ with col2:
     # 音声入力マイクをコアの直下に配置
     spoken_text = speech_to_text(language='ja', start_prompt="◈ PUSH TO TALK", stop_prompt="⬡ TAP TO SEND", use_container_width=True, just_once=True, key='STT')
 
-if not st.session_state.pending_event:
+if not st.session_state.pending_action:
     if spoken_text:
-        st.session_state.chat_history.append({"role": "user", "avatar": "👤", "content": spoken_text})
+        st.session_state.global_chat_history.append({"role": "user", "avatar": "👤", "content": spoken_text})
         st.rerun()
 
     if prompt := st.chat_input("/// コマンドを入力してください、ボス", key="console_input"):
-        st.session_state.chat_history.append({"role": "user", "avatar": "👤", "content": prompt})
+        st.session_state.global_chat_history.append({"role": "user", "avatar": "👤", "content": prompt})
         st.rerun()
 
-if st.session_state.chat_history and st.session_state.chat_history[-1]["role"] == "user" and not st.session_state.pending_event:
-    last_prompt = st.session_state.chat_history[-1]["content"]
+if st.session_state.global_chat_history and st.session_state.global_chat_history[-1]["role"] == "user" and not st.session_state.pending_action:
+    last_prompt = st.session_state.global_chat_history[-1]["content"]
+    prior_history = [
+        {"role": m["role"], "content": m["content"]}
+        for m in st.session_state.global_chat_history[:-1]
+        if m["role"] in ("user", "assistant")
+    ]
     with st.chat_message("assistant", avatar="◈"):
         with st.spinner(" "):
-            gemini_key = st.session_state.global_api_keys.get("gemini", "")
-            if gemini_key:
-                genai.configure(api_key=gemini_key)
-            
-            now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            system_instruction = f"""
-            あなたは総合システム「THE FORGE OS」全体を統括するマスターAI（J.A.R.V.I.S.型）です。
-            ボスの右腕としてあらゆる相談、技術的な質問、日常の会話に高度な知性と端的な言葉で対応してください。
-            絵文字は一切使用せず、システムライクで冷静なトーンを維持してください。
+            # 🤖 エージェント本体：マルチAI＋ツール実行。
+            #    カレンダー登録や通知など外部に作用する操作は pending として返り、
+            #    上の承認ゲートでボスの許可を得てから実行される。
+            ai_text, _updated, pending = run_agent(last_prompt, prior_history)
+            if pending:
+                st.session_state.pending_action = pending
 
-            【現在の状況】
-            現在時刻: {now_str}
-
-            【カレンダー登録時のシステムコマンド（絶対ルール）】
-            会話の流れでユーザーから「〇〇の予定を追加して」「アポを入れといて」と明確に頼まれた場合【のみ】、返答の最後に以下の隠しコマンドを出力してください。普段の会話では絶対に出力しないでください。
-            形式: [CALENDAR_ADD: 予定のタイトル | YYYY-MM-DDTHH:MM:00 | YYYY-MM-DDTHH:MM:00]
-            """
-            
-            # 🚨 制限回避のため gemini-1.5-flash を指定
-            model = genai.GenerativeModel(model_name='gemini-1.5-flash')
-            history_text = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.chat_history[:-1]])
-            full_prompt = system_instruction + "\n\n【会話履歴】\n" + history_text + "\n\nボス: " + last_prompt
-
-            response = model.generate_content(full_prompt)
-            ai_text = response.text
-            
-            match = re.search(r'\[CALENDAR_ADD:\s*(.*?)\s*\|\s*(.*?)\s*\|\s*(.*?)\]', ai_text)
-            if match:
-                title, start, end = match.groups()
-                st.session_state.pending_event = {"title": title.strip(), "start": start.strip(), "end": end.strip()}
-                ai_text = ai_text.replace(match.group(0), "").strip()
-            
             st.markdown(ai_text)
-            
-            clean_text = ai_text.replace("*", "").replace("#", "").replace("`", "").replace("_", "")
-            tts = gTTS(text=clean_text, lang='ja')
-            audio_fp = io.BytesIO()
-            tts.write_to_fp(audio_fp)
-            st.session_state.ai_voice_base64 = base64.b64encode(audio_fp.getvalue()).decode()
-            st.session_state.just_generated_audio = True 
-            
-            st.session_state.chat_history.append({"role": "assistant", "avatar": "◈", "content": ai_text})
+
+            # 🔊 音声読み上げ（ネットワーク不調でも落ちないように保護）
+            try:
+                clean_text = ai_text.replace("*", "").replace("#", "").replace("`", "").replace("_", "")
+                if clean_text.strip():
+                    tts = gTTS(text=clean_text[:200], lang='ja')
+                    audio_fp = io.BytesIO()
+                    tts.write_to_fp(audio_fp)
+                    st.session_state.ai_voice_base64 = base64.b64encode(audio_fp.getvalue()).decode()
+                    st.session_state.just_generated_audio = True
+            except Exception:
+                pass
+
+            st.session_state.global_chat_history.append({"role": "assistant", "avatar": "◈", "content": ai_text})
             st.rerun()

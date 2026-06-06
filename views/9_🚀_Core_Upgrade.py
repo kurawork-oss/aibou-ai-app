@@ -33,7 +33,6 @@ with col_right:
             
             with st.spinner(f"Processing with {target_model}..."):
                 try:
-                    model = genai.GenerativeModel(target_model)
                     # 🚨 AIにターゲットを教育（省略厳禁プロンプト復旧）
                     system_prompt = """
                     あなたは自分自身（Streamlitアプリ）のソースコードを書き換えるAIアーキテクトです。
@@ -56,10 +55,11 @@ with col_right:
                     2. ユーザーの指示箇所以外の既存機能は1ミリも変更・破損させないこと。
                     3. インデントを正確に保ち、Syntax Errorを絶対に出さないこと。
                     """
-                    response = model.generate_content(system_prompt + f"\n\n【指示】\n{upgrade_prompt}\n\n【現状の core.py】\n```python\n{current_app_code}\n```")
-                    
-                    log_match = re.search(r'\[CHANGELOG\](.*?)\[CODE\]', response.text, re.DOTALL)
-                    code_match = re.search(r'```python\n(.*?)\n```', response.text, re.DOTALL)
+                    # 🤖 マルチAI対応：get_ai_response 経由で呼び出す
+                    ai_text = get_ai_response(system_prompt + f"\n\n【指示】\n{upgrade_prompt}\n\n【現状の core.py】\n```python\n{current_app_code}\n```", model=target_model)
+
+                    log_match = re.search(r'\[CHANGELOG\](.*?)\[CODE\]', ai_text, re.DOTALL)
+                    code_match = re.search(r'```python\n(.*?)\n```', ai_text, re.DOTALL)
                     
                     if code_match and log_match:
                         st.session_state.evolution_log = log_match.group(1).strip()

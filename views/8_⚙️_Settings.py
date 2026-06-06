@@ -115,7 +115,9 @@ with col_content:
                             if new_pass and new_pass == new_pass_confirm:
                                 vault_data["master_password_hash"] = hash_password(new_pass)
                                 vault_data["api_keys"] = {
-                                    "gemini": "", "DIFY_API_KEY": "", "google_calendar": "", "slack": "", "line": "",
+                                    "gemini": "", "anthropic": "", "grok": "", "openai": "",
+                                    "DIFY_API_KEY": "", "google_calendar": "", "slack": "", "line": "",
+                                    "discord_webhook": "", "line_webhook": "",
                                     "my_email": "", "my_email_app_password": "",
                                     "gh_token": "", "gh_owner": "", "gh_repo": ""
                                 }
@@ -251,6 +253,18 @@ with col_content:
                     5. 「Create API key in new project」を選択するとキーが生成されます。
                     6. 生成された **`AIza...`** から始まる非常に長い文字列をコピーして、上の欄に貼り付けてください。
                     """)
+
+                st.markdown("##### 🤖 Multi-AI（任意・どれか1つでもOK）")
+                st.caption("複数入れた場合の優先順位：Gemini → Claude → Grok → OpenAI。空欄でも構いません。")
+                new_anthropic = st.text_input("Anthropic (Claude) API Key", value=keys.get("anthropic", ""), type="password", placeholder="sk-ant-...")
+                new_grok = st.text_input("Grok (xAI) API Key", value=keys.get("grok", ""), type="password", placeholder="xai-...")
+                new_openai = st.text_input("OpenAI API Key", value=keys.get("openai", ""), type="password", placeholder="sk-...")
+                with st.expander("ℹ️ 各AI APIキーの取得先"):
+                    st.markdown("""
+                    - **Claude (Anthropic)**: [console.anthropic.com](https://console.anthropic.com/) ＞ 「API Keys」＞「Create Key」（**`sk-ant-`** で始まる）
+                    - **Grok (xAI)**: [console.x.ai](https://console.x.ai/) ＞ 「API Keys」（**`xai-`** で始まる。AIエージェントの**Web検索ツール**にも使われます）
+                    - **OpenAI**: [platform.openai.com/api-keys](https://platform.openai.com/api-keys) ＞ 「Create new secret key」（**`sk-`** で始まる）
+                    """)
                 
                 st.markdown("##### 📅 Schedule (Google Calendar)")
                 new_calendar = st.text_input("Google Calendar JSON (サービスアカウント)", value=keys.get("google_calendar", ""), type="password")
@@ -291,7 +305,19 @@ with col_content:
                     6. 一番下までスクロールし、「チャネルアクセストークン」の **「発行」** ボタンを押します。
                     7. 表示された非常に長い文字列をコピーして、上の欄に貼り付けてください。
                     """)
-                
+
+                st.markdown("##### 🔔 Webhook 通知（AIエージェントの send_notification 用）")
+                new_discord_webhook = st.text_input("Discord Webhook URL", value=keys.get("discord_webhook", ""), type="password", placeholder="https://discord.com/api/webhooks/...")
+                new_line_webhook = st.text_input("LINE Webhook URL（任意）", value=keys.get("line_webhook", ""), type="password")
+                with st.expander("ℹ️ Discord Webhookの作り方（最も簡単）"):
+                    st.markdown("""
+                    1. Discordの対象サーバーで、通知を受け取りたいチャンネルの **「⚙️ 編集」** を開きます。
+                    2. **「連携サービス（Integrations）」** ＞ **「ウェブフック（Webhooks）」** を開きます。
+                    3. **「新しいウェブフック」** を押し、表示された **「ウェブフックURLをコピー」** を押します。
+                    4. コピーしたURL（`https://discord.com/api/webhooks/...`）を上の欄に貼り付けてください。
+                    5. これでAIが「〇〇をDiscordに通知して」の指示で（承認後に）メッセージを送れるようになります。
+                    """)
+
                 st.markdown("##### 🚀 Cloud Deploy (GitHub)")
                 new_gh_token = st.text_input("GitHub Personal Access Token", value=keys.get("gh_token", ""), type="password")
                 new_gh_owner = st.text_input("GitHub Username", value=keys.get("gh_owner", ""), placeholder="例: YamadaTaro")
@@ -316,8 +342,10 @@ with col_content:
                     vault_data["api_keys"] = {
                         "my_email": new_email, "my_email_app_password": new_email_pass,
                         "DIFY_API_KEY": new_dify_key, # 🌟 ここでDifyのキーを保存
-                        "gemini": new_gemini, "google_calendar": new_calendar,
+                        "gemini": new_gemini, "anthropic": new_anthropic, "grok": new_grok, "openai": new_openai,
+                        "google_calendar": new_calendar,
                         "slack": new_slack, "line": new_line,
+                        "discord_webhook": new_discord_webhook, "line_webhook": new_line_webhook,
                         "gh_token": new_gh_token, "gh_owner": new_gh_owner, "gh_repo": new_gh_repo
                     }
                     
