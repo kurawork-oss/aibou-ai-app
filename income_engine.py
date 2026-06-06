@@ -52,6 +52,20 @@ def _ai(prompt, model=None):
         return f"⚠️ AI呼び出しエラー: {e}"
 
 
+# === 実行コンテキスト：Streamlit外（GitHub Actions等）でも落ちないように ====
+# st.session_state は Streamlit ランタイム外では参照できないため、取得できない
+# 場合はモジュール内メモリ(_MEM)にフォールバックする（headless実行を可能にする）。
+_MEM = {"jobs": [], "stats": None}
+
+
+def _session():
+    try:
+        _ = st.session_state
+        return st.session_state
+    except Exception:
+        return None
+
+
 # === 信頼性：指数バックオフ・リトライ（要件 §3.1） ==========================
 # 外部API（AI生成）が一時的に落ちている / レート制限(429)の場合に再試行する。
 # 5秒 → 10秒 → 20秒 → 40秒 → 60秒（最大5回）。成功時はsleepしない。
@@ -190,10 +204,13 @@ def _now():
 
 
 def _local_jobs():
-    """Supabase未接続時のフォールバック保管庫（セッション内のみ）。"""
-    if "income_jobs_local" not in st.session_state:
-        st.session_state.income_jobs_local = []
-    return st.session_state.income_jobs_local
+    """Supabase未接続時のフォールバック保管庫（セッション内 or プロセス内メモリ）。"""
+    ss = _session()
+    if ss is not None:
+        if "income_jobs_local" not in ss:
+            ss.income_jobs_local = []
+        return ss.income_jobs_local
+    return _MEM["jobs"]
 
 
 def list_jobs(status=None, limit=100):
@@ -355,7 +372,10 @@ def get_stats():
         except Exception:
             pass
         return dict(DEFAULT_STATS)
-    return st.session_state.get("income_stats_local", dict(DEFAULT_STATS))
+    ss = _session()
+    if ss is not None:
+        return ss.get("income_stats_local", dict(DEFAULT_STATS))
+    return _MEM["stats"] or dict(DEFAULT_STATS)
 
 
 def update_stats(data):
@@ -367,7 +387,11 @@ def update_stats(data):
             return True
         except Exception:
             return False
-    st.session_state.income_stats_local = merged
+    ss = _session()
+    if ss is not None:
+        ss.income_stats_local = merged
+    else:
+        _MEM["stats"] = merged
     return True
 
 

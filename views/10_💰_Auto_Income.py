@@ -161,6 +161,22 @@ for _job in _pending:
             st.caption(f"{len(_tags)} tags（50個以内）")
             st.write(", ".join(_tags))
 
+        if globals().get("ASSET_AVAILABLE", False):
+            with st.expander("🎨 アセット試作（サムネ / 環境音）"):
+                a1, a2 = st.columns(2)
+                if a1.button("🖼 サムネ生成", key=f"th_{_job['id']}", use_container_width=True):
+                    st.session_state[f"thumb_{_job['id']}"] = generate_thumbnail(
+                        _job.get("theme", ""), subtitle=(_p.get("youtube", {}) or {}).get("title", ""))
+                if a2.button("🔊 環境音10秒", key=f"amb_{_job['id']}", use_container_width=True):
+                    st.session_state[f"amb_{_job['id']}"] = generate_ambient_wav(_job.get("theme", ""), duration_sec=10)
+                _t = st.session_state.get(f"thumb_{_job['id']}")
+                if _t:
+                    st.image(_t, caption="サムネイル試作（1280x720）", use_container_width=True)
+                _aw = st.session_state.get(f"amb_{_job['id']}")
+                if _aw and _aw[0]:
+                    st.caption(f"環境音タイプ: {_aw[1]}")
+                    st.audio(_aw[0], format="audio/wav")
+
         b1, b2 = st.columns(2)
         if b1.button("✅ 承認（配信キューへ）", key=f"ap_{_job['id']}", use_container_width=True):
             st.success(approve_job(_job["id"]))

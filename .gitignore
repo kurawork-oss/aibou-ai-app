@@ -2,3 +2,4 @@ credentials.json
 .streamlit/secrets.toml
 __pycache__/
 .env
+drafts/

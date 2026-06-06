@@ -171,15 +171,43 @@ HUB → AGENCY →「Auto Income」から開く、独立した副業オートメ
 4. **冪等性**：同一テーマの重複生成を `dedupe_key` で防止。生成失敗は `failed` として記録し再試行可能。
 5. **指数バックオフ**：AI生成は 5→10→20→40→60秒・最大5回リトライ（要件§3.1）。
 
-### 8-3. 配信レイヤ（Phase 2 / 未実装）と方針
-実際の配信（YouTube/Shutterstock アップロード、SEOサイト再ビルド等）は、要件定義書どおり
-**GitHub Actions 側の別レイヤ**で `approved` ジョブを拾って実行する設計です（重いFFmpeg/FTPS
-処理を常駐Streamlitから分離）。配信レイヤ実装時の方針：
+### 8-3. アセット生成（`asset_engine.py`）
+APIキー無し・オフラインでも実体アセットを生成できる（numpy / Pillow のみ）。
+- `generate_ambient_wav(theme, duration_sec)`：テーマから種類を推定（雨/焚き火/風/波/ノイズ）し、
+  numpy でノイズ合成 → 16bit WAV バイト列を返す。
+- `generate_thumbnail(title, subtitle)`：PIL でグラデ背景＋テーマ文字のサムネ(1280x720) → PNG。
+- `generate_image(prompt)`：`OPENAI_API_KEY` があれば画像生成API、無ければサムネにフォールバック。
+- Mission Control の各承認待ちジョブに「🎨 アセット試作」（サムネ/環境音プレビュー）を追加。
 
-- 公式手段のみ：YouTube Data API v3 / Shutterstock 公式コントリビューターFTP / 自サイトへの GitHub commit。
-- **note の非公式API自動投稿と「BAN回避（ボット検知回避）」は実装しない**（各規約違反のため）。
-  → note は記事＋アイキャッチを生成して**下書き化し、最後の投稿だけ手動（ワンタップ）**にする規約準拠の代替。
-- 無料枠は各サービスの規約の範囲内で使用（複数アカウントでの上限回避等はしない）。
+### 8-4. 配信レイヤ（`publisher.py` + `scripts/` + GitHub Actions）
+重い外部I/Oを常駐Streamlitから分離し、**バッチ側**で実行する。
+
+| ファイル | 役割 |
+|---|---|
+| `scripts/nightly_generate.py` | 夜間cron。テーマを決めて生成→`income_jobs` に `pending` で積む。**配信はしない（安全）**。 |
+| `publisher.py` | 配信レイヤ。`publish_job()` が note下書き / YouTube / Shutterstock をディスパッチ。指数バックオフ・冪等性・Discord通知つき。 |
+| `scripts/run_publisher.py` | `approved` ジョブを取り出して `publish_job()` を実行（**手動トリガー専用**）。 |
+| `.github/workflows/nightly-generate.yml` | 生成cron（毎日03:00 JST）＋手動。 |
+| `.github/workflows/publish-approved.yml` | 配信（`workflow_dispatch` のみ。自動では走らない）。note下書きは成果物としてダウンロード可。 |
+
+**コンプライアンス方針（厳守）**
+- 公式手段のみ：YouTube Data API v3 / Shutterstock 公式コントリビューターFTPS。
+- **note の非公式API自動投稿・「BAN回避（ボット検知回避）」は実装しない**（規約違反のため）。
+  → 記事Markdown＋アイキャッチを `drafts/` に生成し、**投稿は人間が手動（ワンタップ）**で行う。
+- 認証情報・アセットが無い配信先は必ず `skipped`。勝手な外部送信はしない。
+- 公式アップロードが成功したジョブのみ `completed` に更新（それ以外は `approved` 据え置き）。
+
+### 8-5. 必要な GitHub Secrets（Actions用）
+| Secret | 用途 | 必須 |
+|---|---|---|
+| `SUPABASE_URL` / `SUPABASE_KEY` | キュー読み書き | ✅ |
+| `GEMINI_API_KEY` | 夜間生成 | ✅（生成cron） |
+| `DISCORD_WEBHOOK` | 完了/失敗通知 | 任意 |
+| `YT_CLIENT_ID` / `YT_CLIENT_SECRET` / `YT_REFRESH_TOKEN` | YouTube公式アップロード | 任意（設定時のみ有効） |
+| `SS_FTP_HOST` / `SS_FTP_USER` / `SS_FTP_PASS` | Shutterstock公式FTPS | 任意（設定時のみ有効） |
+
+> 動画・画像の**実レンダリング**（FFmpeg合成等）は次工程。現状 `run_publisher.py` はアセット未提供のため
+> YouTube/Shutterstockは `skipped`、note下書きのみ生成される（安全に動く骨組み）。
 
 ---
 
@@ -191,7 +219,10 @@ HUB → AGENCY →「Auto Income」から開く、独立した副業オートメ
 - ✅ 全ページ共通の会話履歴（`global_chat_history`）
 - ✅ Secrets の `.env` / 環境変数フォールバック
 - ✅ 副業オートメーション：生成エンジン＋管理画面（`income_engine.py` / Auto Income）
-- ⏳ （Phase 2）副業オートメーションの配信レイヤ（GitHub Actions：生成cron＋公式API配信＋Discord通知）
+- ✅ アセット生成（`asset_engine.py`：環境音 / サムネ / 画像）
+- ✅ 配信レイヤの骨組み（`publisher.py`：公式API/規約準拠note下書き、指数バックオフ・通知）
+- ✅ GitHub Actions：夜間生成cron（安全）＋配信（手動トリガー）
+- ⏳ （次工程）動画・画像の実レンダリング（FFmpeg等）→ 公式アップロードの実投入
 - ⏳ （Phase 2）Vault / Dashboard / App Archive の Supabase 永続化
 - ⏳ （Phase 2）Core Upgrade のバージョン管理（`core_versions`）
 - ⏳ （Phase 3）自己進化提案エンジン / プラグインシステム

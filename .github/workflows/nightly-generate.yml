@@ -1,0 +1,43 @@
+name: Nightly Asset Generation
+
+# 夜間に各媒体メタデータを生成し、Supabaseの承認キュー(income_jobs)へ "pending" で積む。
+# ★ 外部配信は一切しない（生成とキュー投入のみ）。安全。
+# Boss は翌朝 Mission Control 画面で承認するだけ。
+
+on:
+  schedule:
+    - cron: "0 18 * * *"   # 毎日 18:00 UTC = 03:00 JST
+  workflow_dispatch:
+    inputs:
+      themes:
+        description: "カンマ区切りのテーマ（空ならAIが自動提案）"
+        required: false
+        default: ""
+      count:
+        description: "AI提案でいくつ生成するか（themes未指定時）"
+        required: false
+        default: "3"
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate & enqueue
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          THEMES: ${{ github.event.inputs.themes }}
+          GEN_COUNT: ${{ github.event.inputs.count }}
+        run: python scripts/nightly_generate.py

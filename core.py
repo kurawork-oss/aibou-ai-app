@@ -115,6 +115,17 @@ except Exception:
     def suggest_theme(*a, **k): return ""
     def generate_metadata(*a, **k): return {"error": "income_engine を読み込めませんでした。"}
 
+# === 🎨 Asset Engine（環境音 / サムネイル生成）を読み込む ====================
+try:
+    import asset_engine
+    from asset_engine import generate_ambient_wav, generate_thumbnail
+    ASSET_AVAILABLE = True
+except Exception:
+    ASSET_AVAILABLE = False
+
+    def generate_ambient_wav(*a, **k): return None, "⚠️ asset_engine を読み込めませんでした。"
+    def generate_thumbnail(*a, **k): return None
+
 try:
     supabase: Client = create_client(get_secret("SUPABASE_URL"), get_secret("SUPABASE_KEY"))
     hasher = hashlib.sha256(get_secret("MASTER_ENCRYPTION_KEY").encode('utf-8')).digest()
