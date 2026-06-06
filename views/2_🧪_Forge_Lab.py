@@ -550,10 +550,8 @@ else:
                     {history_text}
                     """
 
-                # Geminiの実行
-                model = genai.GenerativeModel('gemini-2.5-flash')
-                response = model.generate_content(system_instruction + "\n\nボスの現在の指示: " + trigger_prompt)
-                ai_text = response.text
+                # 🤖 マルチAI対応：get_ai_response 経由で呼び出す（Gemini→Claude→Grok→OpenAI）
+                ai_text = get_ai_response(system_instruction + "\n\nボスの現在の指示: " + trigger_prompt, model='gemini-2.5-flash')
                 
                 # モードごとの後処理（パース）
                 reply_text = ai_text

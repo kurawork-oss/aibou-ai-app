@@ -69,9 +69,8 @@ else:
                     else:
                         all_context = "\n\n=== 資料 ===\n" + "\n---\n".join([f"【{fname}】\n{content}" for fname, content in nb_data["docs"].items()])
                         system_instruction = f"専属コンシェルジュとして、以下の資料【のみ】に基づいて回答せよ。\n{all_context}"
-                        model = genai.GenerativeModel('gemini-2.5-flash')
-                        response = model.generate_content(system_instruction + "\n質問: " + prompt)
-                        response_text = response.text
+                        # 🤖 マルチAI対応：get_ai_response 経由で呼び出す
+                        response_text = get_ai_response(system_instruction + "\n質問: " + prompt, model='gemini-2.5-flash')
                     nb_data["chat"].append({"role": "assistant", "avatar": "🤖", "content": response_text})
                     st.rerun()
                 except Exception as e:
