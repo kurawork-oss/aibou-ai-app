@@ -113,6 +113,7 @@ with col_left:
             st.markdown("<div class='panel-header panel-header-left'>❖ AGENCY</div>", unsafe_allow_html=True)
             if st.button("＞ Active Tasks", use_container_width=True): st.session_state.current_mode = "Active Tasks"; st.rerun()
             if st.button("＞ Task History", use_container_width=True): st.session_state.current_mode = "Task History"; st.rerun()
+            if st.button("＞ Auto Income", use_container_width=True): st.session_state.current_mode = "Auto Income"; st.rerun()
 
 with col_core:
     st.markdown("<div class='view-toggle' style='text-align:center;'>", unsafe_allow_html=True)

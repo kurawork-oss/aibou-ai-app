@@ -86,6 +86,35 @@ except Exception as _agent_err:
 
     TOOLS = []
 
+# === 💰 Income Engine（副業オートメーション：生成＋承認キュー）を読み込む ====
+# 失敗してもアプリ全体が落ちないよう、フォールバック実装を必ず用意する。
+try:
+    import income_engine
+    from income_engine import (
+        enqueue_theme, list_jobs, get_job, approve_job, approve_all_pending,
+        reject_job, reject_and_regenerate, get_stats, update_stats,
+        system_status, suggest_theme, generate_metadata,
+    )
+    INCOME_AVAILABLE = True
+except Exception:
+    INCOME_AVAILABLE = False
+
+    def enqueue_theme(*a, **k): return None, "⚠️ income_engine を読み込めませんでした。"
+    def list_jobs(*a, **k): return []
+    def get_job(*a, **k): return None
+    def approve_job(*a, **k): return "⚠️ income_engine を読み込めませんでした。"
+    def approve_all_pending(*a, **k): return 0
+    def reject_job(*a, **k): return "⚠️ income_engine を読み込めませんでした。"
+    def reject_and_regenerate(*a, **k): return None, "⚠️ income_engine を読み込めませんでした。"
+    def get_stats(*a, **k): return {}
+    def update_stats(*a, **k): return False
+    def system_status(*a, **k):
+        return {"db": False, "ai_engine": False, "ai_key": False,
+                "counts": {"pending": 0, "approved": 0, "completed": 0, "failed": 0, "rejected": 0},
+                "total": 0}
+    def suggest_theme(*a, **k): return ""
+    def generate_metadata(*a, **k): return {"error": "income_engine を読み込めませんでした。"}
+
 try:
     supabase: Client = create_client(get_secret("SUPABASE_URL"), get_secret("SUPABASE_KEY"))
     hasher = hashlib.sha256(get_secret("MASTER_ENCRYPTION_KEY").encode('utf-8')).digest()
@@ -179,6 +208,7 @@ else:
         "Core Upgrade": "EVOLUTION",
         "Dashboard": "DASHBOARD",
         "App Archive": "APP ARCHIVE",
+        "Auto Income": "💰 AUTO INCOME",
         "Task History": "TASK HISTORY",
         "Settings": "⚙️ SETTINGS" # 🚨ここを「Secure Vault」から「Settings」に変更！
     }
@@ -562,6 +592,16 @@ if AGENT_AVAILABLE:
     except Exception:
         pass
 
+# 💰 Income Engine にも道具（Supabase / AI）を注入
+if INCOME_AVAILABLE:
+    try:
+        income_engine.register_services(
+            supabase=(supabase if DB_CONNECTED else None),
+            get_ai_response=get_ai_response,
+        )
+    except Exception:
+        pass
+
 # ==========================================
 # 🖥️ 4. メイン画面の表示 (モジュール・ルーター)
 # ==========================================
@@ -583,6 +623,9 @@ elif page == "Dashboard" or page == "DASHBOARD":
 
 elif page == "App Archive" or page == "APP ARCHIVE":
     with open("views/6_📦_App_Archive.py", "r", encoding="utf-8") as f: exec(f.read())
+
+elif page == "Auto Income" or page == "💰 AUTO INCOME":
+    with open("views/10_💰_Auto_Income.py", "r", encoding="utf-8") as f: exec(f.read())
 
 elif page == "Task History" or page == "🕰️ 過去のタスク":
     with open("views/7_🕰️_Task_History.py", "r", encoding="utf-8") as f: exec(f.read())

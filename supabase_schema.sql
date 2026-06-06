@@ -51,3 +51,30 @@ CREATE TABLE IF NOT EXISTS evolution_proposals (
   status     text DEFAULT 'pending',
   created_at timestamp DEFAULT now()
 );
+
+-- =====================================================================
+-- 💰 副業オートメーション（Mission Control）
+-- income_engine.py が使う。承認キュー＋KPIの2テーブル。
+-- =====================================================================
+
+-- 生成アセットの承認キュー。status: pending/approved/rejected/completed/failed
+-- payload に各プラットフォーム用メタデータ（shutterstock/youtube/note）をJSONで格納。
+-- dedupe_key でテーマの重複生成を防ぐ（冪等性／要件§3.1）。
+CREATE TABLE IF NOT EXISTS income_jobs (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  dedupe_key text,
+  theme      text NOT NULL,
+  status     text DEFAULT 'pending',
+  payload    jsonb DEFAULT '{}'::jsonb,
+  log        text DEFAULT '',
+  created_at timestamp DEFAULT now(),
+  updated_at timestamp DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_income_jobs_status ON income_jobs(status);
+CREATE INDEX IF NOT EXISTS idx_income_jobs_dedupe ON income_jobs(dedupe_key);
+
+-- KPI（収益/PV/稼働開始日）保持。id=1 の1行を upsert して使う。
+CREATE TABLE IF NOT EXISTS income_stats (
+  id   int PRIMARY KEY,
+  data jsonb DEFAULT '{}'::jsonb
+);
