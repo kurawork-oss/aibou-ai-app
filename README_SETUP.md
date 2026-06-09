@@ -228,11 +228,14 @@ APIキー無し・オフラインでも実体アセットを生成できる（nu
   - `agent.get_ai_response(..., purpose=...)` が解決を担当（`provider` 付きスロットなら Claude/Grok/OpenAIにも対応）。
 - ※ 各キーは各プロバイダの**利用規約の範囲内**で使用してください（自動ローテーション等の上限回避は実装していません。割り当ては手動）。
 
-### 8-7. レンダラ（`renderer.py`）
-環境音＋静止画 → 動画(mp4)合成の工程。**画像は実装済み**：`build_assets()` が `asset_image` キーで
-画像を生成して `rendered/` に保存し、`run_publisher.py` 経由で `publish_shutterstock`（FTP認証情報が
-ある場合のみ実アップロード）へ渡す。**動画(mp4)合成は未実装(スタブ)** で、`render_video()` を実装すれば
-`assets["video"]` が埋まり YouTube 実投入に繋がる。
+### 8-7. レンダラ（`renderer.py`） — 実装済み
+環境音＋静止画 → 動画(mp4)合成の工程。
+- `build_assets()`：`asset_image` キーで画像を生成（`rendered/`）→ ffmpeg があれば環境音(numpy)を
+  ループした **mp4** も合成。画像は `publish_shutterstock`、動画は `publish_youtube` に渡る（認証情報がある場合のみ実投入）。
+- `render_video()`：ffmpeg で静止画(`-loop 1`)＋環境音(`-stream_loop -1`)を `RENDER_MINUTES`(既定10分)に
+  伸ばし、1280x720・H.264/AAC・`+faststart` の mp4 を出力。ffmpeg や入力が無ければ `None`（安全にskip）。
+- GitHub Actions（`publish-approved.yml`）は ffmpeg を導入し、生成物を `rendered-assets` アーティファクトで取得可能。
+- 環境変数：`RENDER_MINUTES`(尺/分) ・ `RENDER_AUDIO_SEC`(ベース音源秒) ・ `RENDER_TIMEOUT_SEC`。
 
 ---
 
@@ -249,8 +252,8 @@ APIキー無し・オフラインでも実体アセットを生成できる（nu
 - ✅ 配信レイヤの骨組み（`publisher.py`：公式API/規約準拠note下書き、指数バックオフ・通知）
 - ✅ GitHub Actions：夜間生成cron（安全）＋配信（手動トリガー）
 - ✅ 用途別APIキー（マルチアカウント）保管＆接続（`key_manager.py` / Settings「用途別キー」）
-- ✅ レンダラ：画像生成は実装済み（`renderer.build_assets`）。動画(FFmpeg)は次工程
-- ⏳ （次工程）動画・画像の実レンダリング（FFmpeg等）→ 公式アップロードの実投入
+- ✅ レンダラ（`renderer.py`）：画像＋環境音→動画(mp4) を ffmpeg で合成（`build_assets` / `render_video`）
+- ⏳ （次工程）認証情報の投入（YouTube OAuth / Shutterstock FTP）で実アップロードを有効化／動画の高度化
 - ⏳ （Phase 2）Vault / Dashboard / App Archive の Supabase 永続化
 - ⏳ （Phase 2）Core Upgrade のバージョン管理（`core_versions`）
 - ⏳ （Phase 3）自己進化提案エンジン / プラグインシステム
