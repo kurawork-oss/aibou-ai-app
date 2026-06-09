@@ -33,6 +33,8 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          # Vault復号用（これがあれば配信用の鍵(YT/SS/Discord等)はVaultから自動読込される）
+          MASTER_ENCRYPTION_KEY: ${{ secrets.MASTER_ENCRYPTION_KEY }}
           # 画像生成(asset_image)用キー。未設定なら共通 GEMINI_API_KEY にフォールバック
           GEMINI_API_KEY_ASSET_IMAGE: ${{ secrets.GEMINI_API_KEY_ASSET_IMAGE }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}

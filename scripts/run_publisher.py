@@ -39,6 +39,12 @@ def _build_supabase():
 
 
 def main():
+    # 暗号化Vault → 環境変数（アプリで設定した配信用の鍵をActionsでも使う）
+    try:
+        import vault_store
+        vault_store.hydrate_env()
+    except Exception:
+        pass
     sb = _build_supabase()
     if sb is None:
         print("[error] SUPABASE_URL / SUPABASE_KEY が必要です。終了します。")

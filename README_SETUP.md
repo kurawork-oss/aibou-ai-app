@@ -237,6 +237,23 @@ APIキー無し・オフラインでも実体アセットを生成できる（nu
 - GitHub Actions（`publish-approved.yml`）は ffmpeg を導入し、生成物を `rendered-assets` アーティファクトで取得可能。
 - 環境変数：`RENDER_MINUTES`(尺/分) ・ `RENDER_AUDIO_SEC`(ベース音源秒) ・ `RENDER_TIMEOUT_SEC`。
 
+### 8-8. 🚀 クイックスタート（＝あなたが設定すること）
+コードは完成済み。動かすのに必要なのは**設定だけ**。鍵は基本アプリ内のVaultに入れ、
+GitHub Actions はそのVaultから自動取得する（`vault_store.hydrate_env()`）。
+
+1. **Supabase**：SQL Editor で `supabase_schema.sql` を実行（`income_jobs` / `income_stats` 他）。
+2. **アプリで鍵を入れる**：Settings → 🔐 Secure Vault に
+   - `Gemini API Key`（共通／必須）
+   - （任意）用途別キー：🔑用途別APIキーで `nightly` / `asset_image` など別アカウントのキー
+   - （任意・配信する場合）`YouTube OAuth`（Client ID/Secret/Refresh Token）, `Shutterstock FTP`, `Discord Webhook`
+3. **接続テスト**：Settings → 💰 副業自動化 のチェックリスト＆「接続テスト」ボタンで各鍵の疎通を確認。
+4. **自動運転する場合のみ** GitHub の Secrets に3つ登録：`SUPABASE_URL` / `SUPABASE_KEY` / `MASTER_ENCRYPTION_KEY`
+   （他の鍵はVaultから自動で読まれる）。
+5. **運用**：`Nightly Asset Generation`（自動・生成のみ）→ Mission Control で承認 →
+   `Publish Approved Assets`（手動）で画像/動画を生成し、設定済みの配信先へ投稿。
+   - YouTube の refresh token は手元で `python youtube_oauth_helper.py` を1回実行して取得。
+   - 環境変数の一覧は `.env.example` を参照。
+
 ---
 
 ## 9. 実装ステータス
@@ -253,7 +270,9 @@ APIキー無し・オフラインでも実体アセットを生成できる（nu
 - ✅ GitHub Actions：夜間生成cron（安全）＋配信（手動トリガー）
 - ✅ 用途別APIキー（マルチアカウント）保管＆接続（`key_manager.py` / Settings「用途別キー」）
 - ✅ レンダラ（`renderer.py`）：画像＋環境音→動画(mp4) を ffmpeg で合成（`build_assets` / `render_video`）
-- ⏳ （次工程）認証情報の投入（YouTube OAuth / Shutterstock FTP）で実アップロードを有効化／動画の高度化
+- ✅ 設定のターンキー化：Vault集約＋headless自動読込（`vault_store.py`）、Settings「💰副業自動化」チェックリスト＆接続テスト、`youtube_oauth_helper.py` / `.env.example`
+- ⏳ （あなたの作業）各サービスのアカウント作成・鍵入力・接続テスト（コード側は完了）
+- ⏳ （任意の次工程）動画の高度化（BGM/複数シーン/演出）
 - ⏳ （Phase 2）Vault / Dashboard / App Archive の Supabase 永続化
 - ⏳ （Phase 2）Core Upgrade のバージョン管理（`core_versions`）
 - ⏳ （Phase 3）自己進化提案エンジン / プラグインシステム

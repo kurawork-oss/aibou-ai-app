@@ -71,6 +71,12 @@ def _notify(msg):
 
 
 def main():
+    # 暗号化Vault → 環境変数（アプリで設定した鍵をActionsでも使う）
+    try:
+        import vault_store
+        vault_store.hydrate_env()
+    except Exception:
+        pass
     sb = _build_supabase()
     ai = _build_ai()
     if ai is None:

@@ -30,8 +30,9 @@ with col_menu:
         "🛠️ 基本設定",
         "🧠 コア設定",
         "🕰️ システム復元", 
-        "🔐 Secure Vault", 
-        "📖 取扱説明書", 
+        "🔐 Secure Vault",
+        "💰 副業自動化",
+        "📖 取扱説明書",
         "🚪 ログアウト"
     ], label_visibility="collapsed")
 
@@ -119,7 +120,9 @@ with col_content:
                                     "DIFY_API_KEY": "", "google_calendar": "", "slack": "", "line": "",
                                     "discord_webhook": "", "line_webhook": "",
                                     "my_email": "", "my_email_app_password": "",
-                                    "gh_token": "", "gh_owner": "", "gh_repo": ""
+                                    "gh_token": "", "gh_owner": "", "gh_repo": "",
+                                    "youtube_client_id": "", "youtube_client_secret": "", "youtube_refresh_token": "",
+                                    "shutterstock_ftp_host": "", "shutterstock_ftp_user": "", "shutterstock_ftp_pass": ""
                                 }
                                 
                                 # 🚨 修正：保存に成功した時だけロック解除＆リロードする
@@ -318,6 +321,29 @@ with col_content:
                     5. これでAIが「〇〇をDiscordに通知して」の指示で（承認後に）メッセージを送れるようになります。
                     """)
 
+                st.markdown("##### 📺 配信（YouTube / Shutterstock）— 副業自動化")
+                st.caption("設定すると、承認済みアセットを GitHub Actions の配信ワークフローが各公式手段で投稿します（未設定の配信先はスキップ）。")
+                new_yt_id = st.text_input("YouTube OAuth Client ID", value=keys.get("youtube_client_id", ""), type="password")
+                new_yt_secret = st.text_input("YouTube OAuth Client Secret", value=keys.get("youtube_client_secret", ""), type="password")
+                new_yt_refresh = st.text_input("YouTube Refresh Token", value=keys.get("youtube_refresh_token", ""), type="password")
+                with st.expander("ℹ️ YouTube連携の手順（Refresh Token の取り方）"):
+                    st.markdown("""
+                    1. [Google Cloud Console](https://console.cloud.google.com/) で **「YouTube Data API v3」** を有効化します。
+                    2. 「認証情報」＞「OAuthクライアントID」を **種類: デスクトップ アプリ** で作成し、Client ID / Secret を取得します。
+                    3. それらを上の2欄に入力（またはお手元PCの環境変数 `YT_CLIENT_ID`/`YT_CLIENT_SECRET` に設定）します。
+                    4. お手元のPCで **`python youtube_oauth_helper.py`** を実行 → ブラウザで承認 → 表示された **refresh token** を上の欄へ貼り付けます。
+                    5. 保存すると、動画は最初 **非公開(private)** で投稿されます（内容を確認してから公開）。
+                    """)
+                new_ss_host = st.text_input("Shutterstock FTP Host", value=keys.get("shutterstock_ftp_host", ""), placeholder="例: ftps.shutterstock.com")
+                new_ss_user = st.text_input("Shutterstock FTP User", value=keys.get("shutterstock_ftp_user", ""))
+                new_ss_pass = st.text_input("Shutterstock FTP Password", value=keys.get("shutterstock_ftp_pass", ""), type="password")
+                with st.expander("ℹ️ Shutterstock連携の手順（公式FTPS）"):
+                    st.markdown("""
+                    1. Shutterstock コントリビューターのアカウントを用意します。
+                    2. コントリビューター管理画面のアップロード/FTP設定で、FTPの **ホスト / ユーザー / パスワード** を確認します。
+                    3. それらを上の3欄に入力して保存します。アップロード後、メタデータ（タイトル/タグ）は管理画面で紐付けます。
+                    """)
+
                 st.markdown("##### 🚀 Cloud Deploy (GitHub)")
                 new_gh_token = st.text_input("GitHub Personal Access Token", value=keys.get("gh_token", ""), type="password")
                 new_gh_owner = st.text_input("GitHub Username", value=keys.get("gh_owner", ""), placeholder="例: YamadaTaro")
@@ -346,7 +372,11 @@ with col_content:
                         "google_calendar": new_calendar,
                         "slack": new_slack, "line": new_line,
                         "discord_webhook": new_discord_webhook, "line_webhook": new_line_webhook,
-                        "gh_token": new_gh_token, "gh_owner": new_gh_owner, "gh_repo": new_gh_repo
+                        "gh_token": new_gh_token, "gh_owner": new_gh_owner, "gh_repo": new_gh_repo,
+                        "youtube_client_id": new_yt_id, "youtube_client_secret": new_yt_secret,
+                        "youtube_refresh_token": new_yt_refresh,
+                        "shutterstock_ftp_host": new_ss_host, "shutterstock_ftp_user": new_ss_user,
+                        "shutterstock_ftp_pass": new_ss_pass,
                     }
                     
                     if save_vault(vault_data):
@@ -401,6 +431,102 @@ with col_content:
                     )
             except Exception as _e:
                 st.warning(f"用途別キーUIを表示できませんでした: {_e}")
+
+    # ================================
+    elif setting_mode == "💰 副業自動化":
+        st.markdown("#### 💰 副業自動化 セットアップ")
+        st.caption("設定状況の確認と接続テスト。鍵は基本『🔐 Secure Vault』に保存し、Actionsはそこから自動取得します。")
+
+        keys = st.session_state.get("global_api_keys", {}) or {}
+        slots = st.session_state.get("key_slots", {}) or {}
+        def _has(*names): return any(keys.get(n) for n in names)
+        def _mark(b): return "✅" if b else "⬜"
+
+        db_ok = bool(globals().get("DB_CONNECTED"))
+        table_ok = False
+        if db_ok:
+            try:
+                globals().get("supabase").table("income_jobs").select("id").limit(1).execute()
+                table_ok = True
+            except Exception:
+                table_ok = False
+
+        st.markdown("##### ✅ チェックリスト")
+        st.write(f"{_mark(db_ok)} Supabase 接続（SUPABASE_URL / KEY）")
+        st.write(f"{_mark(table_ok)} テーブル `income_jobs` / `income_stats`（`supabase_schema.sql` を実行）")
+        st.write(f"{_mark(bool(keys.get('gemini')))} Gemini APIキー（共通）")
+        st.write(f"{_mark(bool((slots.get('nightly') or {}).get('key')))} 夜間生成キー（任意・用途別 `nightly`）")
+        st.write(f"{_mark(bool((slots.get('asset_image') or {}).get('key')))} 画像生成キー（任意・用途別 `asset_image`）")
+        st.write(f"{_mark(_has('discord_webhook'))} Discord 通知（任意）")
+        st.write(f"{_mark(_has('youtube_client_id') and _has('youtube_refresh_token'))} YouTube 配信（任意）")
+        st.write(f"{_mark(_has('shutterstock_ftp_host'))} Shutterstock 配信（任意）")
+
+        st.markdown("##### 🔌 接続テスト")
+        t1, t2 = st.columns(2)
+        if t1.button("🧠 Gemini をテスト", use_container_width=True):
+            with st.spinner("呼び出し中..."):
+                r = get_ai_response("Reply with just: OK")
+            (st.success if not str(r).startswith("⚠️") else st.error)(f"応答: {str(r)[:100]}")
+        if t2.button("🔔 Discord に通知テスト", use_container_width=True):
+            url = keys.get("discord_webhook", "")
+            if not url:
+                st.warning("Discord Webhook が未設定です。")
+            else:
+                try:
+                    requests.post(url, json={"content": "✅ THE FORGE 接続テスト"}, timeout=20)
+                    st.success("送信しました。Discordをご確認ください。")
+                except Exception as e:
+                    st.error(f"失敗: {e}")
+        t3, t4 = st.columns(2)
+        if t3.button("🗄 Supabase をテスト", use_container_width=True):
+            if not db_ok:
+                st.error("DB未接続です（SUPABASE_URL / KEY を確認）。")
+            else:
+                try:
+                    n = len(globals().get("supabase").table("income_jobs").select("id").limit(5).execute().data or [])
+                    st.success(f"OK：income_jobs に到達（{n}件）。")
+                except Exception as e:
+                    st.error(f"失敗（テーブル未作成かも）: {e}")
+        if t4.button("📷 Shutterstock FTP をテスト", use_container_width=True):
+            host, user, pw = keys.get("shutterstock_ftp_host", ""), keys.get("shutterstock_ftp_user", ""), keys.get("shutterstock_ftp_pass", "")
+            if not (host and user and pw):
+                st.warning("Shutterstock FTP 情報が未設定です。")
+            else:
+                try:
+                    from ftplib import FTP_TLS
+                    f = FTP_TLS(host); f.login(user, pw); f.prot_p(); f.quit()
+                    st.success("ログイン成功。")
+                except Exception as e:
+                    st.error(f"失敗: {e}")
+        if st.button("📺 YouTube 認証をテスト", use_container_width=True):
+            cid, csec, rtok = keys.get("youtube_client_id", ""), keys.get("youtube_client_secret", ""), keys.get("youtube_refresh_token", "")
+            if not (cid and csec and rtok):
+                st.warning("YouTube OAuth 情報が未設定です。")
+            else:
+                try:
+                    from google.oauth2.credentials import Credentials
+                    from googleapiclient.discovery import build as _gbuild
+                    creds = Credentials(token=None, refresh_token=rtok, client_id=cid, client_secret=csec,
+                                        token_uri="https://oauth2.googleapis.com/token",
+                                        scopes=["https://www.googleapis.com/auth/youtube.readonly"])
+                    yt = _gbuild("youtube", "v3", credentials=creds)
+                    ch = yt.channels().list(part="snippet", mine=True).execute()
+                    title = (ch.get("items") or [{}])[0].get("snippet", {}).get("title", "(不明)")
+                    st.success(f"認証OK：チャンネル「{title}」")
+                except Exception as e:
+                    st.error(f"失敗: {e}")
+
+        st.markdown("##### 🤖 GitHub Actions（自動運転）")
+        st.markdown(
+            "1. リポジトリの **Settings → Secrets and variables → Actions** に "
+            "`SUPABASE_URL` / `SUPABASE_KEY` / `MASTER_ENCRYPTION_KEY` を登録（他の鍵はこのVaultから自動取得）。\n"
+            "2. **Nightly Asset Generation**：毎日テーマ生成→Inboxに `pending` 追加（配信なし・安全）。\n"
+            "3. ここ Mission Control で承認 → `approved`。\n"
+            "4. **Publish Approved Assets** を手動実行 → 画像/動画を生成し、設定済みの配信先へ投稿。"
+        )
+        with st.expander("ℹ️ YouTube refresh token の取り方"):
+            st.markdown("お手元のPCで `python youtube_oauth_helper.py` を実行し、表示された値を "
+                        "Secure Vault の「YouTube Refresh Token」に保存してください。")
 
     # ================================
     elif setting_mode == "📖 取扱説明書":
