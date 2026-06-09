@@ -209,6 +209,25 @@ APIキー無し・オフラインでも実体アセットを生成できる（nu
 > 動画・画像の**実レンダリング**（FFmpeg合成等）は次工程。現状 `run_publisher.py` はアセット未提供のため
 > YouTube/Shutterstockは `skipped`、note下書きのみ生成される（安全に動く骨組み）。
 
+### 8-6. 用途別 APIキー（マルチアカウント） — `key_manager.py`
+「各処理(=用途)ごとに、別アカウントで発行した API キーを使いたい」を実現する保管＆接続の枠組み。
+
+- **用途の定義元**：`key_manager.py` の `PURPOSES`（`hub_chat` / `income_gen` / `nightly` /
+  `asset_image` / `forge_lab`）。用途を増やすときはここに1行足すだけ。
+- **保管場所**
+  - アプリ内：暗号化Vault の `key_slots`（**Settings → 🔐 Secure Vault → 「🔑 用途別APIキー」** フォームで編集）。
+    既存の共通キー(`api_keys`)とは別フィールドなので互いに上書きしない。
+  - headless：環境変数 `<プロバイダのキー名>_<用途ID大文字>`（例 `GEMINI_API_KEY_NIGHTLY`）。
+- **接続(解決順)**：用途専用キー → 共通キー → 環境変数。**未設定の用途は自動で共通キーにフォールバック**。
+  - 例：`income_engine` は `purpose="income_gen"` で `get_ai_response()` を呼ぶ → 割り当て済みなら
+    その専用キー、無ければ共通 Gemini キーを使う（既存挙動を壊さない）。
+  - `agent.get_ai_response(..., purpose=...)` が解決を担当（`provider` 付きスロットなら Claude/Grok/OpenAIにも対応）。
+- ※ 各キーは各プロバイダの**利用規約の範囲内**で使用してください（自動ローテーション等の上限回避は実装していません。割り当ては手動）。
+
+### 8-7. レンダラ枠（`renderer.py`） — 後で実装
+環境音＋静止画 → 動画(mp4)合成の工程。現状は**スタブ**（`build_assets()` は空dictを返し、公式UPは安全にskip）。
+ここを実装すれば `run_publisher.py` が自動でアセットを `publish_job()` に渡し、公式アップロードが実投入される。
+
 ---
 
 ## 9. 実装ステータス
@@ -222,6 +241,8 @@ APIキー無し・オフラインでも実体アセットを生成できる（nu
 - ✅ アセット生成（`asset_engine.py`：環境音 / サムネ / 画像）
 - ✅ 配信レイヤの骨組み（`publisher.py`：公式API/規約準拠note下書き、指数バックオフ・通知）
 - ✅ GitHub Actions：夜間生成cron（安全）＋配信（手動トリガー）
+- ✅ 用途別APIキー（マルチアカウント）保管＆接続（`key_manager.py` / Settings「用途別キー」）
+- ✅ レンダラ枠（`renderer.py`：スタブ。FFmpeg実装は次工程）
 - ⏳ （次工程）動画・画像の実レンダリング（FFmpeg等）→ 公式アップロードの実投入
 - ⏳ （Phase 2）Vault / Dashboard / App Archive の Supabase 永続化
 - ⏳ （Phase 2）Core Upgrade のバージョン管理（`core_versions`）

@@ -53,11 +53,23 @@ def main():
         print("[done] 配信対象がありません。")
         return 0
 
+    # レンダラ（動画/画像合成）。現状はスタブで空アセットを返す → 公式UPは安全にskip。
+    try:
+        import renderer
+    except Exception:
+        renderer = None
+
     completed, manual = 0, 0
     for job in jobs:
-        # ★ 動画・画像アセットの実体生成（レンダリング）は別工程のため、ここでは
-        #    アセット未提供＝公式アップロードはskip、note下書きのみ生成される。
-        res = publisher.publish_job(job, assets={})
+        # ★ 動画・画像アセットの実体生成（レンダリング）は別工程。実装されれば自動で
+        #    publish_job に渡され、YouTube/Shutterstock へ実投入される。
+        assets = {}
+        if renderer is not None:
+            try:
+                assets = renderer.build_assets(job) or {}
+            except Exception as e:
+                print(f"[warn] レンダリングをスキップ: {e}")
+        res = publisher.publish_job(job, assets=assets)
         print(f"  - {job.get('theme','')}: {res.get('log','')}")
         if res.get("status") == "completed":
             completed += 1

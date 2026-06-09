@@ -36,6 +36,8 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          # 夜間生成用の専用キー（未設定なら共通の GEMINI_API_KEY にフォールバック）
+          GEMINI_API_KEY_NIGHTLY: ${{ secrets.GEMINI_API_KEY_NIGHTLY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           THEMES: ${{ github.event.inputs.themes }}

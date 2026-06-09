@@ -51,14 +51,21 @@ try:
 except Exception as _agent_err:
     AGENT_AVAILABLE = False
 
-    def get_ai_response(prompt_or_messages, tools=None, model=None, provider=None):
+    def get_ai_response(prompt_or_messages, tools=None, model=None, provider=None, purpose=None):
         """フォールバック：Gemini を直接呼ぶだけの簡易版（agent.py 読込失敗時）。"""
         try:
             key = ""
-            try:
-                key = st.session_state.get("global_api_keys", {}).get("gemini", "")
-            except Exception:
-                pass
+            if purpose:
+                try:
+                    slot = (st.session_state.get("key_slots", {}) or {}).get(purpose) or {}
+                    key = slot.get("key", "")
+                except Exception:
+                    key = ""
+            if not key:
+                try:
+                    key = st.session_state.get("global_api_keys", {}).get("gemini", "")
+                except Exception:
+                    pass
             if not key:
                 key = get_secret("GEMINI_API_KEY")
             if not key:
@@ -163,6 +170,10 @@ if "global_api_keys" not in st.session_state:
     st.session_state.global_api_keys = {}
     vd = load_vault()
     st.session_state.global_api_keys = vd.get("api_keys", {})
+    # 用途別キー（マルチアカウント）も同じVaultから読み込む
+    st.session_state.key_slots = vd.get("key_slots", {})
+if "key_slots" not in st.session_state:
+    st.session_state.key_slots = {}
 
 # === 🧠 全ページ共通のAI会話履歴（ページ移動で文脈が消えないようにする） ===
 if "global_chat_history" not in st.session_state:

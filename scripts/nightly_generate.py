@@ -35,8 +35,12 @@ def _build_supabase():
 
 
 def _build_ai():
-    """GEMINI_API_KEY を使う直叩きAI関数を返す（Streamlit非依存）。"""
-    key = os.environ.get("GEMINI_API_KEY", "")
+    """夜間生成用キー(GEMINI_API_KEY_NIGHTLY → GEMINI_API_KEY)で直叩きAI関数を返す。"""
+    try:
+        import key_manager
+        key = key_manager.env_key("nightly")
+    except Exception:
+        key = os.environ.get("GEMINI_API_KEY", "")
     if not key:
         return None
     try:

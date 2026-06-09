@@ -41,13 +41,24 @@ def _db():
     return _SERVICES.get("supabase")
 
 
+# この処理(用途)に割り当てる APIキーのスロットID（key_manager.PURPOSES と対応）
+PURPOSE = "income_gen"
+
+
 def _ai(prompt, model=None):
-    """注入された get_ai_response を呼ぶ。未注入でも例外を出さない。"""
+    """注入された get_ai_response を呼ぶ。用途別キー(income_gen)があればそれを使う。
+    未注入でも例外を出さない。"""
     fn = _SERVICES.get("get_ai_response")
     if not fn:
         return "⚠️ AIエンジンが初期化されていません。"
     try:
-        return fn(prompt, model=model)
+        return fn(prompt, model=model, purpose=PURPOSE)
+    except TypeError:
+        # purpose を受け付けない注入関数（headlessの簡易AI等）へのフォールバック
+        try:
+            return fn(prompt, model=model)
+        except Exception as e:
+            return f"⚠️ AI呼び出しエラー: {e}"
     except Exception as e:
         return f"⚠️ AI呼び出しエラー: {e}"
 

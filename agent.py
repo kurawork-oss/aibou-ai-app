@@ -30,6 +30,12 @@ try:
 except Exception:
     GENAI_AVAILABLE = False
 
+try:
+    import key_manager
+    KEY_MANAGER_AVAILABLE = True
+except Exception:
+    KEY_MANAGER_AVAILABLE = False
+
 
 # === 外部サービス（core.py から注入される道具箱） ============================
 _SERVICES = {}
@@ -57,6 +63,24 @@ def _get_key(*names):
     except Exception:
         pass
     return ""
+
+
+def _resolve_purpose(purpose):
+    """用途(purpose)に割り当てられたキーを (provider, key) で返す。未割り当ては (None, '')。
+    解決順：アプリ内Vault の key_slots → 環境変数の用途別キー。"""
+    if not purpose or not KEY_MANAGER_AVAILABLE:
+        return None, ""
+    try:
+        slots = st.session_state.get("key_slots", {}) or {}
+    except Exception:
+        slots = {}
+    prov, key = key_manager.resolve_from_slots(slots, purpose)
+    if key:
+        return prov, key
+    ek = key_manager.env_key(purpose)
+    if ek:
+        return key_manager.purpose_provider(purpose), ek
+    return None, ""
 
 
 # === メッセージ整形ヘルパー =================================================
@@ -142,11 +166,12 @@ def _call_openai_like(messages, api_key, base_url, model):
         return f"⚠️ APIエラー: {data}"
 
 
-def get_ai_response(prompt_or_messages, tools=None, model=None, provider=None):
+def get_ai_response(prompt_or_messages, tools=None, model=None, provider=None, purpose=None):
     """
     Settings(Secure Vault)で設定されたAPIキーに応じてAIを切り替えて呼び出す。
-    優先順位: Gemini → Claude → Grok → OpenAI
+    優先順位: 用途別キー(purpose) → 明示provider → Gemini → Claude → Grok → OpenAI
     - prompt_or_messages: 文字列 or [{"role": "...", "content": "..."}]
+    - purpose: 用途ID（例 "income_gen"）。割り当て済みなら専用キーを最優先で使う。
     - 返り値は常に文字列（例外時もエラーメッセージ文字列を返し、絶対にraiseしない）
     """
     messages = _to_messages(prompt_or_messages)
@@ -157,6 +182,18 @@ def get_ai_response(prompt_or_messages, tools=None, model=None, provider=None):
 
     chosen = provider or st.session_state.get("ai_provider")
     try:
+        # 用途別キー（マルチアカウント）が割り当てられていれば最優先で使う
+        fp, fk = _resolve_purpose(purpose)
+        if fk:
+            if fp in ("claude", "anthropic"):
+                return _call_claude(messages, fk, model)
+            if fp == "grok":
+                return _call_openai_like(messages, fk, "https://api.x.ai/v1/chat/completions",
+                                         model if (model and "grok" in str(model)) else "grok-3")
+            if fp == "openai":
+                return _call_openai_like(messages, fk, "https://api.openai.com/v1/chat/completions",
+                                         model if (model and "gpt" in str(model)) else "gpt-4o")
+            return _call_gemini(messages, fk, model)
         # 明示的にプロバイダ指定がある場合はそれを優先
         if chosen == "gemini" and gemini:
             return _call_gemini(messages, gemini, model)

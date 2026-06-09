@@ -356,6 +356,52 @@ with col_content:
                     else:
                         st.error("❌ 保存に失敗しました。データベースの接続設定を確認してください。")
 
+            # ─────────────────────────────────────────────
+            # 🔑 用途別 APIキー（マルチアカウント）
+            # 各処理(用途)に、別アカウントで発行したキーを割り当てる。未設定なら共通キーへ。
+            # 既存の api_keys フォームとは別フィールド(key_slots)に保存するので互いに上書きしない。
+            st.markdown("---")
+            st.markdown("#### 🔑 用途別 APIキー（マルチアカウント）")
+            st.caption("各処理(用途)ごとに、別のGoogleアカウント等で発行したキーを割り当てられます。未設定の用途は上の共通キーを使います。")
+            try:
+                import key_manager
+                _slots = vault_data.get("key_slots", {})
+                with st.form("key_slots_form"):
+                    _new_slots = {}
+                    for _p in key_manager.PURPOSES:
+                        _cur = _slots.get(_p["id"], {})
+                        _default_prov = _cur.get("provider", _p["provider"])
+                        _c1, _c2 = st.columns([1, 3])
+                        _prov = _c1.selectbox(
+                            "Provider", key_manager.PROVIDERS,
+                            index=key_manager.PROVIDERS.index(_default_prov) if _default_prov in key_manager.PROVIDERS else 0,
+                            key=f"slotprov_{_p['id']}",
+                        )
+                        _val = _c2.text_input(
+                            f"{_p['label']}（{_p['id']}）", value=_cur.get("key", ""),
+                            type="password", key=f"slotkey_{_p['id']}",
+                            placeholder="未設定なら共通キーを使用",
+                        )
+                        if _val.strip():
+                            _new_slots[_p["id"]] = {"provider": _prov, "key": _val.strip()}
+                    st.caption("※ 各キーは各プロバイダの利用規約の範囲内で使用してください。")
+                    if st.form_submit_button("💾 用途別キーを保存", use_container_width=True):
+                        vault_data["key_slots"] = _new_slots
+                        if save_vault(vault_data):
+                            st.session_state.key_slots = _new_slots
+                            st.success("✅ 用途別キーを保存しました。")
+                        else:
+                            st.error("❌ 保存に失敗しました。")
+                with st.expander("ℹ️ headless（GitHub Actions）側の用途別キーについて"):
+                    st.markdown(
+                        "GitHub Actions では環境変数で用途別キーを渡せます（未設定なら共通キーにフォールバック）：\n"
+                        "- 夜間生成: `GEMINI_API_KEY_NIGHTLY`（なければ `GEMINI_API_KEY`）\n"
+                        "- 共通: `GEMINI_API_KEY`\n\n"
+                        "命名規則は `<プロバイダのキー名>_<用途ID大文字>`（例: `GEMINI_API_KEY_INCOME_GEN`）。"
+                    )
+            except Exception as _e:
+                st.warning(f"用途別キーUIを表示できませんでした: {_e}")
+
     # ================================
     elif setting_mode == "📖 取扱説明書":
         st.markdown("#### 📖 MANUAL")
