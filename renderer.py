@@ -31,5 +31,25 @@ def render_audio_track(job, out_dir="rendered", minutes=60):
 
 def build_assets(job):
     """1ジョブから配信用アセット一式 {"video":..., "images":[...]} を生成する。
-    現状は何も作らず空dictを返す（publisher側は skip になる）。"""
-    return {}
+    現状：画像は asset_engine で生成して返す（asset_image キーを使用）。動画は未実装(None)。
+    画像は publisher.publish_shutterstock に渡る（FTP認証情報がある場合のみ実アップロード）。"""
+    assets = {}
+    try:
+        import asset_engine
+        import key_manager
+        payload = job.get("payload", {}) or {}
+        prompt = (payload.get("shutterstock", {}) or {}).get("title_en") or job.get("theme", "")
+        # headless：env の用途別キー(GEMINI_API_KEY_ASSET_IMAGE) → 共通(GEMINI_API_KEY)
+        _, key = key_manager.resolve_key("asset_image")
+        img, src = asset_engine.generate_image(prompt, gemini_key=key)
+        if img:
+            os.makedirs("rendered", exist_ok=True)
+            safe = "".join(c for c in (job.get("theme") or "asset") if c.isalnum() or c in " -_")[:40].strip() or "asset"
+            path = os.path.join("rendered", f"{str(job.get('id', 'x'))[:8]}_{safe}.png")
+            with open(path, "wb") as f:
+                f.write(img)
+            assets["images"] = [path]
+    except Exception:
+        pass
+    # TODO: render_video() を実装したら assets["video"] をここで埋める
+    return assets

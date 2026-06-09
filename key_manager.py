@@ -71,3 +71,16 @@ def env_key(purpose, provider=None):
     prov = provider or purpose_provider(purpose)
     base = PROVIDER_ENV.get(prov, "GEMINI_API_KEY")
     return os.environ.get(env_var(purpose, prov)) or os.environ.get(base) or ""
+
+
+def resolve_key(purpose, slots=None, common=None):
+    """用途のキーを (provider, key) で解決する。
+    解決順: Vaultの用途スロット → 環境変数(用途別/共通) → common(呼び出し側が渡す共通キー)。
+    アプリ内・headless どちらからでも使える統一エントリ。"""
+    prov, key = resolve_from_slots(slots or {}, purpose)
+    if key:
+        return prov, key
+    ek = env_key(purpose)
+    if ek:
+        return purpose_provider(purpose), ek
+    return purpose_provider(purpose), (common or "")

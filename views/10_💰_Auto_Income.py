@@ -162,20 +162,35 @@ for _job in _pending:
             st.write(", ".join(_tags))
 
         if globals().get("ASSET_AVAILABLE", False):
-            with st.expander("🎨 アセット試作（サムネ / 環境音）"):
-                a1, a2 = st.columns(2)
-                if a1.button("🖼 サムネ生成", key=f"th_{_job['id']}", use_container_width=True):
-                    st.session_state[f"thumb_{_job['id']}"] = generate_thumbnail(
+            with st.expander("🎨 アセット試作（サムネ / 環境音 / AI画像）"):
+                a1, a2, a3 = st.columns(3)
+                if a1.button("🖼 サムネ生成", key=f"btn_thumb_{_job['id']}", use_container_width=True):
+                    st.session_state[f"out_thumb_{_job['id']}"] = generate_thumbnail(
                         _job.get("theme", ""), subtitle=(_p.get("youtube", {}) or {}).get("title", ""))
-                if a2.button("🔊 環境音10秒", key=f"amb_{_job['id']}", use_container_width=True):
-                    st.session_state[f"amb_{_job['id']}"] = generate_ambient_wav(_job.get("theme", ""), duration_sec=10)
-                _t = st.session_state.get(f"thumb_{_job['id']}")
+                if a2.button("🔊 環境音10秒", key=f"btn_amb_{_job['id']}", use_container_width=True):
+                    st.session_state[f"out_amb_{_job['id']}"] = generate_ambient_wav(_job.get("theme", ""), duration_sec=10)
+                if a3.button("🖌 AI画像(Gemini)", key=f"btn_img_{_job['id']}", use_container_width=True):
+                    try:
+                        import key_manager as _km
+                        _common = (st.session_state.get("global_api_keys", {}) or {}).get("gemini", "") or get_secret("GEMINI_API_KEY")
+                        _prov, _ikey = _km.resolve_key("asset_image", slots=st.session_state.get("key_slots", {}), common=_common)
+                    except Exception:
+                        _ikey = ""
+                    _prompt = (_p.get("shutterstock", {}) or {}).get("title_en") or _job.get("theme", "")
+                    with st.spinner("画像生成中..."):
+                        st.session_state[f"out_img_{_job['id']}"] = generate_image(_prompt, gemini_key=_ikey)
+                _t = st.session_state.get(f"out_thumb_{_job['id']}")
                 if _t:
                     st.image(_t, caption="サムネイル試作（1280x720）", use_container_width=True)
-                _aw = st.session_state.get(f"amb_{_job['id']}")
+                _aw = st.session_state.get(f"out_amb_{_job['id']}")
                 if _aw and _aw[0]:
                     st.caption(f"環境音タイプ: {_aw[1]}")
                     st.audio(_aw[0], format="audio/wav")
+                _im = st.session_state.get(f"out_img_{_job['id']}")
+                if _im and _im[0]:
+                    st.image(_im[0], caption=f"AI画像（{_im[1]}）", use_container_width=True)
+                    if _im[1] == "placeholder":
+                        st.caption("※ Gemini画像キー未設定 or モデル未対応のため簡易サムネを表示中。Settings→🔑用途別APIキーで asset_image にキーを設定してください。")
 
         b1, b2 = st.columns(2)
         if b1.button("✅ 承認（配信キューへ）", key=f"ap_{_job['id']}", use_container_width=True):

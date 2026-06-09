@@ -125,13 +125,14 @@ except Exception:
 # === 🎨 Asset Engine（環境音 / サムネイル生成）を読み込む ====================
 try:
     import asset_engine
-    from asset_engine import generate_ambient_wav, generate_thumbnail
+    from asset_engine import generate_ambient_wav, generate_thumbnail, generate_image
     ASSET_AVAILABLE = True
 except Exception:
     ASSET_AVAILABLE = False
 
     def generate_ambient_wav(*a, **k): return None, "⚠️ asset_engine を読み込めませんでした。"
     def generate_thumbnail(*a, **k): return None
+    def generate_image(*a, **k): return None, None
 
 try:
     supabase: Client = create_client(get_secret("SUPABASE_URL"), get_secret("SUPABASE_KEY"))

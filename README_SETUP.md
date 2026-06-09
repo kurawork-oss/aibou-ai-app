@@ -176,8 +176,10 @@ APIキー無し・オフラインでも実体アセットを生成できる（nu
 - `generate_ambient_wav(theme, duration_sec)`：テーマから種類を推定（雨/焚き火/風/波/ノイズ）し、
   numpy でノイズ合成 → 16bit WAV バイト列を返す。
 - `generate_thumbnail(title, subtitle)`：PIL でグラデ背景＋テーマ文字のサムネ(1280x720) → PNG。
-- `generate_image(prompt)`：`OPENAI_API_KEY` があれば画像生成API、無ければサムネにフォールバック。
-- Mission Control の各承認待ちジョブに「🎨 アセット試作」（サムネ/環境音プレビュー）を追加。
+- `generate_image(prompt, gemini_key=...)`：**Gemini画像API優先**（`gemini-2.5-flash-image` →
+  Imagen 4/3 を順に試行。`GEMINI_IMAGE_MODEL` で先頭モデルを上書き可）→ OpenAI → PILサムネにフォールバック。
+- Mission Control の各承認待ちジョブに「🎨 アセット試作」（サムネ / 環境音 / **🖌AI画像(Gemini)**）を追加。
+  画像生成は `asset_image` 用途のキーを使う（未設定なら共通Geminiキー）。
 
 ### 8-4. 配信レイヤ（`publisher.py` + `scripts/` + GitHub Actions）
 重い外部I/Oを常駐Streamlitから分離し、**バッチ側**で実行する。
@@ -201,7 +203,9 @@ APIキー無し・オフラインでも実体アセットを生成できる（nu
 | Secret | 用途 | 必須 |
 |---|---|---|
 | `SUPABASE_URL` / `SUPABASE_KEY` | キュー読み書き | ✅ |
-| `GEMINI_API_KEY` | 夜間生成 | ✅（生成cron） |
+| `GEMINI_API_KEY` | 夜間生成・画像生成の共通キー | ✅（生成cron） |
+| `GEMINI_API_KEY_NIGHTLY` | 夜間生成の用途別キー | 任意（未設定なら共通へ） |
+| `GEMINI_API_KEY_ASSET_IMAGE` | 画像生成の用途別キー | 任意（未設定なら共通へ） |
 | `DISCORD_WEBHOOK` | 完了/失敗通知 | 任意 |
 | `YT_CLIENT_ID` / `YT_CLIENT_SECRET` / `YT_REFRESH_TOKEN` | YouTube公式アップロード | 任意（設定時のみ有効） |
 | `SS_FTP_HOST` / `SS_FTP_USER` / `SS_FTP_PASS` | Shutterstock公式FTPS | 任意（設定時のみ有効） |
@@ -224,9 +228,11 @@ APIキー無し・オフラインでも実体アセットを生成できる（nu
   - `agent.get_ai_response(..., purpose=...)` が解決を担当（`provider` 付きスロットなら Claude/Grok/OpenAIにも対応）。
 - ※ 各キーは各プロバイダの**利用規約の範囲内**で使用してください（自動ローテーション等の上限回避は実装していません。割り当ては手動）。
 
-### 8-7. レンダラ枠（`renderer.py`） — 後で実装
-環境音＋静止画 → 動画(mp4)合成の工程。現状は**スタブ**（`build_assets()` は空dictを返し、公式UPは安全にskip）。
-ここを実装すれば `run_publisher.py` が自動でアセットを `publish_job()` に渡し、公式アップロードが実投入される。
+### 8-7. レンダラ（`renderer.py`）
+環境音＋静止画 → 動画(mp4)合成の工程。**画像は実装済み**：`build_assets()` が `asset_image` キーで
+画像を生成して `rendered/` に保存し、`run_publisher.py` 経由で `publish_shutterstock`（FTP認証情報が
+ある場合のみ実アップロード）へ渡す。**動画(mp4)合成は未実装(スタブ)** で、`render_video()` を実装すれば
+`assets["video"]` が埋まり YouTube 実投入に繋がる。
 
 ---
 
@@ -238,11 +244,12 @@ APIキー無し・オフラインでも実体アセットを生成できる（nu
 - ✅ 全ページ共通の会話履歴（`global_chat_history`）
 - ✅ Secrets の `.env` / 環境変数フォールバック
 - ✅ 副業オートメーション：生成エンジン＋管理画面（`income_engine.py` / Auto Income）
-- ✅ アセット生成（`asset_engine.py`：環境音 / サムネ / 画像）
+- ✅ アセット生成（`asset_engine.py`：環境音 / サムネ / **Gemini画像**）
+- ✅ 画像生成の接続（`asset_image` 用途キー：Auto Income の🖌ボタン＋renderer headless）
 - ✅ 配信レイヤの骨組み（`publisher.py`：公式API/規約準拠note下書き、指数バックオフ・通知）
 - ✅ GitHub Actions：夜間生成cron（安全）＋配信（手動トリガー）
 - ✅ 用途別APIキー（マルチアカウント）保管＆接続（`key_manager.py` / Settings「用途別キー」）
-- ✅ レンダラ枠（`renderer.py`：スタブ。FFmpeg実装は次工程）
+- ✅ レンダラ：画像生成は実装済み（`renderer.build_assets`）。動画(FFmpeg)は次工程
 - ⏳ （次工程）動画・画像の実レンダリング（FFmpeg等）→ 公式アップロードの実投入
 - ⏳ （Phase 2）Vault / Dashboard / App Archive の Supabase 永続化
 - ⏳ （Phase 2）Core Upgrade のバージョン管理（`core_versions`）

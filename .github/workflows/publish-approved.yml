@@ -30,6 +30,9 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          # 画像生成(asset_image)用キー。未設定なら共通 GEMINI_API_KEY にフォールバック
+          GEMINI_API_KEY_ASSET_IMAGE: ${{ secrets.GEMINI_API_KEY_ASSET_IMAGE }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           # 以下は設定された配信先のみ有効化（未設定はskip）
           YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}

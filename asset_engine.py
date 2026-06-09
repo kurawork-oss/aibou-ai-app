@@ -209,15 +209,88 @@ def generate_thumbnail(title, subtitle=None, width=1280, height=720):
         return None
 
 
-def generate_image(prompt, openai_key=None, size="1024x1024"):
-    """画像生成。OpenAI画像APIキーがあればそれで生成、無ければサムネにフォールバック。
-    returns: (png_bytes, source)  source は 'openai' または 'placeholder' または None。"""
-    key = openai_key or os.environ.get("OPENAI_API_KEY", "")
-    if key and requests is not None:
+# === 画像生成（Gemini 優先 → OpenAI → PILサムネ） ==========================
+# Gemini画像APIはモデルIDが変わりやすいので、複数候補を順に試し、最初に成功した
+# ものを使う（環境変数 GEMINI_IMAGE_MODEL で先頭に1つ差し込める）。すべて失敗しても
+# PILサムネにフォールバックして必ず画像を返す。
+GEMINI_IMG_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models"
+
+
+def _default_gemini_image_models():
+    models = [
+        ("gemini", "gemini-2.5-flash-image"),               # Nano Banana（native画像出力）
+        ("imagen", "imagen-4.0-generate-001"),              # Imagen 4
+        ("imagen", "imagen-3.0-generate-002"),              # Imagen 3（フォールバック）
+        ("gemini", "gemini-2.0-flash-preview-image-generation"),
+    ]
+    override = os.environ.get("GEMINI_IMAGE_MODEL", "").strip()
+    if override:
+        kind = "imagen" if override.startswith("imagen") else "gemini"
+        models.insert(0, (kind, override))
+    return models
+
+
+def _imagen_predict(prompt, key, model, aspect="16:9"):
+    r = requests.post(
+        f"{GEMINI_IMG_ENDPOINT}/{model}:predict",
+        headers={"x-goog-api-key": key, "Content-Type": "application/json"},
+        json={"instances": [{"prompt": prompt}],
+              "parameters": {"sampleCount": 1, "aspectRatio": aspect}},
+        timeout=120,
+    )
+    preds = (r.json() or {}).get("predictions") or []
+    if preds and preds[0].get("bytesBase64Encoded"):
+        return preds[0]["bytesBase64Encoded"]
+    return None
+
+
+def _gemini_generate_image(prompt, key, model, aspect="16:9"):
+    r = requests.post(
+        f"{GEMINI_IMG_ENDPOINT}/{model}:generateContent",
+        headers={"x-goog-api-key": key, "Content-Type": "application/json"},
+        json={"contents": [{"parts": [{"text": prompt}]}],
+              "generationConfig": {"responseModalities": ["TEXT", "IMAGE"],
+                                   "imageConfig": {"aspectRatio": aspect}}},
+        timeout=120,
+    )
+    data = r.json() or {}
+    for cand in data.get("candidates", []) or []:
+        for part in (cand.get("content", {}) or {}).get("parts", []) or []:
+            inline = part.get("inlineData") or part.get("inline_data") or {}
+            if inline.get("data"):
+                return inline["data"]
+    return None
+
+
+def _gemini_image(prompt, key, aspect="16:9", models=None):
+    if requests is None or not key:
+        return None
+    import base64
+    for kind, model in (models or _default_gemini_image_models()):
+        try:
+            b64 = (_imagen_predict(prompt, key, model, aspect) if kind == "imagen"
+                   else _gemini_generate_image(prompt, key, model, aspect))
+            if b64:
+                return base64.b64decode(b64)
+        except Exception:
+            continue
+    return None
+
+
+def generate_image(prompt, gemini_key=None, openai_key=None, size="1024x1024", aspect="16:9"):
+    """画像生成。Gemini（用途別キー）優先 → OpenAI → PILサムネにフォールバック。
+    returns: (png_bytes, source)  source は 'gemini' / 'openai' / 'placeholder' / None。"""
+    gkey = gemini_key or os.environ.get("GEMINI_API_KEY", "")
+    if gkey:
+        img = _gemini_image(prompt, gkey, aspect=aspect)
+        if img:
+            return img, "gemini"
+    okey = openai_key or os.environ.get("OPENAI_API_KEY", "")
+    if okey and requests is not None:
         try:
             r = requests.post(
                 "https://api.openai.com/v1/images/generations",
-                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                headers={"Authorization": f"Bearer {okey}", "Content-Type": "application/json"},
                 json={"model": "gpt-image-1", "prompt": prompt, "size": size, "n": 1},
                 timeout=120,
             )
@@ -227,8 +300,7 @@ def generate_image(prompt, openai_key=None, size="1024x1024"):
                 import base64
                 return base64.b64decode(item["b64_json"]), "openai"
             if item.get("url"):
-                img = requests.get(item["url"], timeout=60)
-                return img.content, "openai"
+                return requests.get(item["url"], timeout=60).content, "openai"
         except Exception:
             pass
     png = generate_thumbnail(prompt)
