@@ -5,19 +5,19 @@
 
 st.markdown("""
 <style>
-[data-testid="stAppViewContainer"], .stApp { background-color: #e0e5ec !important; }
-.mc-title { text-align:center; color:#2d3748; font-weight:900; letter-spacing:8px;
+[data-testid="stAppViewContainer"], .stApp { background-color: #0b0b12 !important; }
+.mc-title { text-align:center; color:#e6e8ec; font-weight:900; letter-spacing:8px;
     font-family:'Share Tech Mono','Segoe UI',sans-serif; margin-bottom:4px; }
-.mc-sub { text-align:center; color:#718096; letter-spacing:3px; font-size:12px; margin-bottom:22px; }
-[data-testid="stMetric"] { background:#e0e5ec; border-radius:18px; padding:16px 8px;
-    box-shadow: 6px 6px 12px #b8bcc2, -6px -6px 12px #ffffff; text-align:center; }
+.mc-sub { text-align:center; color:#9aa0a8; letter-spacing:3px; font-size:12px; margin-bottom:22px; }
+[data-testid="stMetric"] { background:#0b0b12; border-radius:18px; padding:16px 8px;
+    box-shadow: 6px 6px 12px #000000, -6px -6px 12px #15151c; text-align:center; }
 [data-testid="stMetricValue"] { color:#2b6cb0 !important; font-weight:800 !important; }
-div.stButton > button { background:#e0e5ec !important; border:none !important; border-radius:12px !important;
-    color:#4a5568 !important; font-weight:700 !important; letter-spacing:1px !important;
-    box-shadow:5px 5px 10px #b8bcc2,-5px -5px 10px #ffffff !important; transition:all .2s ease !important; }
+div.stButton > button { background:#0b0b12 !important; border:none !important; border-radius:12px !important;
+    color:#c7ccd4 !important; font-weight:700 !important; letter-spacing:1px !important;
+    box-shadow:5px 5px 10px #000000,-5px -5px 10px #15151c !important; transition:all .2s ease !important; }
 div.stButton > button:hover { color:#00f3ff !important;
-    box-shadow: inset 4px 4px 8px #b8bcc2, inset -4px -4px 8px #ffffff !important; }
-.inbox-theme { font-weight:800; color:#2d3748; letter-spacing:1px; font-size:16px; }
+    box-shadow: inset 4px 4px 8px #000000, inset -4px -4px 8px #15151c !important; }
+.inbox-theme { font-weight:800; color:#e6e8ec; letter-spacing:1px; font-size:16px; }
 </style>
 """, unsafe_allow_html=True)
 

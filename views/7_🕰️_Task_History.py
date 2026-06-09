@@ -2,13 +2,13 @@
 st.markdown("""
     <style>
     .history-card {
-        background: rgba(255, 255, 255, 0.4);
+        background: rgba(255, 255, 255, 0.04);
         backdrop-filter: blur(10px);
-        border: 1px solid rgba(255, 255, 255, 0.9);
+        border: 1px solid #20202a;
         border-radius: 15px;
         padding: 20px;
         margin-bottom: 20px;
-        box-shadow: 6px 6px 15px rgba(163, 177, 198, 0.4), -6px -6px 15px rgba(255, 255, 255, 0.9);
+        box-shadow: 6px 6px 15px #000000, -4px -4px 12px #15151c;
         transition: all 0.3s ease;
     }
     .history-card:hover {
@@ -65,7 +65,7 @@ try:
                     <div style="font-size: 12px; color: #4a5568; margin-bottom: 15px; font-family: monospace;">
                         <b>ID:</b> {row['タスクID']} &nbsp;|&nbsp; <b>TARGET:</b> {row['目標']}
                     </div>
-                    <div style="background: rgba(255,255,255,0.6); padding: 12px; border-radius: 8px; border-left: 4px solid #3182ce; font-size: 13px; color: #2d3748;">
+                    <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; border-left: 4px solid #3182ce; font-size: 13px; color: #2d3748;">
                         <b style="color:#2b6cb0;">🤖 SYSTEM LOG:</b><br>
                         {row['ログ']}
                     </div>

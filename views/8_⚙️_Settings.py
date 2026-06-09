@@ -14,7 +14,7 @@ st.markdown("""
         backdrop-filter: blur(10px) !important;
         border: 1px solid rgba(255, 255, 255, 0.9) !important;
         border-radius: 15px !important;
-        box-shadow: 6px 6px 15px rgba(163, 177, 198, 0.4), -6px -6px 15px rgba(255, 255, 255, 0.9) !important;
+        box-shadow: 6px 6px 15px #000000, -4px -4px 12px #15151c !important;
     }
     </style>
 """, unsafe_allow_html=True)

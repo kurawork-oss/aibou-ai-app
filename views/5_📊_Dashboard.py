@@ -14,13 +14,13 @@ except ImportError:
 st.markdown("""
     <style>
     .cyber-title { color: #2b6cb0; font-weight: 800; letter-spacing: 2px; margin-bottom: 5px; text-shadow: 2px 2px 4px rgba(255,255,255,0.8); }
-    .dash-card { background: rgba(255, 255, 255, 0.4); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.9); border-radius: 15px; padding: 20px; box-shadow: 6px 6px 15px rgba(163, 177, 198, 0.4), -6px -6px 15px rgba(255, 255, 255, 0.9); height: 100%; }
-    .stat-value { font-size: 32px; font-weight: 900; color: #2b6cb0; }
-    .stat-label { font-size: 14px; font-weight: bold; color: #718096; }
-    .event-item { border-left: 4px solid #00e676; margin-bottom: 10px; background: rgba(255,255,255,0.6); padding: 12px; border-radius: 5px; box-shadow: 2px 2px 5px rgba(0,0,0,0.05);}
+    .dash-card { background: rgba(255, 255, 255, 0.04); backdrop-filter: blur(10px); border: 1px solid #20202a; border-radius: 15px; padding: 20px; box-shadow: 6px 6px 15px #000000, -4px -4px 12px #15151c; height: 100%; }
+    .stat-value { font-size: 32px; font-weight: 900; color: #00f3ff; }
+    .stat-label { font-size: 14px; font-weight: bold; color: #9aa0a8; }
+    .event-item { border-left: 4px solid #00e676; margin-bottom: 10px; background: rgba(255,255,255,0.05); padding: 12px; border-radius: 5px; box-shadow: 2px 2px 5px rgba(0,0,0,0.4);}
     
     /* Miro V2 CSS: キャンバスを最大化 */
-    .miro-container { background: #e0e5ec; border-radius: 15px; box-shadow: inset 5px 5px 15px #b8bcc2, inset -5px -5px 15px #ffffff; padding: 5px; margin-top: 10px; }
+    .miro-container { background: #0b0b12; border-radius: 15px; box-shadow: inset 5px 5px 15px #000000, inset -5px -5px 15px #15151c; padding: 5px; margin-top: 10px; }
     .react-flow { background: transparent !important; }
     div[data-baseweb="tab-list"] { gap: 10px; }
     div[data-baseweb="tab"] { background: transparent !important; border-radius: 10px 10px 0 0 !important; padding: 10px 20px !important; font-weight: bold !important; }
@@ -40,7 +40,7 @@ with tab_miro:
     else:
         # 🌟 要望9: 複数ダッシュボードの管理
         if 'miro_boards' not in st.session_state:
-            default_style = {"background": "#e0e5ec", "border": "2px solid #00f3ff", "borderRadius": "12px", "color": "#2d3748", "fontWeight": "bold", "padding": "15px", "boxShadow": "5px 5px 10px #b8bcc2"}
+            default_style = {"background": "#0b0b12", "border": "2px solid #00f3ff", "borderRadius": "12px", "color": "#e6e8ec", "fontWeight": "bold", "padding": "15px", "boxShadow": "5px 5px 10px #000000"}
             initial_node = StreamlitFlowNode(id='core_node', pos=(250, 250), data={'content': '🧠 AIBOU Core'}, node_type='default', source_position='right', target_position='left', style=default_style)
             st.session_state.miro_boards = {"Main Board": StreamlitFlowState([initial_node], [])}
         
@@ -94,7 +94,7 @@ with tab_miro:
             if submitted and new_node_text:
                 custom_style = {
                     "background": bg_color, "border": "2px solid #a0aec0", "borderRadius": border_radius,
-                    "color": "#2d3748", "fontWeight": "bold", "padding": "15px", "boxShadow": "3px 3px 8px #b8bcc2"
+                    "color": "#e6e8ec", "fontWeight": "bold", "padding": "15px", "boxShadow": "3px 3px 8px #000000"
                 }
                 new_id = f"node_{uuid.uuid4().hex[:6]}"
                 new_pos = (50, 50) # 左上に固定出現（その後自分でドラッグ）
@@ -139,7 +139,7 @@ with tab_system:
     with col2:
         st.markdown("<div class='dash-card'><div class='stat-label'>🚀 OS 稼働状態</div><div class='stat-value' style='color:#00e676;'>ONLINE</div></div>", unsafe_allow_html=True)
     with col3:
-        st.markdown(f"<div class='dash-card'><div class='stat-label'>📧 同期アカウント</div><div style='font-size: 13px; font-weight:bold; margin-top:10px; color:#2d3748; word-break: break-all;'>{my_email if my_email else 'Vault未設定'}</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='dash-card'><div class='stat-label'>📧 同期アカウント</div><div style='font-size: 13px; font-weight:bold; margin-top:10px; color:#e6e8ec; word-break: break-all;'>{my_email if my_email else 'Vault未設定'}</div></div>", unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
     col_cal, col_log = st.columns([6, 4], gap="large")
