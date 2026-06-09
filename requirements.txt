@@ -15,3 +15,5 @@ python-pptx
 streamlit-flow-component
 requests
 python-dotenv
+numpy
+Pillow

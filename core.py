@@ -51,14 +51,21 @@ try:
 except Exception as _agent_err:
     AGENT_AVAILABLE = False
 
-    def get_ai_response(prompt_or_messages, tools=None, model=None, provider=None):
+    def get_ai_response(prompt_or_messages, tools=None, model=None, provider=None, purpose=None):
         """フォールバック：Gemini を直接呼ぶだけの簡易版（agent.py 読込失敗時）。"""
         try:
             key = ""
-            try:
-                key = st.session_state.get("global_api_keys", {}).get("gemini", "")
-            except Exception:
-                pass
+            if purpose:
+                try:
+                    slot = (st.session_state.get("key_slots", {}) or {}).get(purpose) or {}
+                    key = slot.get("key", "")
+                except Exception:
+                    key = ""
+            if not key:
+                try:
+                    key = st.session_state.get("global_api_keys", {}).get("gemini", "")
+                except Exception:
+                    pass
             if not key:
                 key = get_secret("GEMINI_API_KEY")
             if not key:
@@ -85,6 +92,47 @@ except Exception as _agent_err:
         return ""
 
     TOOLS = []
+
+# === 💰 Income Engine（副業オートメーション：生成＋承認キュー）を読み込む ====
+# 失敗してもアプリ全体が落ちないよう、フォールバック実装を必ず用意する。
+try:
+    import income_engine
+    from income_engine import (
+        enqueue_theme, list_jobs, get_job, approve_job, approve_all_pending,
+        reject_job, reject_and_regenerate, get_stats, update_stats,
+        system_status, suggest_theme, generate_metadata,
+    )
+    INCOME_AVAILABLE = True
+except Exception:
+    INCOME_AVAILABLE = False
+
+    def enqueue_theme(*a, **k): return None, "⚠️ income_engine を読み込めませんでした。"
+    def list_jobs(*a, **k): return []
+    def get_job(*a, **k): return None
+    def approve_job(*a, **k): return "⚠️ income_engine を読み込めませんでした。"
+    def approve_all_pending(*a, **k): return 0
+    def reject_job(*a, **k): return "⚠️ income_engine を読み込めませんでした。"
+    def reject_and_regenerate(*a, **k): return None, "⚠️ income_engine を読み込めませんでした。"
+    def get_stats(*a, **k): return {}
+    def update_stats(*a, **k): return False
+    def system_status(*a, **k):
+        return {"db": False, "ai_engine": False, "ai_key": False,
+                "counts": {"pending": 0, "approved": 0, "completed": 0, "failed": 0, "rejected": 0},
+                "total": 0}
+    def suggest_theme(*a, **k): return ""
+    def generate_metadata(*a, **k): return {"error": "income_engine を読み込めませんでした。"}
+
+# === 🎨 Asset Engine（環境音 / サムネイル生成）を読み込む ====================
+try:
+    import asset_engine
+    from asset_engine import generate_ambient_wav, generate_thumbnail, generate_image
+    ASSET_AVAILABLE = True
+except Exception:
+    ASSET_AVAILABLE = False
+
+    def generate_ambient_wav(*a, **k): return None, "⚠️ asset_engine を読み込めませんでした。"
+    def generate_thumbnail(*a, **k): return None
+    def generate_image(*a, **k): return None, None
 
 try:
     supabase: Client = create_client(get_secret("SUPABASE_URL"), get_secret("SUPABASE_KEY"))
@@ -123,6 +171,10 @@ if "global_api_keys" not in st.session_state:
     st.session_state.global_api_keys = {}
     vd = load_vault()
     st.session_state.global_api_keys = vd.get("api_keys", {})
+    # 用途別キー（マルチアカウント）も同じVaultから読み込む
+    st.session_state.key_slots = vd.get("key_slots", {})
+if "key_slots" not in st.session_state:
+    st.session_state.key_slots = {}
 
 # === 🧠 全ページ共通のAI会話履歴（ページ移動で文脈が消えないようにする） ===
 if "global_chat_history" not in st.session_state:
@@ -131,7 +183,20 @@ if "global_chat_history" not in st.session_state:
 if "pending_action" not in st.session_state:
     st.session_state.pending_action = None
 
-st.set_page_config(page_title="AIbou", page_icon="❖", layout="wide")
+# === アプリアイコン（ブラウザタブ）＆共通ロゴ ===
+try:
+    from PIL import Image as _PILImage
+    _APP_ICON = _PILImage.open("assets/aibou_icon.png")
+except Exception:
+    _APP_ICON = "❖"
+
+st.set_page_config(page_title="AIbou", page_icon=_APP_ICON, layout="wide")
+
+# 画面左上の共通ロゴ（対応バージョンのみ。失敗しても無視）
+try:
+    st.logo("assets/aibou_icon.png")
+except Exception:
+    pass
 
 # ==========================================
 # 🔐 1. ログインシステム
@@ -140,6 +205,12 @@ if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 
 if not st.session_state.logged_in:
+    _lc1, _lc2, _lc3 = st.columns([2, 1, 2])
+    with _lc2:
+        try:
+            st.image("assets/aibou_icon.png", width=180)
+        except Exception:
+            pass
     st.title("相棒AI 起動シークエンス")
     password = st.text_input("Password", type="password")
     if st.button("システム起動"):
@@ -179,6 +250,7 @@ else:
         "Core Upgrade": "EVOLUTION",
         "Dashboard": "DASHBOARD",
         "App Archive": "APP ARCHIVE",
+        "Auto Income": "💰 AUTO INCOME",
         "Task History": "TASK HISTORY",
         "Settings": "⚙️ SETTINGS" # 🚨ここを「Secure Vault」から「Settings」に変更！
     }
@@ -303,13 +375,13 @@ MASTER_CORE_TEMPLATE = """
     #core-settings { 
         display: none; position: absolute; 
         left: 50%; top: 50%; transform: translate(-50%, -50%); 
-        background: rgba(240, 242, 246, 0.85); backdrop-filter: blur(15px); border: 1px solid #cbd5e0; 
-        border-radius: 20px; padding: 20px; box-shadow: 0px 10px 30px rgba(0, 0, 0, 0.1); 
-        width: 280px; max-height: 90%; overflow-y: auto; z-index: 99999; 
-        font-family: 'Segoe UI', sans-serif; color: #2d3748; font-size: 12px; 
+        background: rgba(10, 10, 16, 0.92); backdrop-filter: blur(15px); border: 1px solid #2a2a34;
+        border-radius: 20px; padding: 20px; box-shadow: 0px 10px 30px rgba(0, 0, 0, 0.6);
+        width: 280px; max-height: 90%; overflow-y: auto; z-index: 99999;
+        font-family: 'Segoe UI', sans-serif; color: #e6e8ec; font-size: 12px;
     }
     #core-settings input[type=range] { accent-color: #00f3ff; cursor: pointer; width: 100%; }
-    #core-settings select { background: rgba(255,255,255,0.5); border: 1px solid #cbd5e0; border-radius: 8px; padding: 5px; outline: none; width: 100%; cursor: pointer; }
+    #core-settings select { background: rgba(255,255,255,0.06); color:#e6e8ec; border: 1px solid #2a2a34; border-radius: 8px; padding: 5px; outline: none; width: 100%; cursor: pointer; }
     #core-settings input[type=color] { border: none; background: transparent; cursor: pointer; width: 30px; height: 30px; padding: 0; }
     #core-settings button:hover { filter: brightness(1.1); }
 </style>
@@ -321,7 +393,7 @@ MASTER_CORE_TEMPLATE = """
     </div>
 
     <div id="core-settings">
-        <h4 style="margin:0 0 15px 0; color:#1a202c; text-align:center; font-weight:800; letter-spacing:2px;">A.I. SETTINGS</h4>
+        <h4 style="margin:0 0 15px 0; color:#ffffff; text-align:center; font-weight:800; letter-spacing:2px;">A.I. SETTINGS</h4>
         <div style="margin-bottom: 12px;"><label style="font-weight:bold; display:block; margin-bottom:2px;">Voice Speed: <span id="val-speed">1.5</span>x</label><input type="range" id="ctrl-speed" min="0.5" max="2.0" step="0.1" value="1.5"></div>
         <div style="margin-bottom: 12px;"><label style="font-weight:bold; display:block; margin-bottom:2px;">Volume: <span id="val-vol">100</span>%</label><input type="range" id="ctrl-vol" min="0" max="1" step="0.05" value="1"></div>
         <label style="display:block; margin-bottom:12px; font-weight:bold; cursor:pointer;"><input type="checkbox" id="ctrl-filter"> Sci-Fi Voice Filter</label>
@@ -562,6 +634,16 @@ if AGENT_AVAILABLE:
     except Exception:
         pass
 
+# 💰 Income Engine にも道具（Supabase / AI）を注入
+if INCOME_AVAILABLE:
+    try:
+        income_engine.register_services(
+            supabase=(supabase if DB_CONNECTED else None),
+            get_ai_response=get_ai_response,
+        )
+    except Exception:
+        pass
+
 # ==========================================
 # 🖥️ 4. メイン画面の表示 (モジュール・ルーター)
 # ==========================================
@@ -584,6 +666,9 @@ elif page == "Dashboard" or page == "DASHBOARD":
 elif page == "App Archive" or page == "APP ARCHIVE":
     with open("views/6_📦_App_Archive.py", "r", encoding="utf-8") as f: exec(f.read())
 
+elif page == "Auto Income" or page == "💰 AUTO INCOME":
+    with open("views/10_💰_Auto_Income.py", "r", encoding="utf-8") as f: exec(f.read())
+
 elif page == "Task History" or page == "🕰️ 過去のタスク":
     with open("views/7_🕰️_Task_History.py", "r", encoding="utf-8") as f: exec(f.read())
 
@@ -592,3 +677,70 @@ elif page == "Settings" or page == "⚙️ SETTINGS":
 
 elif page == "Core Upgrade":
     with open("views/9_🚀_Core_Upgrade.py", "r", encoding="utf-8") as f: exec(f.read())
+
+# ==========================================
+# 🌑 GLOBAL DARK THEME OVERRIDE
+# 各 view の CSS の「後」に注入することで、旧ライト配色（灰背景・黒文字）を
+# 全ページで上書きする。背景＝黒 / 文字＝ライトシルバー / アクセント＝水色は維持。
+# ==========================================
+st.markdown("""
+<style>
+.stApp, [data-testid="stAppViewContainer"], [data-testid="stMain"], [data-testid="stHeader"],
+[data-testid="stBottom"], [data-testid="stBottom"] > div {
+    background-color:#000 !important;
+}
+[data-testid="stSidebar"], [data-testid="stSidebar"] > div:first-child {
+    background:#08080c !important; border-right:1px solid #1c1c24 !important; box-shadow:none !important;
+}
+.stApp p, .stApp li, .stApp label,
+[data-testid="stMarkdownContainer"], [data-testid="stMarkdownContainer"] * {
+    color:#dfe3e8 !important;
+}
+.stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5, .stApp h6,
+[data-testid="stMarkdownContainer"] h1, [data-testid="stMarkdownContainer"] h2, [data-testid="stMarkdownContainer"] h3, [data-testid="stMarkdownContainer"] h4 {
+    color:#f2f4f7 !important; text-shadow:none !important;
+}
+[data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] * { color:#9aa0a8 !important; }
+.stApp a { color:#00f3ff !important; }
+.stApp code, .stApp kbd { color:#7fffe6 !important; background:#10141a !important; }
+
+/* ボタン（ダーク・ネオモーフィズム） */
+div.stButton > button, .stDownloadButton > button, [data-testid="stFormSubmitButton"] button, .view-toggle button {
+    background:#101018 !important; color:#dfe3e8 !important; border:1px solid #20202a !important;
+    box-shadow:4px 4px 10px #000000, -3px -3px 8px #1b1b24 !important;
+}
+div.stButton > button:hover, .stDownloadButton > button:hover, [data-testid="stFormSubmitButton"] button:hover {
+    color:#00f3ff !important; border-color:#00f3ff !important;
+    box-shadow:inset 3px 3px 8px #000000, inset -3px -3px 8px #1b1b24 !important;
+}
+
+/* コンテナ / カード / Expander / メトリクス / チャット / フォーム
+   ※ box-shadow は各viewの装飾（HUBの水色エッジ等）を潰さないよう指定しない */
+[data-testid="stExpander"], [data-testid="stExpander"] details {
+    background:#0b0b12 !important; border-color:#20202a !important;
+}
+[data-testid="stVerticalBlockBorderWrapper"], [data-testid="stMetric"],
+[data-testid="stChatMessage"], [data-testid="stForm"] {
+    background:#0b0b12 !important; border-color:#20202a !important;
+}
+[data-testid="stMetricValue"] { color:#00f3ff !important; }
+[data-testid="stMetricLabel"], [data-testid="stMetricLabel"] * { color:#aeb4bc !important; }
+
+/* 入力欄 */
+[data-testid="stTextInput"] input, [data-testid="stTextArea"] textarea, [data-testid="stNumberInput"] input,
+[data-baseweb="select"] > div, [data-testid="stChatInput"], [data-testid="stChatInput"] textarea {
+    background:#0e0e16 !important; color:#e6e8ec !important; -webkit-text-fill-color:#e6e8ec !important; border:1px solid #24242e !important;
+}
+[data-testid="stTextInput"] input:focus, [data-testid="stTextArea"] textarea:focus, [data-testid="stChatInput"]:focus-within {
+    border-color:#00f3ff !important; box-shadow:0 0 12px rgba(0,243,255,0.35) !important;
+}
+
+/* タブ / ラジオ / プログレス */
+.stTabs [data-baseweb="tab"] { color:#aeb4bc !important; }
+.stTabs [aria-selected="true"] { color:#00f3ff !important; }
+div[role="radiogroup"] > label { background:#101018 !important; border:1px solid #20202a !important;
+    box-shadow:4px 4px 10px #000000, -3px -3px 8px #1b1b24 !important; }
+div[role="radiogroup"] > label p { color:#dfe3e8 !important; }
+[data-testid="stProgress"] > div > div > div { background-color:#00f3ff !important; }
+</style>
+""", unsafe_allow_html=True)

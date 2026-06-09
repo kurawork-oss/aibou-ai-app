@@ -1,12 +1,15 @@
 [theme]
+# ダークテーマ（背景＝黒 / 文字＝ライトシルバー / アクセント＝水色ネオン）
+base = "dark"
+
 # ボタンや選択時のメインカラー（水色ネオン）
 primaryColor = "#00f3ff"
 
-# 全体の背景色（ボスのCSSに合わせた微グレー）
-backgroundColor = "#e0e5ec"
+# 全体の背景色（黒）
+backgroundColor = "#000000"
 
-# サイドバーなどのサブ背景色
-secondaryBackgroundColor = "#ffffff"
+# サイドバーなどのサブ背景色（ほぼ黒のサーフェス）
+secondaryBackgroundColor = "#0c0c12"
 
-# 文字色（濃いグレー・黒）
-textColor = "#1a202c"
+# 文字色（ライトシルバー）
+textColor = "#e6e8ec"

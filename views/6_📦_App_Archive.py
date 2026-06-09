@@ -1,11 +1,11 @@
 st.markdown("""
     <style>
     .cyber-title { color: #2b6cb0; font-weight: 800; letter-spacing: 2px; margin-bottom: 20px; text-shadow: 2px 2px 4px rgba(255,255,255,0.8); }
-    .app-card { 
-        background: rgba(255, 255, 255, 0.4); backdrop-filter: blur(10px); 
-        border: 1px solid rgba(255, 255, 255, 0.9); border-radius: 15px; 
-        padding: 20px; margin-bottom: 15px; transition: all 0.3s ease; 
-        box-shadow: 4px 4px 10px rgba(163, 177, 198, 0.3), -4px -4px 10px rgba(255, 255, 255, 0.8);
+    .app-card {
+        background: rgba(255, 255, 255, 0.04); backdrop-filter: blur(10px);
+        border: 1px solid #20202a; border-radius: 15px;
+        padding: 20px; margin-bottom: 15px; transition: all 0.3s ease;
+        box-shadow: 4px 4px 10px #000000, -3px -3px 10px #15151c;
     }
     .app-card:hover { transform: translateY(-5px); border-color: #3182ce; box-shadow: 0 8px 25px rgba(49, 130, 206, 0.3); }
     </style>

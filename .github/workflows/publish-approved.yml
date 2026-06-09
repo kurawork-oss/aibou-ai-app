@@ -1,0 +1,67 @@
+name: Publish Approved Assets
+
+# 承認済み(approved)ジョブを各プラットフォームへ配信する。
+# ★ 手動トリガー(workflow_dispatch)のみ。自動では絶対に走らない ★
+#
+# コンプライアンス:
+#   - 公式手段のみ（YouTube Data API v3 / Shutterstock 公式FTPS）。
+#   - 認証情報が設定された配信先だけ実行。未設定はskip。
+#   - note は規約準拠の「下書きパッケージ」を生成してアーティファクトに保存するのみ
+#     （自動投稿・検知回避は実装しない。投稿は人間が手動で行う）。
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Ensure ffmpeg (動画合成に必要)
+        run: which ffmpeg || (sudo apt-get update && sudo apt-get install -y ffmpeg)
+
+      - name: Publish approved jobs
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          # Vault復号用（これがあれば配信用の鍵(YT/SS/Discord等)はVaultから自動読込される）
+          MASTER_ENCRYPTION_KEY: ${{ secrets.MASTER_ENCRYPTION_KEY }}
+          # 画像生成(asset_image)用キー。未設定なら共通 GEMINI_API_KEY にフォールバック
+          GEMINI_API_KEY_ASSET_IMAGE: ${{ secrets.GEMINI_API_KEY_ASSET_IMAGE }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          # 動画の尺（分）。長くするとファイルサイズ/エンコード時間が増える
+          RENDER_MINUTES: "10"
+          # 以下は設定された配信先のみ有効化（未設定はskip）
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+          SS_FTP_HOST: ${{ secrets.SS_FTP_HOST }}
+          SS_FTP_USER: ${{ secrets.SS_FTP_USER }}
+          SS_FTP_PASS: ${{ secrets.SS_FTP_PASS }}
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        run: python scripts/run_publisher.py
+
+      - name: Upload note drafts (manual posting)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: note-drafts
+          path: drafts/
+          if-no-files-found: ignore
+
+      - name: Upload rendered assets (動画/画像)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rendered-assets
+          path: rendered/
+          if-no-files-found: ignore

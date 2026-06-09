@@ -5,42 +5,42 @@ st.markdown("""
     <style>
     /* 1. 全体をクリーンなライトグレー（ネオモーフィズムベース）に */
     [data-testid="stAppViewContainer"], .stApp { 
-        background-color: #e0e5ec !important; 
+        background-color: #0b0b12 !important; 
         background-image: none !important;
         overflow-y: hidden !important; 
     }
     
     .hub-title { 
-        text-align: center; color: #4a5568; font-weight: 900;
+        text-align: center; color: #c7ccd4; font-weight: 900;
         letter-spacing: 12px; margin-bottom: 30px; font-family: 'Share Tech Mono', 'Segoe UI', sans-serif;
         text-shadow: 2px 2px 5px rgba(255,255,255,0.7);
     }
 
     /* 2. 透明感のあるネオモーフィズムボタン */
     div.stButton > button {
-        background: #e0e5ec !important; 
+        background: #0b0b12 !important; 
         border: none !important; 
         border-radius: 12px !important; 
-        color: #4a5568 !important; font-weight: 700 !important; letter-spacing: 2px !important;
-        box-shadow: 5px 5px 10px #b8bcc2, -5px -5px 10px #ffffff !important;
+        color: #c7ccd4 !important; font-weight: 700 !important; letter-spacing: 2px !important;
+        box-shadow: 5px 5px 10px #000000, -5px -5px 10px #15151c !important;
         transition: all 0.2s ease !important; padding: 10px !important; font-size: 13px !important;
     }
     div.stButton > button:hover {
-        box-shadow: inset 4px 4px 8px #b8bcc2, inset -4px -4px 8px #ffffff !important;
+        box-shadow: inset 4px 4px 8px #000000, inset -4px -4px 8px #15151c !important;
         color: #00f3ff !important;
         transform: translateY(1px);
     }
     
     .view-toggle button {
         border-radius: 20px !important; padding: 5px 15px !important; font-size: 11px !important;
-        background: #e0e5ec !important; color: #4a5568 !important;
-        box-shadow: 3px 3px 6px #b8bcc2, -3px -3px 6px #ffffff !important;
+        background: #0b0b12 !important; color: #c7ccd4 !important;
+        box-shadow: 3px 3px 6px #000000, -3px -3px 6px #15151c !important;
     }
     .view-toggle button:hover { color: #00f3ff !important; }
 
     /* 🌟 3. 衛星軌道パネル（分厚いアクリル発光エッジ仕様） */
     [data-testid="stVerticalBlockBorderWrapper"] {
-        background: #e0e5ec !important;
+        background: #0b0b12 !important;
         border: none !important;
         transition: all 0.3s ease !important;
         padding: 15px !important;
@@ -50,11 +50,11 @@ st.markdown("""
     [data-testid="column"]:nth-of-type(1) [data-testid="stVerticalBlockBorderWrapper"] {
         border-radius: 15px 70px 70px 15px !important;
         border-right: 6px solid rgba(0, 210, 255, 0.5) !important;
-        box-shadow: 8px 8px 16px #b8bcc2, -8px -8px 16px #ffffff, inset -4px 0px 12px rgba(0, 210, 255, 0.15) !important;
+        box-shadow: 8px 8px 16px #000000, -8px -8px 16px #15151c, inset -4px 0px 12px rgba(0, 210, 255, 0.15) !important;
     }
     [data-testid="column"]:nth-of-type(1) [data-testid="stVerticalBlockBorderWrapper"]:hover {
         border-right: 6px solid #00f3ff !important;
-        box-shadow: 12px 12px 20px #b8bcc2, -12px -12px 20px #ffffff, inset -8px 0px 20px rgba(0, 243, 255, 0.4) !important;
+        box-shadow: 12px 12px 20px #000000, -12px -12px 20px #15151c, inset -8px 0px 20px rgba(0, 243, 255, 0.4) !important;
         transform: translateY(-2px);
     }
     
@@ -62,17 +62,17 @@ st.markdown("""
     [data-testid="column"]:nth-of-type(3) [data-testid="stVerticalBlockBorderWrapper"] {
         border-radius: 70px 15px 15px 70px !important;
         border-left: 6px solid rgba(0, 210, 255, 0.5) !important;
-        box-shadow: 8px 8px 16px #b8bcc2, -8px -8px 16px #ffffff, inset 4px 0px 12px rgba(0, 210, 255, 0.15) !important;
+        box-shadow: 8px 8px 16px #000000, -8px -8px 16px #15151c, inset 4px 0px 12px rgba(0, 210, 255, 0.15) !important;
     }
     [data-testid="column"]:nth-of-type(3) [data-testid="stVerticalBlockBorderWrapper"]:hover {
         border-left: 6px solid #00f3ff !important;
-        box-shadow: 12px 12px 20px #b8bcc2, -12px -12px 20px #ffffff, inset 8px 0px 20px rgba(0, 243, 255, 0.4) !important;
+        box-shadow: 12px 12px 20px #000000, -12px -12px 20px #15151c, inset 8px 0px 20px rgba(0, 243, 255, 0.4) !important;
         transform: translateY(-2px);
     }
     
     .panel-header {
-        font-weight: 900; color: #2d3748; letter-spacing: 4px; font-size: 14px; 
-        margin-bottom: 15px; text-shadow: 1px 1px 2px #ffffff;
+        font-weight: 900; color: #e6e8ec; letter-spacing: 4px; font-size: 14px; 
+        margin-bottom: 15px; text-shadow: 1px 1px 2px #15151c;
     }
     .panel-header-left { text-align: left; }
     .panel-header-right { text-align: right; }
@@ -82,7 +82,16 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.markdown("<h2 class='hub-title'>⬡ THE FORGE OS</h2>", unsafe_allow_html=True)
+_logo_b64 = get_base64_video("assets/aibou_icon.png")
+if _logo_b64:
+    st.markdown(f"""
+        <div style="display:flex; align-items:center; justify-content:center; gap:16px; margin:4px 0 24px;">
+          <img src="data:image/png;base64,{_logo_b64}" style="width:58px; height:58px; border-radius:14px; box-shadow:0 0 22px rgba(0,243,255,0.45);">
+          <h2 class='hub-title' style="margin:0;">THE FORGE OS</h2>
+        </div>
+    """, unsafe_allow_html=True)
+else:
+    st.markdown("<h2 class='hub-title'>⬡ THE FORGE OS</h2>", unsafe_allow_html=True)
 
 if "global_chat_history" not in st.session_state: st.session_state.global_chat_history = []
 if "ai_voice_base64" not in st.session_state: st.session_state.ai_voice_base64 = None
@@ -113,6 +122,7 @@ with col_left:
             st.markdown("<div class='panel-header panel-header-left'>❖ AGENCY</div>", unsafe_allow_html=True)
             if st.button("＞ Active Tasks", use_container_width=True): st.session_state.current_mode = "Active Tasks"; st.rerun()
             if st.button("＞ Task History", use_container_width=True): st.session_state.current_mode = "Task History"; st.rerun()
+            if st.button("＞ Auto Income", use_container_width=True): st.session_state.current_mode = "Auto Income"; st.rerun()
 
 with col_core:
     st.markdown("<div class='view-toggle' style='text-align:center;'>", unsafe_allow_html=True)
