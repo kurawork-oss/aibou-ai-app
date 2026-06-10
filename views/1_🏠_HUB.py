@@ -82,7 +82,9 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-_logo_b64 = get_base64_video("assets/aibou_icon.png")
+if "icon_b64" not in st.session_state:
+    st.session_state.icon_b64 = get_base64_video("assets/aibou_icon.png") or ""
+_logo_b64 = st.session_state.icon_b64
 if _logo_b64:
     st.markdown(f"""
         <div style="display:flex; align-items:center; justify-content:center; gap:16px; margin:4px 0 24px;">

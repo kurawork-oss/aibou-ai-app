@@ -492,29 +492,31 @@ with col_content:
             if not (host and user and pw):
                 st.warning("Shutterstock FTP 情報が未設定です。")
             else:
-                try:
-                    from ftplib import FTP_TLS
-                    f = FTP_TLS(host); f.login(user, pw); f.prot_p(); f.quit()
-                    st.success("ログイン成功。")
-                except Exception as e:
-                    st.error(f"失敗: {e}")
+                with st.spinner("FTP接続テスト中..."):
+                    try:
+                        from ftplib import FTP_TLS
+                        f = FTP_TLS(host); f.login(user, pw); f.prot_p(); f.quit()
+                        st.success("ログイン成功。")
+                    except Exception as e:
+                        st.error(f"失敗: {e}")
         if st.button("📺 YouTube 認証をテスト", use_container_width=True):
             cid, csec, rtok = keys.get("youtube_client_id", ""), keys.get("youtube_client_secret", ""), keys.get("youtube_refresh_token", "")
             if not (cid and csec and rtok):
                 st.warning("YouTube OAuth 情報が未設定です。")
             else:
-                try:
-                    from google.oauth2.credentials import Credentials
-                    from googleapiclient.discovery import build as _gbuild
-                    creds = Credentials(token=None, refresh_token=rtok, client_id=cid, client_secret=csec,
-                                        token_uri="https://oauth2.googleapis.com/token",
-                                        scopes=["https://www.googleapis.com/auth/youtube.readonly"])
-                    yt = _gbuild("youtube", "v3", credentials=creds)
-                    ch = yt.channels().list(part="snippet", mine=True).execute()
-                    title = (ch.get("items") or [{}])[0].get("snippet", {}).get("title", "(不明)")
-                    st.success(f"認証OK：チャンネル「{title}」")
-                except Exception as e:
-                    st.error(f"失敗: {e}")
+                with st.spinner("YouTube 認証テスト中..."):
+                    try:
+                        from google.oauth2.credentials import Credentials
+                        from googleapiclient.discovery import build as _gbuild
+                        creds = Credentials(token=None, refresh_token=rtok, client_id=cid, client_secret=csec,
+                                            token_uri="https://oauth2.googleapis.com/token",
+                                            scopes=["https://www.googleapis.com/auth/youtube.readonly"])
+                        yt = _gbuild("youtube", "v3", credentials=creds)
+                        ch = yt.channels().list(part="snippet", mine=True).execute()
+                        title = (ch.get("items") or [{}])[0].get("snippet", {}).get("title", "(不明)")
+                        st.success(f"認証OK：チャンネル「{title}」")
+                    except Exception as e:
+                        st.error(f"失敗: {e}")
 
         st.markdown("##### 🤖 GitHub Actions（自動運転）")
         st.markdown(
