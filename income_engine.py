@@ -225,7 +225,7 @@ def _local_jobs():
 
 
 def list_jobs(status=None, limit=100):
-    """承認キューのジョブを新しい順に返す。"""
+    """承認キューのジョブを新しい順に返す。DBクエリ失敗時はローカル退避分にフォールバック。"""
     db = _db()
     if db:
         try:
@@ -235,7 +235,7 @@ def list_jobs(status=None, limit=100):
             res = q.order("created_at", desc=True).limit(limit).execute()
             return res.data or []
         except Exception:
-            return []
+            pass  # テーブル未作成/接続不良 → ローカルへフォールバック
     jobs = list(_local_jobs())
     if status:
         jobs = [j for j in jobs if j.get("status") == status]
@@ -247,9 +247,10 @@ def get_job(job_id):
     if db:
         try:
             res = db.table("income_jobs").select("*").eq("id", job_id).execute()
-            return (res.data or [None])[0]
+            if res.data:
+                return res.data[0]
         except Exception:
-            return None
+            pass
     for j in _local_jobs():
         if j.get("id") == job_id:
             return j
@@ -259,13 +260,13 @@ def get_job(job_id):
 def _find_active_by_dedupe(key):
     """同一テーマで pending / approved / completed のジョブを探す（重複生成防止）。"""
     db = _db()
-    rows = []
+    rows = None
     if db:
         try:
             rows = db.table("income_jobs").select("*").eq("dedupe_key", key).execute().data or []
         except Exception:
-            rows = []
-    else:
+            rows = None  # DB失敗 → ローカルで判定
+    if rows is None:
         rows = [j for j in _local_jobs() if j.get("dedupe_key") == key]
     return [r for r in rows if r.get("status") in ("pending", "approved", "completed")]
 
@@ -325,7 +326,7 @@ def set_status(job_id, status, log=None):
             db.table("income_jobs").update(patch).eq("id", job_id).execute()
             return True
         except Exception:
-            return False
+            pass  # DB失敗 → ローカルへフォールバック
     for j in _local_jobs():
         if j.get("id") == job_id:
             j.update(patch)
@@ -380,9 +381,9 @@ def get_stats():
                 if isinstance(d, str):
                     d = json.loads(d)
                 return {**DEFAULT_STATS, **d}
+            return dict(DEFAULT_STATS)  # DB正常・行なし → デフォルト
         except Exception:
-            pass
-        return dict(DEFAULT_STATS)
+            pass  # DB失敗 → ローカルへフォールバック
     ss = _session()
     if ss is not None:
         return ss.get("income_stats_local", dict(DEFAULT_STATS))
@@ -397,7 +398,7 @@ def update_stats(data):
             db.table("income_stats").upsert({"id": 1, "data": merged}).execute()
             return True
         except Exception:
-            return False
+            pass  # DB失敗 → ローカルへフォールバック
     ss = _session()
     if ss is not None:
         ss.income_stats_local = merged

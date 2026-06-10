@@ -236,7 +236,7 @@ def _imagen_predict(prompt, key, model, aspect="16:9"):
         headers={"x-goog-api-key": key, "Content-Type": "application/json"},
         json={"instances": [{"prompt": prompt}],
               "parameters": {"sampleCount": 1, "aspectRatio": aspect}},
-        timeout=120,
+        timeout=60,
     )
     preds = (r.json() or {}).get("predictions") or []
     if preds and preds[0].get("bytesBase64Encoded"):
@@ -251,7 +251,7 @@ def _gemini_generate_image(prompt, key, model, aspect="16:9"):
         json={"contents": [{"parts": [{"text": prompt}]}],
               "generationConfig": {"responseModalities": ["TEXT", "IMAGE"],
                                    "imageConfig": {"aspectRatio": aspect}}},
-        timeout=120,
+        timeout=60,
     )
     data = r.json() or {}
     for cand in data.get("candidates", []) or []:
