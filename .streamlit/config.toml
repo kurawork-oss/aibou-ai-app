@@ -1,15 +1,15 @@
 [theme]
-# ダークテーマ（背景＝黒 / 文字＝ライトシルバー / アクセント＝水色ネオン）
+# THE FORGE OS — 漆黒 × 純白 × ライト水色
 base = "dark"
 
-# ボタンや選択時のメインカラー（水色ネオン）
-primaryColor = "#00f3ff"
+# コア＆アクティブカラー（ライト水色 / ネオンシアン）
+primaryColor = "#66FCF1"
 
-# 全体の背景色（黒）
-backgroundColor = "#000000"
+# ベース背景（漆黒）
+backgroundColor = "#0B0C10"
 
-# サイドバーなどのサブ背景色（ほぼ黒のサーフェス）
-secondaryBackgroundColor = "#0c0c12"
+# サブ背景（サイドバー等）
+secondaryBackgroundColor = "#0d0f15"
 
-# 文字色（ライトシルバー）
-textColor = "#e6e8ec"
+# 本文の文字色（ライトシルバー）
+textColor = "#C5C6C7"

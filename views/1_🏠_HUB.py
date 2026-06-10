@@ -1,100 +1,25 @@
-if "hub_view_mode" not in st.session_state: st.session_state.hub_view_mode = "CORE"
+# views/1_🏠_HUB.py — THE FORGE OS / コマンドデッキ
+# 中央の「コア」を主役に、下部カルーセル（◀ ❖ MODE ▶）でモードを選び、❖で確定すると
+# システムボイスが鳴り、その「部屋カード（ホワイトグラス）」が展開する。
+# AIコンソール（チャット/音声入力/承認ゲート）も保持。
+# 配色・カード等のCSSは assets/style.css（core.py が全ページに適用）。
 
-# ☀️ DAYLIGHT ORBITAL (Light Neumorphism + Arc Reactor)
-st.markdown("""
-    <style>
-    /* 1. 全体をクリーンなライトグレー（ネオモーフィズムベース）に */
-    [data-testid="stAppViewContainer"], .stApp { 
-        background-color: #0b0b12 !important; 
-        background-image: none !important;
-        overflow-y: hidden !important; 
-    }
-    
-    .hub-title { 
-        text-align: center; color: #c7ccd4; font-weight: 900;
-        letter-spacing: 12px; margin-bottom: 30px; font-family: 'Share Tech Mono', 'Segoe UI', sans-serif;
-        text-shadow: 2px 2px 5px rgba(255,255,255,0.7);
-    }
+# --- モード定義（FACTORY / BRAIN / AGENCY / CORE）と部屋（サブメニュー） ---
+# rooms: (表示名, サブラベル, 遷移先 current_mode)
+MODES = [
+    {"name": "FACTORY", "desc": "FACTORY MODE — アプリケーションの錬成、およびプロトタイプのアーカイブを実行します。",
+     "rooms": [("Forge Lab", "FORGE LAB", "Forge Lab"), ("App Archive", "APP ARCHIVE", "App Archive")]},
+    {"name": "BRAIN", "desc": "BRAIN MODE — 知識の保管と、アイデアの可視化（無限キャンバス）を司ります。",
+     "rooms": [("Data Vault", "DATA VAULT", "Document Vault"), ("Miro Board", "MIRO BOARD", "Dashboard")]},
+    {"name": "AGENCY", "desc": "AGENCY MODE — タスクの実行管理と、自動収益化のオペレーションを統括します。",
+     "rooms": [("Active Tasks", "ACTIVE TASKS", "Active Tasks"), ("Task History", "TASK HISTORY", "Task History"), ("Auto Income", "AUTO INCOME", "Auto Income")]},
+    {"name": "CORE", "desc": "CORE MODE — システムの進化（自己改変）と、環境設定を管理します。",
+     "rooms": [("Evolution", "EVOLUTION", "Core Upgrade"), ("Settings", "SETTINGS", "Settings")]},
+]
 
-    /* 2. 透明感のあるネオモーフィズムボタン */
-    div.stButton > button {
-        background: #0b0b12 !important; 
-        border: none !important; 
-        border-radius: 12px !important; 
-        color: #c7ccd4 !important; font-weight: 700 !important; letter-spacing: 2px !important;
-        box-shadow: 5px 5px 10px #000000, -5px -5px 10px #15151c !important;
-        transition: all 0.2s ease !important; padding: 10px !important; font-size: 13px !important;
-    }
-    div.stButton > button:hover {
-        box-shadow: inset 4px 4px 8px #000000, inset -4px -4px 8px #15151c !important;
-        color: #00f3ff !important;
-        transform: translateY(1px);
-    }
-    
-    .view-toggle button {
-        border-radius: 20px !important; padding: 5px 15px !important; font-size: 11px !important;
-        background: #0b0b12 !important; color: #c7ccd4 !important;
-        box-shadow: 3px 3px 6px #000000, -3px -3px 6px #15151c !important;
-    }
-    .view-toggle button:hover { color: #00f3ff !important; }
-
-    /* 🌟 3. 衛星軌道パネル（分厚いアクリル発光エッジ仕様） */
-    [data-testid="stVerticalBlockBorderWrapper"] {
-        background: #0b0b12 !important;
-        border: none !important;
-        transition: all 0.3s ease !important;
-        padding: 15px !important;
-    }
-    
-    /* 左側のパネル (FACTORY, AGENCY): 内側へ発光する分厚いシアンのフチ */
-    [data-testid="column"]:nth-of-type(1) [data-testid="stVerticalBlockBorderWrapper"] {
-        border-radius: 15px 70px 70px 15px !important;
-        border-right: 6px solid rgba(0, 210, 255, 0.5) !important;
-        box-shadow: 8px 8px 16px #000000, -8px -8px 16px #15151c, inset -4px 0px 12px rgba(0, 210, 255, 0.15) !important;
-    }
-    [data-testid="column"]:nth-of-type(1) [data-testid="stVerticalBlockBorderWrapper"]:hover {
-        border-right: 6px solid #00f3ff !important;
-        box-shadow: 12px 12px 20px #000000, -12px -12px 20px #15151c, inset -8px 0px 20px rgba(0, 243, 255, 0.4) !important;
-        transform: translateY(-2px);
-    }
-    
-    /* 右側のパネル (BRAIN, CORE): 内側へ発光する分厚いシアンのフチ */
-    [data-testid="column"]:nth-of-type(3) [data-testid="stVerticalBlockBorderWrapper"] {
-        border-radius: 70px 15px 15px 70px !important;
-        border-left: 6px solid rgba(0, 210, 255, 0.5) !important;
-        box-shadow: 8px 8px 16px #000000, -8px -8px 16px #15151c, inset 4px 0px 12px rgba(0, 210, 255, 0.15) !important;
-    }
-    [data-testid="column"]:nth-of-type(3) [data-testid="stVerticalBlockBorderWrapper"]:hover {
-        border-left: 6px solid #00f3ff !important;
-        box-shadow: 12px 12px 20px #000000, -12px -12px 20px #15151c, inset 8px 0px 20px rgba(0, 243, 255, 0.4) !important;
-        transform: translateY(-2px);
-    }
-    
-    .panel-header {
-        font-weight: 900; color: #e6e8ec; letter-spacing: 4px; font-size: 14px; 
-        margin-bottom: 15px; text-shadow: 1px 1px 2px #15151c;
-    }
-    .panel-header-left { text-align: left; }
-    .panel-header-right { text-align: right; }
-    
-    /* 入力欄（チャット）のライト化 */
-    [data-testid="stChatInput"] { background: transparent !important; border: none !important; }
-    </style>
-""", unsafe_allow_html=True)
-
-if "icon_b64" not in st.session_state:
-    st.session_state.icon_b64 = get_base64_video("assets/aibou_icon.png") or ""
-_logo_b64 = st.session_state.icon_b64
-if _logo_b64:
-    st.markdown(f"""
-        <div style="display:flex; align-items:center; justify-content:center; gap:16px; margin:4px 0 24px;">
-          <img src="data:image/png;base64,{_logo_b64}" style="width:58px; height:58px; border-radius:14px; box-shadow:0 0 22px rgba(0,243,255,0.45);">
-          <h2 class='hub-title' style="margin:0;">THE FORGE OS</h2>
-        </div>
-    """, unsafe_allow_html=True)
-else:
-    st.markdown("<h2 class='hub-title'>⬡ THE FORGE OS</h2>", unsafe_allow_html=True)
-
+# --- 状態初期化 ---
+if "hub_browse_index" not in st.session_state: st.session_state.hub_browse_index = 0
+if "hub_active_mode" not in st.session_state: st.session_state.hub_active_mode = MODES[0]["name"]
 if "global_chat_history" not in st.session_state: st.session_state.global_chat_history = []
 if "ai_voice_base64" not in st.session_state: st.session_state.ai_voice_base64 = None
 if "just_generated_audio" not in st.session_state: st.session_state.just_generated_audio = False
@@ -102,70 +27,79 @@ if "pending_action" not in st.session_state: st.session_state.pending_action = N
 
 v_data = st.session_state.ai_voice_base64 if st.session_state.ai_voice_base64 else ""
 autoplay_attr = "autoplay" if st.session_state.just_generated_audio else ""
-st.session_state.just_generated_audio = False 
+st.session_state.just_generated_audio = False
 
-# 👑 カラムを [1 : 1.5 : 1] のワイドグリッドに配置（中央コアを大きく）
-core_height = 320
-col_left, col_core, col_right = st.columns([1, 1.5, 1], gap="medium")
+# --- ロゴ（アイコン＋ワードマーク） ---
+if "icon_b64" not in st.session_state:
+    st.session_state.icon_b64 = get_base64_video("assets/aibou_icon.png") or ""
+if st.session_state.icon_b64:
+    st.markdown(
+        f"""<div class="forge-logo-wrap">
+              <img src="data:image/png;base64,{st.session_state.icon_b64}">
+              <h2 class="hub-title">THE FORGE OS</h2>
+            </div>""",
+        unsafe_allow_html=True,
+    )
+else:
+    st.markdown("<h2 class='hub-title' style='text-align:center;'>⬡ THE FORGE OS</h2>", unsafe_allow_html=True)
 
-with col_left:
-    st.markdown("<br>", unsafe_allow_html=True)
-    if st.session_state.hub_view_mode == "HUB":
-        # パネル1: FACTORY
-        with st.container(border=True):
-            st.markdown("<div class='panel-header panel-header-left'>❖ FACTORY</div>", unsafe_allow_html=True)
-            if st.button("＞ Forge Lab", use_container_width=True): st.session_state.current_mode = "Forge Lab"; st.rerun()
-            if st.button("＞ App Archive", use_container_width=True): st.session_state.current_mode = "App Archive"; st.rerun()
-        
-        st.markdown("<br>", unsafe_allow_html=True)
-        
-        # パネル2: AGENCY
-        with st.container(border=True):
-            st.markdown("<div class='panel-header panel-header-left'>❖ AGENCY</div>", unsafe_allow_html=True)
-            if st.button("＞ Active Tasks", use_container_width=True): st.session_state.current_mode = "Active Tasks"; st.rerun()
-            if st.button("＞ Task History", use_container_width=True): st.session_state.current_mode = "Task History"; st.rerun()
-            if st.button("＞ Auto Income", use_container_width=True): st.session_state.current_mode = "Auto Income"; st.rerun()
-
-with col_core:
-    st.markdown("<div class='view-toggle' style='text-align:center;'>", unsafe_allow_html=True)
-    toggle_label = "◈ VIEW: CORE" if st.session_state.hub_view_mode == "HUB" else "◈ VIEW: HUB"
-    if st.button(toggle_label, key="toggle_view"):
-        st.session_state.hub_view_mode = "CORE" if st.session_state.hub_view_mode == "HUB" else "HUB"
-        st.rerun()
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    # コアをド真ん中に鎮座させる
-    core_html = MASTER_CORE_TEMPLATE.replace("H_VAL", str(core_height)).replace("MAX_Wpx", "300").replace("V_DATA", v_data).replace("A_PLAY", autoplay_attr)
+# --- コア（主役）を中央に鎮座 ---
+core_height = 300
+_cl, _cc, _cr = st.columns([1, 2, 1])
+with _cc:
+    core_html = (MASTER_CORE_TEMPLATE
+                 .replace("H_VAL", str(core_height)).replace("MAX_Wpx", "300")
+                 .replace("V_DATA", v_data).replace("A_PLAY", autoplay_attr))
     st.components.v1.html(core_html, height=core_height + 20)
-    
-    if st.session_state.hub_view_mode == "CORE":
-        with st.container(height=280, border=False):
-            for m in st.session_state.global_chat_history:
-                with st.chat_message(m["role"], avatar=m.get("avatar", "🤖")):
-                    st.markdown(m["content"])
 
-with col_right:
-    st.markdown("<br>", unsafe_allow_html=True)
-    if st.session_state.hub_view_mode == "HUB":
-        # パネル3: BRAIN
-        with st.container(border=True):
-            st.markdown("<div class='panel-header panel-header-right'>BRAIN ❖</div>", unsafe_allow_html=True)
-            if st.button("Data Vault ＜", use_container_width=True): st.session_state.current_mode = "Document Vault"; st.rerun()
-            if st.button("Miro Board ＜", use_container_width=True): st.session_state.current_mode = "Dashboard"; st.rerun()
-            
-        st.markdown("<br>", unsafe_allow_html=True)
+# --- 確定中モードの説明＋部屋カード（コマンドデッキ直上に展開） ---
+_active = next((m for m in MODES if m["name"] == st.session_state.hub_active_mode), MODES[0])
+st.markdown(f"<div class='mode-desc'>{_active['desc']}</div>", unsafe_allow_html=True)
 
-        # パネル4: CORE
-        with st.container(border=True):
-            st.markdown("<div class='panel-header panel-header-right'>CORE ❖</div>", unsafe_allow_html=True)
-            if st.button("Evolution ＜", use_container_width=True): st.session_state.current_mode = "Core Upgrade"; st.rerun()
-            if st.button("Settings ＜", use_container_width=True): st.session_state.current_mode = "Settings"; st.rerun()
+_cards = "".join(
+    f"<a class='mode-card' href='?goto={target.replace(' ', '%20')}' target='_self'>"
+    f"<div class='mc-name'>{disp}</div><div class='mc-sub'>{sub}</div></a>"
+    for disp, sub, target in _active["rooms"]
+)
+st.markdown(f"<div class='room-grid'>{_cards}</div>", unsafe_allow_html=True)
+
+# --- コマンドデッキ：◀ ❖ モード名 ▶ カルーセル ---
+_browse = MODES[st.session_state.hub_browse_index]
+b1, b2, b3 = st.columns([1, 2, 1])
+if b1.button("◀", key="mode_prev", use_container_width=True):
+    st.session_state.hub_browse_index = (st.session_state.hub_browse_index - 1) % len(MODES)
+    st.rerun()
+if b2.button(f"❖  {_browse['name']}", key="mode_confirm", use_container_width=True):
+    # 確定：アクティブモードを切替＋システムボイス（コアが波形で発光）
+    st.session_state.hub_active_mode = _browse["name"]
+    try:
+        _tts = gTTS(text=_browse["name"], lang="en")
+        _buf = io.BytesIO(); _tts.write_to_fp(_buf)
+        st.session_state.ai_voice_base64 = base64.b64encode(_buf.getvalue()).decode()
+        st.session_state.just_generated_audio = True
+    except Exception:
+        pass
+    st.rerun()
+if b3.button("▶", key="mode_next", use_container_width=True):
+    st.session_state.hub_browse_index = (st.session_state.hub_browse_index + 1) % len(MODES)
+    st.rerun()
+
+if _browse["name"] != st.session_state.hub_active_mode:
+    st.markdown(
+        f"<div class='mode-active-hint'>◀ ▶ 選択中: <b>{_browse['name']}</b> ／ ❖ を押して確定</div>",
+        unsafe_allow_html=True,
+    )
+
+# --- AI会話履歴 ---
+if st.session_state.global_chat_history:
+    with st.container(height=240, border=False):
+        for m in st.session_state.global_chat_history:
+            with st.chat_message(m["role"], avatar=m.get("avatar", "🤖")):
+                st.markdown(m["content"])
 
 # ------------------------------------------
 # 🚨 承認ゲート（外部に作用する操作）・マイク・AIチャット処理
 # ------------------------------------------
-# カレンダー登録・通知送信など「外部に作用する操作」はAIが即実行せず、
-# ここでボスの承認（Approve）を得てから execute_tool() で実行する。
 if st.session_state.pending_action:
     pa = st.session_state.pending_action
     st.warning(f"⚠️ 以下の操作を実行しますか？\n\n{describe_pending(pa)}")
@@ -185,15 +119,14 @@ if st.session_state.pending_action:
 
 st.markdown("""
     <style>
-    iframe[title*='mic'] { mix-blend-mode: multiply !important; opacity: 0.7; transition: all 0.3s ease-in-out; } 
-    iframe[title*='mic']:hover { opacity: 1.0; filter: drop-shadow(0px 5px 15px rgba(0, 243, 255, 0.4)); transform: translateY(-2px); } 
+    iframe[title*='mic'] { mix-blend-mode: screen !important; opacity: 0.8; transition: all 0.3s ease-in-out; }
+    iframe[title*='mic']:hover { opacity: 1.0; filter: drop-shadow(0px 5px 15px rgba(102, 252, 241, 0.5)); transform: translateY(-2px); }
     [data-testid='stVerticalBlock'] > div:has(iframe[title*='mic']) { margin-bottom: -25px !important; position: relative; z-index: 50; }
     </style>
 """, unsafe_allow_html=True)
 
-col1, col2, col3 = st.columns([4, 4, 4]) 
+col1, col2, col3 = st.columns([4, 4, 4])
 with col2:
-    # 音声入力マイクをコアの直下に配置
     spoken_text = speech_to_text(language='ja', start_prompt="◈ PUSH TO TALK", stop_prompt="⬡ TAP TO SEND", use_container_width=True, just_once=True, key='STT')
 
 if not st.session_state.pending_action:
@@ -214,16 +147,14 @@ if st.session_state.global_chat_history and st.session_state.global_chat_history
     ]
     with st.chat_message("assistant", avatar="◈"):
         with st.spinner(" "):
-            # 🤖 エージェント本体：マルチAI＋ツール実行。
-            #    カレンダー登録や通知など外部に作用する操作は pending として返り、
-            #    上の承認ゲートでボスの許可を得てから実行される。
+            # 🤖 エージェント本体：マルチAI＋ツール実行（承認が必要な操作は pending に）
             ai_text, _updated, pending = run_agent(last_prompt, prior_history)
             if pending:
                 st.session_state.pending_action = pending
 
             st.markdown(ai_text)
 
-            # 🔊 音声読み上げ（ネットワーク不調でも落ちないように保護）
+            # 🔊 音声読み上げ（ネットワーク不調でも落ちないよう保護）
             try:
                 clean_text = ai_text.replace("*", "").replace("#", "").replace("`", "").replace("_", "")
                 if clean_text.strip():

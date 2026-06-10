@@ -227,6 +227,19 @@ if not st.session_state.logged_in:
 if "current_mode" not in st.session_state:
     st.session_state.current_mode = "HUB"
 
+# 部屋カード（HUBのホワイトグラスカード）からの遷移：?goto=<mode>
+try:
+    _goto = st.query_params.get("goto")
+    if _goto:
+        st.session_state.current_mode = _goto
+        try:
+            del st.query_params["goto"]
+        except Exception:
+            st.query_params.clear()
+        st.rerun()
+except Exception:
+    pass
+
 if st.session_state.current_mode == "HUB":
     st.markdown("""
         <style>
@@ -430,7 +443,7 @@ MASTER_CORE_TEMPLATE = """
 
     const STORAGE_KEY = "jarvis_core_settings";
     // 🚨 showChat をデフォルト設定に追加
-    const DEFAULTS = { speed: 1.5, vol: 1, filter: false, innerColor: "#00f3ff", outerColor: "#0064ff", pulse: 2, particles: false, showMic: false, showChat: true };
+    const DEFAULTS = { speed: 1.5, vol: 1, filter: false, innerColor: "#66FCF1", outerColor: "#45A29E", pulse: 2, particles: false, showMic: false, showChat: true };
     
     let settings = { ...DEFAULTS };
     try { 
@@ -679,68 +692,11 @@ elif page == "Core Upgrade":
     with open("views/9_🚀_Core_Upgrade.py", "r", encoding="utf-8") as f: exec(f.read())
 
 # ==========================================
-# 🌑 GLOBAL DARK THEME OVERRIDE
-# 各 view の CSS の「後」に注入することで、旧ライト配色（灰背景・黒文字）を
-# 全ページで上書きする。背景＝黒 / 文字＝ライトシルバー / アクセント＝水色は維持。
+# 🎨 DESIGN SYSTEM (assets/style.css)
+# 各 view の CSS の「後」に読み込み、全ページへ「漆黒×純白×ライト水色」を適用する。
 # ==========================================
-st.markdown("""
-<style>
-.stApp, [data-testid="stAppViewContainer"], [data-testid="stMain"], [data-testid="stHeader"],
-[data-testid="stBottom"], [data-testid="stBottom"] > div {
-    background-color:#000 !important;
-}
-[data-testid="stSidebar"], [data-testid="stSidebar"] > div:first-child {
-    background:#08080c !important; border-right:1px solid #1c1c24 !important; box-shadow:none !important;
-}
-.stApp p, .stApp li, .stApp label,
-[data-testid="stMarkdownContainer"], [data-testid="stMarkdownContainer"] * {
-    color:#dfe3e8 !important;
-}
-.stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5, .stApp h6,
-[data-testid="stMarkdownContainer"] h1, [data-testid="stMarkdownContainer"] h2, [data-testid="stMarkdownContainer"] h3, [data-testid="stMarkdownContainer"] h4 {
-    color:#f2f4f7 !important; text-shadow:none !important;
-}
-[data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] * { color:#9aa0a8 !important; }
-.stApp a { color:#00f3ff !important; }
-.stApp code, .stApp kbd { color:#7fffe6 !important; background:#10141a !important; }
-
-/* ボタン（ダーク・ネオモーフィズム） */
-div.stButton > button, .stDownloadButton > button, [data-testid="stFormSubmitButton"] button, .view-toggle button {
-    background:#101018 !important; color:#dfe3e8 !important; border:1px solid #20202a !important;
-    box-shadow:4px 4px 10px #000000, -3px -3px 8px #1b1b24 !important;
-}
-div.stButton > button:hover, .stDownloadButton > button:hover, [data-testid="stFormSubmitButton"] button:hover {
-    color:#00f3ff !important; border-color:#00f3ff !important;
-    box-shadow:inset 3px 3px 8px #000000, inset -3px -3px 8px #1b1b24 !important;
-}
-
-/* コンテナ / カード / Expander / メトリクス / チャット / フォーム
-   ※ box-shadow は各viewの装飾（HUBの水色エッジ等）を潰さないよう指定しない */
-[data-testid="stExpander"], [data-testid="stExpander"] details {
-    background:#0b0b12 !important; border-color:#20202a !important;
-}
-[data-testid="stVerticalBlockBorderWrapper"], [data-testid="stMetric"],
-[data-testid="stChatMessage"], [data-testid="stForm"] {
-    background:#0b0b12 !important; border-color:#20202a !important;
-}
-[data-testid="stMetricValue"] { color:#00f3ff !important; }
-[data-testid="stMetricLabel"], [data-testid="stMetricLabel"] * { color:#aeb4bc !important; }
-
-/* 入力欄 */
-[data-testid="stTextInput"] input, [data-testid="stTextArea"] textarea, [data-testid="stNumberInput"] input,
-[data-baseweb="select"] > div, [data-testid="stChatInput"], [data-testid="stChatInput"] textarea {
-    background:#0e0e16 !important; color:#e6e8ec !important; -webkit-text-fill-color:#e6e8ec !important; border:1px solid #24242e !important;
-}
-[data-testid="stTextInput"] input:focus, [data-testid="stTextArea"] textarea:focus, [data-testid="stChatInput"]:focus-within {
-    border-color:#00f3ff !important; box-shadow:0 0 12px rgba(0,243,255,0.35) !important;
-}
-
-/* タブ / ラジオ / プログレス */
-.stTabs [data-baseweb="tab"] { color:#aeb4bc !important; }
-.stTabs [aria-selected="true"] { color:#00f3ff !important; }
-div[role="radiogroup"] > label { background:#101018 !important; border:1px solid #20202a !important;
-    box-shadow:4px 4px 10px #000000, -3px -3px 8px #1b1b24 !important; }
-div[role="radiogroup"] > label p { color:#dfe3e8 !important; }
-[data-testid="stProgress"] > div > div > div { background-color:#00f3ff !important; }
-</style>
-""", unsafe_allow_html=True)
+try:
+    with open("assets/style.css", "r", encoding="utf-8") as _css:
+        st.markdown(f"<style>{_css.read()}</style>", unsafe_allow_html=True)
+except Exception:
+    pass
