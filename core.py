@@ -240,6 +240,24 @@ try:
 except Exception:
     pass
 
+# ==========================================
+# 🧭 モード定義（HUBカルーセル＆サイドバーで共用する単一の定義元）
+# rooms: (表示名, サブラベル, 遷移先 current_mode)。CORE は対話モード（rooms無し）。
+# ==========================================
+FORGE_MODES = [
+    {"name": "CORE", "icon": "❖", "desc": "メイン司令塔 — コアと対話する（何でも相談・指示）。", "rooms": []},
+    {"name": "FACTORY", "icon": "⚒", "desc": "アプリの錬成とプロトタイプの保管。",
+     "rooms": [("Forge Lab", "FORGE LAB", "Forge Lab"), ("App Archive", "APP ARCHIVE", "App Archive")]},
+    {"name": "AGENCY", "icon": "✦", "desc": "タスクの実行管理と履歴。",
+     "rooms": [("Active Tasks", "ACTIVE TASKS", "Active Tasks"), ("Task History", "TASK HISTORY", "Task History")]},
+    {"name": "INCOME", "icon": "💰", "desc": "副業オートメーション（自動収益化）。",
+     "rooms": [("Auto Income", "AUTO INCOME", "Auto Income")]},
+    {"name": "BRAIN", "icon": "◈", "desc": "知識の保管とアイデアの可視化。",
+     "rooms": [("Data Vault", "DATA VAULT", "Document Vault"), ("Miro Board", "MIRO BOARD", "Dashboard")]},
+    {"name": "SYSTEM", "icon": "⚙", "desc": "システムの進化と環境設定。",
+     "rooms": [("Evolution", "EVOLUTION", "Core Upgrade"), ("Settings", "SETTINGS", "Settings")]},
+]
+
 if st.session_state.current_mode == "HUB":
     st.markdown("""
         <style>
@@ -249,32 +267,25 @@ if st.session_state.current_mode == "HUB":
     """, unsafe_allow_html=True)
     page = "HUB"
 else:
-    st.sidebar.markdown("<h2 style='text-align:center; color:#2b6cb0; font-weight:900; letter-spacing:2px; margin-bottom: 20px;'>THE FORGE</h2>", unsafe_allow_html=True)
+    st.sidebar.markdown("<h2 style='text-align:center; color:#66FCF1; font-weight:900; letter-spacing:3px; margin-bottom: 16px;'>THE FORGE</h2>", unsafe_allow_html=True)
     if st.sidebar.button("⬅️ RETURN TO HUB", use_container_width=True):
         st.session_state.current_mode = "HUB"
         st.rerun()
     st.sidebar.markdown("---")
-    
-    st.sidebar.caption("QUICK JUMP")
-    page_names = {
-        "Forge Lab": "FORGE LAB",
-        "Document Vault": "DATA VAULT",
-        "Active Tasks": "ACTIVE TASKS",
-        "Core Upgrade": "EVOLUTION",
-        "Dashboard": "DASHBOARD",
-        "App Archive": "APP ARCHIVE",
-        "Auto Income": "💰 AUTO INCOME",
-        "Task History": "TASK HISTORY",
-        "Settings": "⚙️ SETTINGS" # 🚨ここを「Secure Vault」から「Settings」に変更！
-    }
-    
-    current_index = list(page_names.keys()).index(st.session_state.current_mode) if st.session_state.current_mode in page_names else 0
-    new_mode = st.sidebar.radio("QUICK JUMP", list(page_names.keys()), index=current_index, format_func=lambda x: page_names[x], label_visibility="collapsed")
-    
-    if new_mode != st.session_state.current_mode:
-        st.session_state.current_mode = new_mode
-        st.rerun()
-        
+
+    # 📁 フォルダ(モード) / 📄 ファイル(各部屋) のツリー表示
+    st.sidebar.caption("MODES")
+    _cur = st.session_state.current_mode
+    for _m in FORGE_MODES:
+        if not _m["rooms"]:
+            continue  # CORE（対話モード）はページが無いので RETURN TO HUB に集約
+        _targets = [t for _, _, t in _m["rooms"]]
+        with st.sidebar.expander(f"📁 {_m.get('icon', '')} {_m['name']}", expanded=(_cur in _targets)):
+            for _disp, _sub, _target in _m["rooms"]:
+                if st.button((("● " if _target == _cur else "📄 ") + _disp), key=f"side_{_target}", use_container_width=True):
+                    st.session_state.current_mode = _target
+                    st.rerun()
+
     page = st.session_state.current_mode
 
 def get_base64_video(file_path):

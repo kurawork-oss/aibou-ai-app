@@ -4,17 +4,9 @@
 # 入口ボタンはクリックで直接そのモードへ（?goto=）。AIコンソールは保持。
 # 配色・カード等は assets/style.css（core.py が全ページに適用）。
 
-# --- モード定義（rooms: (表示名, サブラベル, 遷移先 current_mode)） ---
-MODES = [
-    {"name": "FACTORY", "desc": "アプリの錬成とプロトタイプの保管。",
-     "rooms": [("Forge Lab", "FORGE LAB", "Forge Lab"), ("App Archive", "APP ARCHIVE", "App Archive")]},
-    {"name": "BRAIN", "desc": "知識の保管とアイデアの可視化。",
-     "rooms": [("Data Vault", "DATA VAULT", "Document Vault"), ("Miro Board", "MIRO BOARD", "Dashboard")]},
-    {"name": "AGENCY", "desc": "タスクの実行管理と自動収益化。",
-     "rooms": [("Active Tasks", "ACTIVE TASKS", "Active Tasks"), ("Task History", "TASK HISTORY", "Task History"), ("Auto Income", "AUTO INCOME", "Auto Income")]},
-    {"name": "CORE", "desc": "システムの進化と環境設定。",
-     "rooms": [("Evolution", "EVOLUTION", "Core Upgrade"), ("Settings", "SETTINGS", "Settings")]},
-]
+# --- モード定義は core.py の FORGE_MODES を共用（HUB＆サイドバーで一貫） ---
+# 既定は先頭の CORE（メイン司令塔＝コアとの対話モード）。
+MODES = FORGE_MODES
 
 # --- 状態初期化 ---
 if "hub_mode_index" not in st.session_state: st.session_state.hub_mode_index = 0
