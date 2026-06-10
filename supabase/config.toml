@@ -1,0 +1,8 @@
+# Supabase プロジェクト設定（ローカル ⇄ リモート連携）
+# このリポジトリを下記でリモートプロジェクトに接続します：
+#   supabase link --project-ref hwjmojipsablfevtjzln
+#
+# ※ お使いの supabase CLI のバージョンによっては、お手元で一度 `supabase init` を
+#   実行すると、そのバージョンに合った完全な config.toml が再生成されます。
+#   その場合も supabase/migrations/ はそのまま利用できます。
+project_id = "hwjmojipsablfevtjzln"
