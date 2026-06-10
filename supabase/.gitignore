@@ -1,0 +1,4 @@
+# Supabase CLI（ローカル作業用・コミット不要）
+.branches
+.temp
+.env
