@@ -137,3 +137,9 @@ div[role="radiogroup"] > label[data-checked="true"] { border-color: var(--line) 
 .miro-container { background: var(--bg2) !important; box-shadow: 0 6px 18px var(--shadow) !important; }
 /* 完了バッジ等は銀グレーに */
 .status-done, .status-badge { background: var(--accent) !important; color: #fff !important; }
+/* ボタン内テキストもテーマ色に追従（view側の白固定を上書き＝ライト地で文字が消えるのを防ぐ） */
+div.stButton > button p, div.stButton > button span, div.stButton > button div,
+.stDownloadButton > button p, [data-testid="stFormSubmitButton"] button p,
+[data-testid="stFormSubmitButton"] button span {
+    color: var(--btn-fg) !important; text-shadow: none !important;
+}

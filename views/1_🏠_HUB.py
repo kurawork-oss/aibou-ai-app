@@ -58,16 +58,9 @@ if _cs[3].button("▶", key="mode_next", use_container_width=True):
 st.markdown(f"<div class='mode-desc'>{_mode['desc']}</div>", unsafe_allow_html=True)
 
 
-def _room_col(rooms):
-    cards = "".join(
-        f"<a class='mode-card' href='?goto={target.replace(' ', '%20')}' target='_self'>"
-        f"<div class='mc-name'>{disp}</div><div class='mc-sub'>{sub}</div></a>"
-        for disp, sub, target in rooms
-    )
-    return f"<div class='room-col'>{cards}</div>"
-
-
 # --- ③ コア（主役）を中央に、左右に入口ボタン（権限で出し分け） ---
+# 入口は st.button（再実行のみ＝ページ再読込なし）。以前の <a href="?goto="> は
+# 全体リロードを起こしてセッション(ログイン状態)を失うため廃止。
 _is_owner = (not globals().get("AUTH_ON")) or bool(globals().get("auth") and auth.is_owner())
 _income_ok = (not globals().get("AUTH_ON")) or bool(globals().get("auth") and auth.income_active())
 _rooms = []
@@ -75,14 +68,23 @@ for _disp, _sub, _target in _mode["rooms"]:
     if _target == "Core Upgrade" and not _is_owner:
         continue  # 自己進化はオーナー専用
     if _target == "Auto Income" and not _income_ok:
-        _disp, _sub = "🔒 " + _disp, "SUBSCRIPTION"
-    _rooms.append((_disp, _sub, _target))
+        _disp = "🔒 " + _disp
+    _rooms.append((_disp, _target))
 _half = (len(_rooms) + 1) // 2
 _left, _right = _rooms[:_half], _rooms[_half:]
 
+
+def _room_buttons(rooms, side):
+    st.markdown("<div style='height:70px'></div>", unsafe_allow_html=True)  # コアと縦位置を合わせる
+    for _disp, _target in rooms:
+        if st.button(_disp, key=f"room_{side}_{_target}", use_container_width=True):
+            st.session_state.current_mode = _target
+            st.rerun()
+
+
 col_l, col_c, col_r = st.columns([1.1, 1.7, 1.1])
 with col_l:
-    st.markdown(_room_col(_left), unsafe_allow_html=True)
+    _room_buttons(_left, "L")
 with col_c:
     core_height = 240
     core_html = (MASTER_CORE_TEMPLATE
@@ -90,7 +92,7 @@ with col_c:
                  .replace("V_DATA", v_data).replace("A_PLAY", autoplay_attr))
     st.components.v1.html(core_html, height=core_height + 20)
 with col_r:
-    st.markdown(_room_col(_right), unsafe_allow_html=True)
+    _room_buttons(_right, "R")
 
 # --- AI会話履歴（あればコンパクト表示） ---
 if st.session_state.global_chat_history:

@@ -981,12 +981,22 @@ try:
     if page == "HUB":
         st.markdown("""
         <style>:root{
-            --bg:#0a0b0f; --bg2:#0d0f14; --panel:rgba(255,255,255,0.05); --panel-bd:rgba(255,255,255,0.12);
+            --bg:#0a0b0f; --bg2:#0d0f14; --panel:rgba(255,255,255,0.06); --panel-bd:rgba(197,198,199,0.30);
             --fg:#c9ccd2; --fg-strong:#ffffff; --muted:#8b8f97; --line:#c5c6c7; --accent:#c5c6c7;
-            --input-bg:rgba(255,255,255,0.05); --input-bd:rgba(255,255,255,0.18);
-            --btn-bg:rgba(255,255,255,0.05); --btn-bd:rgba(255,255,255,0.2); --btn-fg:#e9ebee;
-            --shadow:rgba(0,0,0,0.6); --card:#f2f3f5; --card-fg:#0c0d10; --card-sub:#5a5f66;
-        }</style>
+            --input-bg:rgba(255,255,255,0.06); --input-bd:rgba(197,198,199,0.42);
+            --btn-bg:rgba(255,255,255,0.07); --btn-bd:rgba(197,198,199,0.5); --btn-fg:#eef1f4;
+            --shadow:rgba(0,0,0,0.55); --card:#f2f3f5; --card-fg:#0c0d10; --card-sub:#5a5f66;
+        }
+        /* HUB：シルバークリアの枠を強調（モード選択/入口ボタン・コマンド入力） */
+        div.stButton > button { border:1px solid rgba(197,198,199,0.5) !important;
+            background:rgba(255,255,255,0.06) !important; color:#eef1f4 !important; letter-spacing:.12em !important; }
+        div.stButton > button:hover { border-color:#c5c6c7 !important;
+            background:rgba(255,255,255,0.12) !important; box-shadow:0 0 16px rgba(197,198,199,0.35) !important; }
+        [data-testid="stChatInput"], [data-testid="stChatInput"] textarea {
+            border:1px solid rgba(197,198,199,0.42) !important; background:rgba(255,255,255,0.05) !important; }
+        [data-testid="stChatInput"]:focus-within { border-color:#c5c6c7 !important;
+            box-shadow:0 0 16px rgba(197,198,199,0.35) !important; }
+        </style>
         """, unsafe_allow_html=True)
 except Exception:
     pass
