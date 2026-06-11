@@ -240,8 +240,10 @@ except Exception:
 #     - assets/login_bg.(png|jpg|webp)     … ログイン画面の背景（幾何学ライン）
 #     - assets/loading_bg.(gif|png|jpg)     … ロード画面の背景（光のワープ）
 # ==========================================
+@st.cache_data(show_spinner=False)
 def _asset_data_uri(basename, exts):
-    """assets/<basename>.<ext> を探して data URI を返す。無ければ ("","")。"""
+    """assets/<basename>.<ext> を探して data URI を返す。無ければ ("","")。
+    毎回の base64 再エンコードを避けるためキャッシュする（重いGIFで効く）。"""
     _mimes = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
               "gif": "image/gif", "webp": "image/webp"}
     for ext in exts:
@@ -497,6 +499,7 @@ else:
 
     page = st.session_state.current_mode
 
+@st.cache_data(show_spinner=False)
 def get_base64_video(file_path):
     if not os.path.exists(file_path): return None
     try:
