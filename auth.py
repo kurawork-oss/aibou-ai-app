@@ -241,7 +241,7 @@ def set_stripe(supabase, uid, customer_id=None, subscription_id=None, income_sta
 # ログイン / 新規登録 UI（成功時は rerun、未ログインのまま戻ったら呼び出し側で st.stop()）
 # ---------------------------------------------------------------------
 def render_login(supabase, get_secret):
-    _l, _c, _r = st.columns([1, 2, 1])
+    _l, _c, _r = st.columns([1, 18, 1])
     with _c:
         with st.container(border=True):
             _li, _lc, _lr = st.columns([1, 1, 1])

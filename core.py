@@ -271,15 +271,15 @@ def inject_login_background():
         filter: blur(5px) brightness(0.5) saturate(1.05);
         transform: scale(1.08); }}
     [data-testid="stAppViewContainer"] {{ position:relative; z-index:1; background:transparent !important; }}
-    .block-container {{ max-width: 430px !important; padding-top: 9vh !important; }}
+    .block-container {{ max-width: 540px !important; padding-top: 8vh !important; }}
     /* 中央のガラスカード（st.container(border=True)） */
     [data-testid="stVerticalBlockBorderWrapper"] {{
         background: rgba(12,14,20,0.55) !important; backdrop-filter: blur(16px) !important;
         border: 1px solid rgba(255,255,255,0.18) !important; border-radius: 20px !important;
-        box-shadow: 0 20px 60px rgba(0,0,0,0.6) !important; padding: 10px 8px !important; }}
-    .login-title {{ text-align:center; color:#fff; font-weight:800; letter-spacing:7px;
-        font-size:21px; margin:8px 0 2px; text-shadow:0 0 18px rgba(255,255,255,.35); }}
-    .login-sub {{ text-align:center; color:#aab0b8; letter-spacing:5px; font-size:11px; margin-bottom:14px; }}
+        box-shadow: 0 20px 60px rgba(0,0,0,0.6) !important; padding: 22px 26px !important; }}
+    .login-title {{ text-align:center; color:#fff; font-weight:800; letter-spacing:4px;
+        font-size:24px; margin:10px 0 2px; text-shadow:0 0 18px rgba(255,255,255,.35); }}
+    .login-sub {{ text-align:center; color:#aab0b8; letter-spacing:3px; font-size:12px; margin-bottom:18px; }}
     .stApp p, .stApp label, [data-baseweb="tab"] {{ color:#eef2f6 !important; }}
     [data-baseweb="tab-list"] {{ justify-content:center; }}
     [data-testid="stTextInput"] input {{
@@ -298,47 +298,59 @@ def inject_login_background():
     """, unsafe_allow_html=True)
 
 
-def render_loading_splash(duration=4.2):
+def render_loading_overlay(duration=4.5):
+    """親ドキュメントに全画面スプラッシュを注入し、その裏でメイン画面を構築する。
+    duration 秒後に自動でフェード＆DOM除去（重いGIFを残さずラグを防ぐ）。
+    st.rerun も st.stop も使わない＝同一ランでメインを完成させてから現す。"""
     uri, _ = _asset_data_uri("loading_bg", ["gif", "png", "jpg", "jpeg", "webp"])
-    bg = (f"#000 url('{uri}') center/cover no-repeat"
-          if uri else "radial-gradient(circle at 50% 50%, #1b1d26 0%, #000 70%)")
-    d = float(duration)
-    st.markdown(f"""
-    <style>
-    [data-testid="stHeader"], [data-testid="stSidebar"], [data-testid="stToolbar"] {{ display:none !important; }}
-    .stApp {{ background:#000 !important; }}
-    #forge-splash {{
-        position: fixed; inset: 0; z-index: 2147483600; background: {bg};
-        display:flex; flex-direction:column; align-items:center; justify-content:center;
-        animation: fsplash-in {d}s ease-out forwards; }}
-    #forge-splash::after {{ content:""; position:absolute; inset:0; background:rgba(0,0,0,0.38); }}
-    #forge-splash > * {{ position:relative; z-index:1; }}
-    @keyframes fsplash-in {{ 0%{{transform:scale(1.18); opacity:0}} 10%{{opacity:1}} 100%{{transform:scale(1)}} }}
-    #forge-splash .ttl {{ color:#fff; letter-spacing:14px; font-weight:800;
-        font-family:'Share Tech Mono',monospace; font-size:26px; text-shadow:0 0 22px rgba(255,255,255,.7); }}
-    #forge-splash .sub {{ color:#cfd6dd; letter-spacing:7px; font-size:11px; margin-top:12px; }}
-    #forge-log {{ margin-top:22px; min-height:90px; font-family:'Share Tech Mono',monospace;
-        font-size:12px; color:#9fe7ff; letter-spacing:2px; text-align:left; }}
-    #forge-log div {{ opacity:0; animation: flog .5s ease forwards; }}
-    @keyframes flog {{ to {{ opacity:1; }} }}
-    #forge-bar {{ width:260px; height:3px; margin-top:18px; background:rgba(255,255,255,.15);
-        border-radius:3px; overflow:hidden; }}
-    #forge-bar > i {{ display:block; height:100%; width:0; background:#fff;
-        box-shadow:0 0 14px #fff; animation: fbar {d}s ease-in-out forwards; }}
-    @keyframes fbar {{ to {{ width:100%; }} }}
-    </style>
-    <div id="forge-splash">
-        <div class="ttl">THE FORGE OS</div>
-        <div class="sub">SYSTEM BOOTING…</div>
-        <div id="forge-log">
-            <div style="animation-delay:{d*0.10:.2f}s">▸ AUTH SESSION ............ OK</div>
-            <div style="animation-delay:{d*0.32:.2f}s">▸ SECURE VAULT ........... LOADED</div>
-            <div style="animation-delay:{d*0.55:.2f}s">▸ AI CORE ................ ONLINE</div>
-            <div style="animation-delay:{d*0.78:.2f}s">▸ WORKSPACE SYNC ......... DONE</div>
-        </div>
-        <div id="forge-bar"><i></i></div>
-    </div>
-    """, unsafe_allow_html=True)
+    bg_css = (f"#000 url('{uri}') center/cover no-repeat"
+              if uri else "radial-gradient(circle at 50% 50%, #1b1d26 0%, #000 70%)")
+    ms = int(float(duration) * 1000)
+    tmpl = r"""
+    <script>
+    (function(){
+      try {
+        var doc = window.parent.document;
+        if (doc.getElementById('forge-splash-ov')) return;
+        var css = doc.createElement('style'); css.id = 'forge-splash-css';
+        css.textContent =
+          "#forge-splash-ov{position:fixed;inset:0;z-index:2147483600;background:__BG__;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:'Share Tech Mono',monospace;transition:opacity .6s ease;animation:fov-in .8s ease-out;}"
+          + "@keyframes fov-in{from{opacity:0;transform:scale(1.12)}to{opacity:1;transform:scale(1)}}"
+          + "#forge-splash-ov::after{content:'';position:absolute;inset:0;background:rgba(0,0,0,.42);}"
+          + "#forge-splash-ov>*{position:relative;z-index:1;}"
+          + "#forge-splash-ov .ttl{color:#fff;letter-spacing:14px;font-weight:800;font-size:26px;text-shadow:0 0 22px rgba(255,255,255,.7);}"
+          + "#forge-splash-ov .sub{color:#cfd6dd;letter-spacing:7px;font-size:11px;margin-top:12px;}"
+          + "#forge-splash-ov .log{margin-top:22px;min-height:94px;font-size:12px;color:#9fe7ff;letter-spacing:2px;text-align:left;}"
+          + "#forge-splash-ov .log div{opacity:0;animation:flog .5s ease forwards;}"
+          + "@keyframes flog{to{opacity:1;}}"
+          + "#forge-splash-ov .bar{width:260px;height:3px;margin-top:18px;background:rgba(255,255,255,.15);border-radius:3px;overflow:hidden;}"
+          + "#forge-splash-ov .bar>i{display:block;height:100%;width:0;background:#fff;box-shadow:0 0 14px #fff;animation:fbar __SEC__s ease-in-out forwards;}"
+          + "@keyframes fbar{to{width:100%;}}";
+        doc.head.appendChild(css);
+        var ov = doc.createElement('div'); ov.id = 'forge-splash-ov';
+        ov.innerHTML =
+          "<div class='ttl'>THE FORGE OS</div><div class='sub'>SYSTEM BOOTING…</div>"
+          + "<div class='log'>"
+          + "<div style='animation-delay:.3s'>&#9656; AUTH SESSION ............ OK</div>"
+          + "<div style='animation-delay:__D1__s'>&#9656; SECURE VAULT ........... LOADED</div>"
+          + "<div style='animation-delay:__D2__s'>&#9656; AI CORE ................ ONLINE</div>"
+          + "<div style='animation-delay:__D3__s'>&#9656; WORKSPACE SYNC ......... DONE</div>"
+          + "</div><div class='bar'><i></i></div>";
+        doc.body.appendChild(ov);
+        setTimeout(function(){
+          ov.style.opacity = '0'; ov.style.pointerEvents = 'none';
+          setTimeout(function(){ try{ov.remove();css.remove();}catch(e){} }, 650);
+        }, __MS__);
+      } catch(e) {}
+    })();
+    </script>
+    """
+    html = (tmpl.replace("__BG__", bg_css).replace("__MS__", str(ms))
+                .replace("__SEC__", str(float(duration)))
+                .replace("__D1__", f"{duration*0.32:.2f}")
+                .replace("__D2__", f"{duration*0.55:.2f}")
+                .replace("__D3__", f"{duration*0.78:.2f}"))
+    st.components.v1.html(html, height=0)
 
 
 # ==========================================
@@ -377,25 +389,23 @@ else:
     if not st.session_state.logged_in:
         inject_login_background()
         _ico, _ = _asset_data_uri("aibou_icon", ["png"])
-        _l, _c, _r = st.columns([1, 2, 1])
-        with _c:
-            with st.container(border=True):
-                if _ico:
-                    st.markdown(
-                        f"<div style='text-align:center'><img src='{_ico}' width='78' "
-                        f"style='filter:drop-shadow(0 0 12px rgba(255,255,255,.45))'></div>",
-                        unsafe_allow_html=True)
-                st.markdown("<div class='login-title'>相棒AI</div>"
-                            "<div class='login-sub'>起動シークエンス</div>", unsafe_allow_html=True)
-                password = st.text_input("Password", type="password",
-                                         label_visibility="collapsed", placeholder="パスワードを入力")
-                if st.button("システム起動", use_container_width=True):
-                    if password == st.secrets.get("APP_PASSWORD", "boss"):
-                        st.session_state.logged_in = True
-                        st.session_state.show_loading = True
-                        st.rerun()
-                    else:
-                        st.error("パスワードが違います。")
+        with st.container(border=True):
+            if _ico:
+                st.markdown(
+                    f"<div style='text-align:center'><img src='{_ico}' width='92' "
+                    f"style='filter:drop-shadow(0 0 12px rgba(255,255,255,.45))'></div>",
+                    unsafe_allow_html=True)
+            st.markdown("<div class='login-title'>相棒AI</div>"
+                        "<div class='login-sub'>起動シークエンス</div>", unsafe_allow_html=True)
+            password = st.text_input("Password", type="password",
+                                     label_visibility="collapsed", placeholder="パスワードを入力")
+            if st.button("システム起動", use_container_width=True):
+                if password == st.secrets.get("APP_PASSWORD", "boss"):
+                    st.session_state.logged_in = True
+                    st.session_state.show_loading = True
+                    st.rerun()
+                else:
+                    st.error("パスワードが違います。")
         st.stop()
 
 # ログイン後：金庫(APIキー)をセッションへ読み込む（Auth有効時は per-user）
@@ -409,32 +419,11 @@ if _bm:
     except Exception:
         st.info(_bm)
 
-# === ⚡ ロード画面：ログイン直後に一度だけ表示し、その間に実セットアップを行う ===
+# === ⚡ ロード画面：スプラッシュを前面に出し、その「裏」で本ランがメインを構築する ===
+#   st.rerun / st.stop は使わない。下のルーティングが同一ラン内でHUBを完成させ、
+#   スプラッシュは約4.5秒後に自動フェード＆DOM除去 → 完成済みのメインが滑らかに現れる。
 if st.session_state.pop("show_loading", False):
-    _boot_t0 = time.time()
-    _LOAD_SECS = 4.3
-    render_loading_splash(duration=_LOAD_SECS)
-    # この時間を使って実初期化（鍵の再読込・AI設定・接続/購読のウォームアップ）
-    try:
-        hydrate_vault_into_session(force=True)
-    except Exception:
-        pass
-    try:
-        _gk = get_secret("GEMINI_API_KEY") or (st.session_state.get("global_api_keys", {}) or {}).get("gemini")
-        if _gk:
-            genai.configure(api_key=_gk)
-    except Exception:
-        pass
-    if AUTH_ON and BILLING_AVAILABLE:
-        try:
-            billing.sync_status(supabase, get_secret, auth.current_user())
-        except Exception:
-            pass
-    # 演出を最後まで見せるため最低表示時間を確保
-    _rem = _LOAD_SECS - (time.time() - _boot_t0)
-    if _rem > 0:
-        time.sleep(_rem)
-    st.rerun()
+    render_loading_overlay(duration=4.5)
 
 # ==========================================
 # 🧭 2. THE AIbou OS セントラルルーティング
