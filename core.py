@@ -257,7 +257,7 @@ def _asset_data_uri(basename, exts):
 
 
 def inject_login_background():
-    uri, _ = _asset_data_uri("login_bg", ["png", "jpg", "jpeg", "webp"])
+    uri, _ = _asset_data_uri("login_bg", ["gif", "png", "jpg", "jpeg", "webp"])
     bg = (f"#000 url('{uri}') center/cover no-repeat fixed"
           if uri else "radial-gradient(circle at 50% 38%, #14161d 0%, #000 72%)")
     st.markdown(f"""
