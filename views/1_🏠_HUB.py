@@ -67,8 +67,16 @@ def _room_col(rooms):
     return f"<div class='room-col'>{cards}</div>"
 
 
-# --- ③ コア（主役）を中央に、左右に入口ボタン ---
-_rooms = _mode["rooms"]
+# --- ③ コア（主役）を中央に、左右に入口ボタン（権限で出し分け） ---
+_is_owner = (not globals().get("AUTH_ON")) or bool(globals().get("auth") and auth.is_owner())
+_income_ok = (not globals().get("AUTH_ON")) or bool(globals().get("auth") and auth.income_active())
+_rooms = []
+for _disp, _sub, _target in _mode["rooms"]:
+    if _target == "Core Upgrade" and not _is_owner:
+        continue  # 自己進化はオーナー専用
+    if _target == "Auto Income" and not _income_ok:
+        _disp, _sub = "🔒 " + _disp, "SUBSCRIPTION"
+    _rooms.append((_disp, _sub, _target))
 _half = (len(_rooms) + 1) // 2
 _left, _right = _rooms[:_half], _rooms[_half:]
 
