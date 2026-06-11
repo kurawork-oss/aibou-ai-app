@@ -136,6 +136,7 @@ def _set_current_user(supabase, session_obj, user_obj, get_secret):
         "accepted_terms_at": prof.get("accepted_terms_at"),
     }
     st.session_state.logged_in = True
+    st.session_state.show_loading = True  # ログイン直後にロード画面(スプラッシュ)を表示
 
 
 def refresh_profile(supabase):

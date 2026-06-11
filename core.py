@@ -20,6 +20,7 @@ import requests
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 import datetime
+import time
 
 # === ☁️ クラウドDB ＆ 暗号化エンジン (Supabase) ===
 from supabase import create_client, Client
@@ -234,6 +235,86 @@ except Exception:
     pass
 
 # ==========================================
+# 🎨 ログイン背景 ＆ ⚡ ロード(スプラッシュ)画面
+#   背景は assets/ の画像を使う。未配置でもCSSフォールバックで成立する。
+#     - assets/login_bg.(png|jpg|webp)     … ログイン画面の背景（幾何学ライン）
+#     - assets/loading_bg.(gif|png|jpg)     … ロード画面の背景（光のワープ）
+# ==========================================
+def _asset_data_uri(basename, exts):
+    """assets/<basename>.<ext> を探して data URI を返す。無ければ ("","")。"""
+    _mimes = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
+              "gif": "image/gif", "webp": "image/webp"}
+    for ext in exts:
+        p = f"assets/{basename}.{ext}"
+        if os.path.exists(p):
+            try:
+                with open(p, "rb") as f:
+                    b64 = base64.b64encode(f.read()).decode()
+                return f"data:{_mimes.get(ext, 'image/png')};base64,{b64}", ext
+            except Exception:
+                pass
+    return "", ""
+
+
+def inject_login_background():
+    uri, _ = _asset_data_uri("login_bg", ["gif", "png", "jpg", "jpeg", "webp"])
+    bg = (f"#000 url('{uri}') center/cover no-repeat fixed"
+          if uri else "radial-gradient(circle at 50% 38%, #14161d 0%, #000 72%)")
+    st.markdown(f"""
+    <style>
+    [data-testid="stAppViewContainer"], .stApp {{ background: {bg} !important; }}
+    [data-testid="stHeader"] {{ background: transparent !important; }}
+    .block-container {{ max-width: 440px !important; padding-top: 7vh !important; }}
+    .stApp h1, .stApp h2, .stApp p, .stApp label, [data-baseweb="tab"] {{ color: #eef2f6 !important; }}
+    [data-baseweb="tab-list"] {{ justify-content: center; }}
+    [data-testid="stTextInput"] input {{
+        background: rgba(255,255,255,0.06) !important; color: #fff !important;
+        border: 1px solid rgba(255,255,255,0.28) !important; border-radius: 12px !important;
+        backdrop-filter: blur(6px); }}
+    [data-testid="stTextInput"] input:focus {{
+        border-color: #ffffff !important; box-shadow: 0 0 14px rgba(255,255,255,0.35) !important; }}
+    .stButton > button, .stFormSubmitButton > button {{
+        background: rgba(255,255,255,0.08) !important; color: #fff !important;
+        border: 1px solid rgba(255,255,255,0.55) !important; border-radius: 12px !important;
+        letter-spacing: 2px !important; font-weight: 700 !important; transition: all .2s ease; }}
+    .stButton > button:hover, .stFormSubmitButton > button:hover {{
+        background: rgba(255,255,255,0.18) !important; box-shadow: 0 0 18px rgba(255,255,255,0.4) !important; }}
+    [data-testid="stCheckbox"] * {{ color: #cfd6dd !important; }}
+    </style>
+    """, unsafe_allow_html=True)
+
+
+def render_loading_splash():
+    uri, _ = _asset_data_uri("loading_bg", ["gif", "png", "jpg", "jpeg", "webp"])
+    bg = (f"#000 url('{uri}') center/cover no-repeat"
+          if uri else "radial-gradient(circle at 50% 50%, #1b1d26 0%, #000 70%)")
+    st.markdown(f"""
+    <style>
+    [data-testid="stHeader"], [data-testid="stSidebar"], [data-testid="stToolbar"] {{ display:none !important; }}
+    .stApp {{ background:#000 !important; }}
+    #forge-splash {{
+        position: fixed; inset: 0; z-index: 2147483600; background: {bg};
+        display:flex; flex-direction:column; align-items:center; justify-content:center;
+        animation: fsplash-in 2.4s ease-in-out forwards; }}
+    @keyframes fsplash-in {{ 0%{{transform:scale(1.18); opacity:0}} 18%{{opacity:1}} 100%{{transform:scale(1)}} }}
+    #forge-splash .ttl {{ color:#fff; letter-spacing:12px; font-weight:800;
+        font-family:'Share Tech Mono',monospace; font-size:24px; text-shadow:0 0 22px rgba(255,255,255,.7); }}
+    #forge-splash .sub {{ color:#aab0b8; letter-spacing:7px; font-size:11px; margin-top:12px; }}
+    #forge-bar {{ width:240px; height:3px; margin-top:26px; background:rgba(255,255,255,.15);
+        border-radius:3px; overflow:hidden; }}
+    #forge-bar > i {{ display:block; height:100%; width:0; background:#fff;
+        box-shadow:0 0 14px #fff; animation: fbar 2.2s ease-in-out forwards; }}
+    @keyframes fbar {{ to {{ width:100%; }} }}
+    </style>
+    <div id="forge-splash">
+        <div class="ttl">THE FORGE OS</div>
+        <div class="sub">SYSTEM BOOTING…</div>
+        <div id="forge-bar"><i></i></div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+# ==========================================
 # 🔐 1. 認証（Supabase Auth または 従来の共有パスワード）
 # ==========================================
 if "logged_in" not in st.session_state:
@@ -254,6 +335,7 @@ if AUTH_ON:
     except Exception:
         _cu = None
     if not _cu:
+        inject_login_background()
         auth.render_login(supabase, get_secret)
         st.stop()
     # Stripe 決済からの復帰（?checkout=success）を検証して購読を反映
@@ -266,6 +348,7 @@ if AUTH_ON:
             pass
 else:
     if not st.session_state.logged_in:
+        inject_login_background()
         _lc1, _lc2, _lc3 = st.columns([2, 1, 2])
         with _lc2:
             try:
@@ -277,6 +360,7 @@ else:
         if st.button("システム起動"):
             if password == st.secrets.get("APP_PASSWORD", "boss"):
                 st.session_state.logged_in = True
+                st.session_state.show_loading = True
                 st.rerun()
             else:
                 st.error("パスワードが違います。")
@@ -292,6 +376,12 @@ if _bm:
         st.toast(_bm)
     except Exception:
         st.info(_bm)
+
+# === ⚡ ロード画面：ログイン直後に一度だけスプラッシュを表示してからメインへ ===
+if st.session_state.pop("show_loading", False):
+    render_loading_splash()
+    time.sleep(2.2)
+    st.rerun()
 
 # ==========================================
 # 🧭 2. THE AIbou OS セントラルルーティング
