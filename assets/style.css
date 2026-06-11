@@ -1,116 +1,139 @@
 /* =====================================================================
-   THE FORGE OS — Design System  (漆黒 × 純白 × ライト水色)
-   palette: bg #0B0C10 / text #FFFFFF / silver #C5C6C7 / cyan #66FCF1 / deep #45A29E
-   ※ core.py が各 view の CSS の「後」に読み込んで全ページへ適用する。
+   THE FORGE OS — Unified Design System（白 × 銀 × 黒 / モノトーン）
+   テーマは CSS 変数で切替：作業画面=ライト（既定）／ HUB=ダーク（core.py が
+   :root をダーク値に上書き）。各 view の CSS の「後」に読み込み、!important で統一。
    ===================================================================== */
+:root {
+  --bg:        #eef0f2;                  /* ページ背景（ライト既定） */
+  --bg2:       #e7e9ed;                  /* ヘッダ/サイドバー */
+  --panel:     rgba(255,255,255,0.72);  /* カード/コンテナ */
+  --panel-bd:  rgba(0,0,0,0.10);        /* カード枠 */
+  --fg:        #2a2d33;                  /* 本文 */
+  --fg-strong: #0c0d10;                  /* 見出し */
+  --muted:     #6b6f76;                  /* キャプション */
+  --line:      #aeb3ba;                  /* 銀ライン/アクセント */
+  --accent:    #6b7077;                  /* アクセント（銀寄りグレー） */
+  --input-bg:  rgba(255,255,255,0.88);
+  --input-bd:  rgba(0,0,0,0.18);
+  --btn-bg:    rgba(255,255,255,0.62);
+  --btn-bd:    rgba(0,0,0,0.18);
+  --btn-fg:    #1a1c20;
+  --shadow:    rgba(0,0,0,0.16);
+  --card:      #ffffff;                  /* HUBの入口カード */
+  --card-fg:   #0c0d10;
+  --card-sub:  #6b6f76;
+}
 
-/* ---- ベース：漆黒背景 ---- */
+/* ---- ベース背景 ---- */
 .stApp, [data-testid="stAppViewContainer"], [data-testid="stMain"], [data-testid="stHeader"],
 [data-testid="stBottom"], [data-testid="stBottom"] > div {
-    background-color: #0B0C10 !important;
+    background-color: var(--bg) !important; background-image: none !important;
 }
 [data-testid="stSidebar"], [data-testid="stSidebar"] > div:first-child {
-    background-color: #0d0f15 !important;
-    border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
-    box-shadow: none !important;
+    background-color: var(--bg2) !important;
+    border-right: 1px solid var(--panel-bd) !important; box-shadow: none !important;
 }
 
-/* ---- 文字：本文＝ライトシルバー / 見出し＝純白 ---- */
-.stApp p, .stApp li, .stApp label,
-[data-testid="stMarkdownContainer"], [data-testid="stMarkdownContainer"] * {
-    color: #C5C6C7 !important;
-}
+/* ---- 文字 ---- */
+.stApp p, .stApp li, .stApp label, .stApp span,
+[data-testid="stMarkdownContainer"], [data-testid="stMarkdownContainer"] * { color: var(--fg) !important; }
 .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5, .stApp h6,
 [data-testid="stMarkdownContainer"] h1, [data-testid="stMarkdownContainer"] h2,
 [data-testid="stMarkdownContainer"] h3, [data-testid="stMarkdownContainer"] h4 {
-    color: #FFFFFF !important; text-shadow: none !important;
+    color: var(--fg-strong) !important; text-shadow: none !important;
 }
-[data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] * { color: #8b8d93 !important; }
-.stApp a { color: #66FCF1 !important; }
-.stApp code, .stApp kbd { color: #9efcf5 !important; background: #10141a !important; }
+[data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] * { color: var(--muted) !important; }
+.stApp a { color: var(--fg-strong) !important; text-decoration: underline; }
+.stApp code, .stApp kbd { color: var(--fg-strong) !important; background: rgba(127,127,127,0.16) !important; }
 
-/* ---- 3D クリアガラスボタン（白黒＋ライト水色アクセント） ---- */
-div.stButton > button, .stDownloadButton > button, [data-testid="stFormSubmitButton"] button {
-    background: rgba(255, 255, 255, 0.03) !important;
-    backdrop-filter: blur(12px) !important;
-    border: 1px solid rgba(255, 255, 255, 0.15) !important;
-    border-radius: 6px !important;
-    color: #C5C6C7 !important;
-    font-weight: 600 !important;
-    letter-spacing: 0.1em !important;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.1) !important;
-    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+/* ---- ボタン（白銀黒ガラス・水色なし） ---- */
+div.stButton > button, .stDownloadButton > button,
+[data-testid="stFormSubmitButton"] button, .stLinkButton > a {
+    background: var(--btn-bg) !important; backdrop-filter: blur(10px) !important;
+    border: 1px solid var(--btn-bd) !important; border-radius: 8px !important;
+    color: var(--btn-fg) !important; font-weight: 700 !important; letter-spacing: 0.08em !important;
+    box-shadow: 0 3px 10px var(--shadow) !important; transition: all 0.2s ease !important;
 }
-div.stButton > button:hover, .stDownloadButton > button:hover, [data-testid="stFormSubmitButton"] button:hover {
-    color: #FFFFFF !important;
-    background: rgba(102, 252, 241, 0.05) !important;
-    border: 1px solid #66FCF1 !important;
-    box-shadow: 0 0 15px rgba(102, 252, 241, 0.3), inset 0 1px 1px rgba(255, 255, 255, 0.2) !important;
-    transform: translateY(-2px);
+div.stButton > button:hover, .stDownloadButton > button:hover,
+[data-testid="stFormSubmitButton"] button:hover, .stLinkButton > a:hover {
+    color: var(--fg-strong) !important; border-color: var(--line) !important;
+    box-shadow: 0 6px 16px var(--shadow) !important; transform: translateY(-1px);
 }
-div.stButton > button:active, [data-testid="stFormSubmitButton"] button:active {
-    transform: translateY(1px);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.7) !important;
-}
+div.stButton > button:active, [data-testid="stFormSubmitButton"] button:active { transform: translateY(1px); }
 
-/* ---- コンテナ / カード / メトリクス / 入力（暗色ガラス） ---- */
+/* ---- コンテナ / カード / メトリクス / フォーム / チャット ---- */
 [data-testid="stVerticalBlockBorderWrapper"], [data-testid="stMetric"],
 [data-testid="stChatMessage"], [data-testid="stForm"] {
-    background: rgba(255, 255, 255, 0.03) !important;
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.10) !important;
-    border-radius: 10px !important;
+    background: var(--panel) !important; backdrop-filter: blur(10px);
+    border: 1px solid var(--panel-bd) !important; border-radius: 12px !important;
+    box-shadow: 0 6px 18px var(--shadow) !important;
 }
 [data-testid="stExpander"], [data-testid="stExpander"] details {
-    background: rgba(255, 255, 255, 0.03) !important;
-    border: 1px solid rgba(255, 255, 255, 0.10) !important;
+    background: var(--panel) !important; border: 1px solid var(--panel-bd) !important; border-radius: 10px !important;
 }
-[data-testid="stMetricValue"] { color: #66FCF1 !important; }
-[data-testid="stMetricLabel"], [data-testid="stMetricLabel"] * { color: #9a9ca2 !important; }
+[data-testid="stMetricValue"] { color: var(--fg-strong) !important; }
+[data-testid="stMetricLabel"], [data-testid="stMetricLabel"] * { color: var(--muted) !important; }
+
+/* ---- 入力 ---- */
 [data-testid="stTextInput"] input, [data-testid="stTextArea"] textarea, [data-testid="stNumberInput"] input,
 [data-baseweb="select"] > div, [data-testid="stChatInput"], [data-testid="stChatInput"] textarea {
-    background: rgba(255, 255, 255, 0.04) !important;
-    color: #FFFFFF !important; -webkit-text-fill-color: #FFFFFF !important;
-    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+    background: var(--input-bg) !important; color: var(--fg-strong) !important;
+    -webkit-text-fill-color: var(--fg-strong) !important;
+    border: 1px solid var(--input-bd) !important; border-radius: 10px !important;
 }
-[data-testid="stTextInput"] input:focus, [data-testid="stTextArea"] textarea:focus, [data-testid="stChatInput"]:focus-within {
-    border-color: #66FCF1 !important; box-shadow: 0 0 14px rgba(102, 252, 241, 0.35) !important;
+[data-testid="stTextInput"] input:focus, [data-testid="stTextArea"] textarea:focus,
+[data-testid="stChatInput"]:focus-within {
+    border-color: var(--line) !important; box-shadow: 0 0 12px var(--shadow) !important;
 }
-.stTabs [data-baseweb="tab"] { color: #9a9ca2 !important; }
-.stTabs [aria-selected="true"] { color: #66FCF1 !important; }
-div[role="radiogroup"] > label { background: rgba(255, 255, 255, 0.03) !important; border: 1px solid rgba(255, 255, 255, 0.15) !important; }
-div[role="radiogroup"] > label p { color: #C5C6C7 !important; }
-[data-testid="stProgress"] > div > div > div { background-color: #66FCF1 !important; }
+.stApp ::placeholder { color: var(--muted) !important; opacity: 1; }
 
-/* =====================================================================
-   HUB：コマンドデッキ（ロゴ / カルーセル / 入口ボタン）
-   ===================================================================== */
-/* ページ上部の余白を圧縮（ロゴを上へ／全体を縦圧縮） */
-[data-testid="stMainBlockContainer"], .block-container,
-[data-testid="stAppViewBlockContainer"] {
+/* ---- タブ / ラジオ / プログレス ---- */
+.stTabs [data-baseweb="tab"] { color: var(--muted) !important; }
+.stTabs [aria-selected="true"] { color: var(--fg-strong) !important; }
+.stTabs [data-baseweb="tab-highlight"], .stTabs [data-baseweb="tab-border"] { background-color: var(--line) !important; }
+div[role="radiogroup"] > label { background: var(--panel) !important; border: 1px solid var(--panel-bd) !important; border-radius: 10px !important; }
+div[role="radiogroup"] > label p { color: var(--fg) !important; }
+div[role="radiogroup"] > label[data-checked="true"] { border-color: var(--line) !important; }
+[data-testid="stProgress"] > div > div > div { background-color: var(--accent) !important; }
+
+/* ---- ページ余白（HUB含む全体を縦圧縮） ---- */
+[data-testid="stMainBlockContainer"], .block-container, [data-testid="stAppViewBlockContainer"] {
     padding-top: 1.3rem !important; padding-bottom: 1.0rem !important;
 }
 
+/* =====================================================================
+   HUB：コマンドデッキ（HUB は core.py がダーク変数を注入して黒地に）
+   ===================================================================== */
 .forge-logo-wrap { display:flex; align-items:center; justify-content:center; gap:13px; margin:0 0 4px; }
-.forge-logo-wrap img { width:42px; height:42px; border-radius:11px; box-shadow:0 0 18px rgba(102,252,241,0.5); }
+.forge-logo-wrap img { width:44px; height:44px; border-radius:11px; box-shadow:0 0 16px var(--shadow); }
 .hub-title {
-    color:#FFFFFF; font-weight:900; letter-spacing:8px; margin:0; font-size:1.5rem;
+    color: var(--fg-strong); font-weight:900; letter-spacing:8px; margin:0; font-size:1.5rem;
     font-family:'Share Tech Mono','Segoe UI',sans-serif;
 }
-/* グローバルの h2{text-shadow:none} に勝つよう高い詳細度で発光を付与 */
-.forge-logo-wrap .hub-title { text-shadow:0 0 16px rgba(102,252,241,0.35) !important; }
-
+.forge-logo-wrap .hub-title { text-shadow: 0 0 16px var(--shadow) !important; }
 .mode-desc {
-    text-align:center; color:#C5C6C7 !important; letter-spacing:2px; font-size:11.5px;
-    font-family:'Share Tech Mono','Segoe UI',sans-serif; margin:2px 0 4px; opacity:0.9;
+    text-align:center; color: var(--muted) !important; letter-spacing:2px; font-size:11.5px;
+    font-family:'Share Tech Mono','Segoe UI',sans-serif; margin:2px 0 4px;
 }
 
-/* 部屋の入口ボタン（白背景・黒文字・水色なし）。コアの左右に縦並び。 */
+/* 入口カード（銀/白・黒文字） */
 .room-col { display:flex; flex-direction:column; gap:12px; justify-content:center; height:100%; }
 .mode-card {
-    display:block; text-decoration:none !important; background:#eef0f2; border-radius:8px;
-    padding:13px 15px; box-shadow:0 4px 12px rgba(0,0,0,0.55); transition:all 0.2s ease;
+    display:block; text-decoration:none !important; background: var(--card); border-radius:8px;
+    padding:13px 15px; border:1px solid var(--panel-bd);
+    box-shadow:0 4px 12px var(--shadow); transition:all 0.2s ease;
 }
-.mode-card:hover { background:#ffffff; transform:translateY(-2px); box-shadow:0 8px 18px rgba(0,0,0,0.65); }
-.mode-card .mc-name { font-weight:800 !important; letter-spacing:0.5px; font-size:14px; color:#0B0C10 !important; }
-.mode-card .mc-sub  { font-size:10px; color:#555a61 !important; font-family:monospace; margin-top:3px; }
+.mode-card:hover { transform:translateY(-2px); box-shadow:0 8px 18px var(--shadow); border-color: var(--line); }
+.mode-card .mc-name { font-weight:800 !important; letter-spacing:0.5px; font-size:14px; color: var(--card-fg) !important; }
+.mode-card .mc-sub  { font-size:10px; color: var(--card-sub) !important; font-family:monospace; margin-top:3px; }
+
+/* =====================================================================
+   各 view の独自クラス/色を palette へ寄せる（水色・青を撤去して白銀黒に統一）
+   ===================================================================== */
+.cyber-title { color: var(--fg-strong) !important; text-shadow: none !important; }
+.mc-title { color: var(--fg-strong) !important; }
+.mc-sub, .stat-label { color: var(--muted) !important; }
+.stat-value, .inbox-theme { color: var(--fg-strong) !important; }
+.miro-container { background: var(--bg2) !important; box-shadow: 0 6px 18px var(--shadow) !important; }
+/* 完了バッジ等は銀グレーに */
+.status-done, .status-badge { background: var(--accent) !important; color: #fff !important; }

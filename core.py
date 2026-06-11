@@ -470,7 +470,7 @@ if st.session_state.current_mode == "HUB":
     """, unsafe_allow_html=True)
     page = "HUB"
 else:
-    st.sidebar.markdown("<h2 style='text-align:center; color:#66FCF1; font-weight:900; letter-spacing:3px; margin-bottom: 16px;'>THE FORGE</h2>", unsafe_allow_html=True)
+    st.sidebar.markdown("<h2 style='text-align:center; color:var(--fg-strong); font-weight:900; letter-spacing:3px; margin-bottom: 16px;'>THE FORGE</h2>", unsafe_allow_html=True)
     if st.sidebar.button("⬅️ RETURN TO HUB", use_container_width=True):
         st.session_state.current_mode = "HUB"
         st.rerun()
@@ -972,11 +972,21 @@ elif page == "Core Upgrade":
         with open("views/9_🚀_Core_Upgrade.py", "r", encoding="utf-8") as f: exec(f.read())
 
 # ==========================================
-# 🎨 DESIGN SYSTEM (assets/style.css)
-# 各 view の CSS の「後」に読み込み、全ページへ「漆黒×純白×ライト水色」を適用する。
+# 🎨 DESIGN SYSTEM (assets/style.css)：白×銀×黒で統一。
+#   既定=ライト（作業画面）。HUB のみダーク変数を上書きしてログインと地続きに。
 # ==========================================
 try:
     with open("assets/style.css", "r", encoding="utf-8") as _css:
         st.markdown(f"<style>{_css.read()}</style>", unsafe_allow_html=True)
+    if page == "HUB":
+        st.markdown("""
+        <style>:root{
+            --bg:#0a0b0f; --bg2:#0d0f14; --panel:rgba(255,255,255,0.05); --panel-bd:rgba(255,255,255,0.12);
+            --fg:#c9ccd2; --fg-strong:#ffffff; --muted:#8b8f97; --line:#c5c6c7; --accent:#c5c6c7;
+            --input-bg:rgba(255,255,255,0.05); --input-bd:rgba(255,255,255,0.18);
+            --btn-bg:rgba(255,255,255,0.05); --btn-bd:rgba(255,255,255,0.2); --btn-fg:#e9ebee;
+            --shadow:rgba(0,0,0,0.6); --card:#f2f3f5; --card-fg:#0c0d10; --card-sub:#5a5f66;
+        }</style>
+        """, unsafe_allow_html=True)
 except Exception:
     pass
