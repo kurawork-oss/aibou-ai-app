@@ -768,9 +768,15 @@ MASTER_CORE_TEMPLATE = """
     function hexToRgb(hex) { let result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex); return result ? `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}` : "0, 243, 255"; }
     
     let particles = [];
-    function draw() { 
-        requestAnimationFrame(draw); 
-        const cx = canvas.width/2, cy = canvas.height/2; ctx.clearRect(0,0,canvas.width,canvas.height); 
+    let _lastFrame = 0;
+    const _FRAME_MS = 1000 / 30; // FPS上限(30fps)で省電力
+    function draw(now) {
+        requestAnimationFrame(draw);
+        if (document.hidden) return;                 // タブ非表示中は描画しない（CPU節約）
+        now = now || performance.now();
+        if (now - _lastFrame < _FRAME_MS) return;    // FPS上限で間引き
+        _lastFrame = now;
+        const cx = canvas.width/2, cy = canvas.height/2; ctx.clearRect(0,0,canvas.width,canvas.height);
         let avg = 0; let time = Date.now() / 1000; 
         
         if(isSetup && !audio.paused) { 
@@ -808,7 +814,7 @@ MASTER_CORE_TEMPLATE = """
             } 
         } 
     }
-    audio.onplay = setup; draw();
+    audio.onplay = setup; requestAnimationFrame(draw);
 </script>
 """
 
