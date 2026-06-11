@@ -258,36 +258,51 @@ def _asset_data_uri(basename, exts):
 
 def inject_login_background():
     uri, _ = _asset_data_uri("login_bg", ["gif", "png", "jpg", "jpeg", "webp"])
-    bg = (f"#000 url('{uri}') center/cover no-repeat fixed"
-          if uri else "radial-gradient(circle at 50% 38%, #14161d 0%, #000 72%)")
+    layer = (f"#000 url('{uri}') center/cover no-repeat"
+             if uri else "radial-gradient(circle at 50% 38%, #14161d 0%, #000 72%)")
     st.markdown(f"""
     <style>
-    [data-testid="stAppViewContainer"], .stApp {{ background: {bg} !important; }}
+    .stApp {{ background:#000 !important; }}
     [data-testid="stHeader"] {{ background: transparent !important; }}
-    .block-container {{ max-width: 440px !important; padding-top: 7vh !important; }}
-    .stApp h1, .stApp h2, .stApp p, .stApp label, [data-baseweb="tab"] {{ color: #eef2f6 !important; }}
-    [data-baseweb="tab-list"] {{ justify-content: center; }}
+    /* 背景は擬似要素に。ぼかし＋暗幕で低解像度のザラつきを抑え、文字を読みやすく */
+    .stApp::before {{
+        content:""; position:fixed; inset:-40px; z-index:0;
+        background: {layer};
+        filter: blur(5px) brightness(0.5) saturate(1.05);
+        transform: scale(1.08); }}
+    [data-testid="stAppViewContainer"] {{ position:relative; z-index:1; background:transparent !important; }}
+    .block-container {{ max-width: 430px !important; padding-top: 9vh !important; }}
+    /* 中央のガラスカード（st.container(border=True)） */
+    [data-testid="stVerticalBlockBorderWrapper"] {{
+        background: rgba(12,14,20,0.55) !important; backdrop-filter: blur(16px) !important;
+        border: 1px solid rgba(255,255,255,0.18) !important; border-radius: 20px !important;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.6) !important; padding: 10px 8px !important; }}
+    .login-title {{ text-align:center; color:#fff; font-weight:800; letter-spacing:7px;
+        font-size:21px; margin:8px 0 2px; text-shadow:0 0 18px rgba(255,255,255,.35); }}
+    .login-sub {{ text-align:center; color:#aab0b8; letter-spacing:5px; font-size:11px; margin-bottom:14px; }}
+    .stApp p, .stApp label, [data-baseweb="tab"] {{ color:#eef2f6 !important; }}
+    [data-baseweb="tab-list"] {{ justify-content:center; }}
     [data-testid="stTextInput"] input {{
-        background: rgba(255,255,255,0.06) !important; color: #fff !important;
-        border: 1px solid rgba(255,255,255,0.28) !important; border-radius: 12px !important;
-        backdrop-filter: blur(6px); }}
+        background: rgba(255,255,255,0.07) !important; color:#fff !important;
+        border:1px solid rgba(255,255,255,0.3) !important; border-radius:12px !important; }}
     [data-testid="stTextInput"] input:focus {{
-        border-color: #ffffff !important; box-shadow: 0 0 14px rgba(255,255,255,0.35) !important; }}
+        border-color:#fff !important; box-shadow:0 0 14px rgba(255,255,255,0.35) !important; }}
     .stButton > button, .stFormSubmitButton > button {{
-        background: rgba(255,255,255,0.08) !important; color: #fff !important;
-        border: 1px solid rgba(255,255,255,0.55) !important; border-radius: 12px !important;
-        letter-spacing: 2px !important; font-weight: 700 !important; transition: all .2s ease; }}
+        background: rgba(255,255,255,0.10) !important; color:#fff !important;
+        border:1px solid rgba(255,255,255,0.6) !important; border-radius:12px !important;
+        letter-spacing:2px !important; font-weight:700 !important; transition:all .2s ease; }}
     .stButton > button:hover, .stFormSubmitButton > button:hover {{
-        background: rgba(255,255,255,0.18) !important; box-shadow: 0 0 18px rgba(255,255,255,0.4) !important; }}
-    [data-testid="stCheckbox"] * {{ color: #cfd6dd !important; }}
+        background: rgba(255,255,255,0.2) !important; box-shadow:0 0 18px rgba(255,255,255,0.4) !important; }}
+    [data-testid="stCheckbox"] * {{ color:#cfd6dd !important; }}
     </style>
     """, unsafe_allow_html=True)
 
 
-def render_loading_splash():
+def render_loading_splash(duration=4.2):
     uri, _ = _asset_data_uri("loading_bg", ["gif", "png", "jpg", "jpeg", "webp"])
     bg = (f"#000 url('{uri}') center/cover no-repeat"
           if uri else "radial-gradient(circle at 50% 50%, #1b1d26 0%, #000 70%)")
+    d = float(duration)
     st.markdown(f"""
     <style>
     [data-testid="stHeader"], [data-testid="stSidebar"], [data-testid="stToolbar"] {{ display:none !important; }}
@@ -295,20 +310,32 @@ def render_loading_splash():
     #forge-splash {{
         position: fixed; inset: 0; z-index: 2147483600; background: {bg};
         display:flex; flex-direction:column; align-items:center; justify-content:center;
-        animation: fsplash-in 2.4s ease-in-out forwards; }}
-    @keyframes fsplash-in {{ 0%{{transform:scale(1.18); opacity:0}} 18%{{opacity:1}} 100%{{transform:scale(1)}} }}
-    #forge-splash .ttl {{ color:#fff; letter-spacing:12px; font-weight:800;
-        font-family:'Share Tech Mono',monospace; font-size:24px; text-shadow:0 0 22px rgba(255,255,255,.7); }}
-    #forge-splash .sub {{ color:#aab0b8; letter-spacing:7px; font-size:11px; margin-top:12px; }}
-    #forge-bar {{ width:240px; height:3px; margin-top:26px; background:rgba(255,255,255,.15);
+        animation: fsplash-in {d}s ease-out forwards; }}
+    #forge-splash::after {{ content:""; position:absolute; inset:0; background:rgba(0,0,0,0.38); }}
+    #forge-splash > * {{ position:relative; z-index:1; }}
+    @keyframes fsplash-in {{ 0%{{transform:scale(1.18); opacity:0}} 10%{{opacity:1}} 100%{{transform:scale(1)}} }}
+    #forge-splash .ttl {{ color:#fff; letter-spacing:14px; font-weight:800;
+        font-family:'Share Tech Mono',monospace; font-size:26px; text-shadow:0 0 22px rgba(255,255,255,.7); }}
+    #forge-splash .sub {{ color:#cfd6dd; letter-spacing:7px; font-size:11px; margin-top:12px; }}
+    #forge-log {{ margin-top:22px; min-height:90px; font-family:'Share Tech Mono',monospace;
+        font-size:12px; color:#9fe7ff; letter-spacing:2px; text-align:left; }}
+    #forge-log div {{ opacity:0; animation: flog .5s ease forwards; }}
+    @keyframes flog {{ to {{ opacity:1; }} }}
+    #forge-bar {{ width:260px; height:3px; margin-top:18px; background:rgba(255,255,255,.15);
         border-radius:3px; overflow:hidden; }}
     #forge-bar > i {{ display:block; height:100%; width:0; background:#fff;
-        box-shadow:0 0 14px #fff; animation: fbar 2.2s ease-in-out forwards; }}
+        box-shadow:0 0 14px #fff; animation: fbar {d}s ease-in-out forwards; }}
     @keyframes fbar {{ to {{ width:100%; }} }}
     </style>
     <div id="forge-splash">
         <div class="ttl">THE FORGE OS</div>
         <div class="sub">SYSTEM BOOTING…</div>
+        <div id="forge-log">
+            <div style="animation-delay:{d*0.10:.2f}s">▸ AUTH SESSION ............ OK</div>
+            <div style="animation-delay:{d*0.32:.2f}s">▸ SECURE VAULT ........... LOADED</div>
+            <div style="animation-delay:{d*0.55:.2f}s">▸ AI CORE ................ ONLINE</div>
+            <div style="animation-delay:{d*0.78:.2f}s">▸ WORKSPACE SYNC ......... DONE</div>
+        </div>
         <div id="forge-bar"><i></i></div>
     </div>
     """, unsafe_allow_html=True)
@@ -349,21 +376,26 @@ if AUTH_ON:
 else:
     if not st.session_state.logged_in:
         inject_login_background()
-        _lc1, _lc2, _lc3 = st.columns([2, 1, 2])
-        with _lc2:
-            try:
-                st.image("assets/aibou_icon.png", width=180)
-            except Exception:
-                pass
-        st.title("相棒AI 起動シークエンス")
-        password = st.text_input("Password", type="password")
-        if st.button("システム起動"):
-            if password == st.secrets.get("APP_PASSWORD", "boss"):
-                st.session_state.logged_in = True
-                st.session_state.show_loading = True
-                st.rerun()
-            else:
-                st.error("パスワードが違います。")
+        _ico, _ = _asset_data_uri("aibou_icon", ["png"])
+        _l, _c, _r = st.columns([1, 2, 1])
+        with _c:
+            with st.container(border=True):
+                if _ico:
+                    st.markdown(
+                        f"<div style='text-align:center'><img src='{_ico}' width='78' "
+                        f"style='filter:drop-shadow(0 0 12px rgba(255,255,255,.45))'></div>",
+                        unsafe_allow_html=True)
+                st.markdown("<div class='login-title'>相棒AI</div>"
+                            "<div class='login-sub'>起動シークエンス</div>", unsafe_allow_html=True)
+                password = st.text_input("Password", type="password",
+                                         label_visibility="collapsed", placeholder="パスワードを入力")
+                if st.button("システム起動", use_container_width=True):
+                    if password == st.secrets.get("APP_PASSWORD", "boss"):
+                        st.session_state.logged_in = True
+                        st.session_state.show_loading = True
+                        st.rerun()
+                    else:
+                        st.error("パスワードが違います。")
         st.stop()
 
 # ログイン後：金庫(APIキー)をセッションへ読み込む（Auth有効時は per-user）
@@ -377,10 +409,31 @@ if _bm:
     except Exception:
         st.info(_bm)
 
-# === ⚡ ロード画面：ログイン直後に一度だけスプラッシュを表示してからメインへ ===
+# === ⚡ ロード画面：ログイン直後に一度だけ表示し、その間に実セットアップを行う ===
 if st.session_state.pop("show_loading", False):
-    render_loading_splash()
-    time.sleep(2.2)
+    _boot_t0 = time.time()
+    _LOAD_SECS = 4.3
+    render_loading_splash(duration=_LOAD_SECS)
+    # この時間を使って実初期化（鍵の再読込・AI設定・接続/購読のウォームアップ）
+    try:
+        hydrate_vault_into_session(force=True)
+    except Exception:
+        pass
+    try:
+        _gk = get_secret("GEMINI_API_KEY") or (st.session_state.get("global_api_keys", {}) or {}).get("gemini")
+        if _gk:
+            genai.configure(api_key=_gk)
+    except Exception:
+        pass
+    if AUTH_ON and BILLING_AVAILABLE:
+        try:
+            billing.sync_status(supabase, get_secret, auth.current_user())
+        except Exception:
+            pass
+    # 演出を最後まで見せるため最低表示時間を確保
+    _rem = _LOAD_SECS - (time.time() - _boot_t0)
+    if _rem > 0:
+        time.sleep(_rem)
     st.rerun()
 
 # ==========================================

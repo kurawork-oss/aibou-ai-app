@@ -241,65 +241,69 @@ def set_stripe(supabase, uid, customer_id=None, subscription_id=None, income_sta
 # ログイン / 新規登録 UI（成功時は rerun、未ログインのまま戻ったら呼び出し側で st.stop()）
 # ---------------------------------------------------------------------
 def render_login(supabase, get_secret):
-    _lc1, _lc2, _lc3 = st.columns([2, 1, 2])
-    with _lc2:
-        try:
-            st.image("assets/aibou_icon.png", width=160)
-        except Exception:
-            pass
-    st.markdown("<h2 style='text-align:center; letter-spacing:3px;'>相棒AI — 起動シークエンス</h2>", unsafe_allow_html=True)
-
-    tab_login, tab_signup = st.tabs(["🔓 ログイン", "✨ 新規登録"])
-
-    with tab_login:
-        email = st.text_input("メールアドレス", key="login_email")
-        pw = st.text_input("パスワード", type="password", key="login_pw")
-        if st.button("ログイン", use_container_width=True, type="primary", key="btn_login"):
-            try:
-                res = supabase.auth.sign_in_with_password({"email": email.strip(), "password": pw})
-                sess = getattr(res, "session", None)
-                usr = getattr(res, "user", None)
-                if sess and usr:
-                    _set_current_user(supabase, sess, usr, get_secret)
-                    st.rerun()
-                else:
-                    st.error("ログインに失敗しました。メール確認が未完了の可能性があります。")
-            except Exception as e:
-                st.error(f"ログインに失敗しました：{e}")
-
-    with tab_signup:
-        s_email = st.text_input("メールアドレス", key="signup_email")
-        s_pw = st.text_input("パスワード（8文字以上推奨）", type="password", key="signup_pw")
-        s_pw2 = st.text_input("パスワード（確認）", type="password", key="signup_pw2")
-        with st.expander("📜 利用規約を読む", expanded=False):
-            st.markdown(TERMS_TEXT)
-        agreed = st.checkbox("利用規約に同意します", key="signup_agree")
-        if st.button("アカウントを作成", use_container_width=True, type="primary", key="btn_signup"):
-            if not s_email.strip() or not s_pw:
-                st.error("メールアドレスとパスワードを入力してください。")
-            elif s_pw != s_pw2:
-                st.error("パスワード（確認）が一致しません。")
-            elif not agreed:
-                st.error("利用規約への同意が必要です。")
-            else:
+    _l, _c, _r = st.columns([1, 2, 1])
+    with _c:
+        with st.container(border=True):
+            _li, _lc, _lr = st.columns([1, 1, 1])
+            with _lc:
                 try:
-                    res = supabase.auth.sign_up({"email": s_email.strip(), "password": s_pw})
-                    usr = getattr(res, "user", None)
-                    sess = getattr(res, "session", None)
-                    # 規約同意時刻を記録（profile は trigger が作成。後追いで update）
-                    if usr is not None:
-                        try:
-                            supabase.table("profiles").update(
-                                {"accepted_terms_at": datetime.datetime.utcnow().isoformat()}
-                            ).eq("id", getattr(usr, "id", "")).execute()
-                        except Exception:
-                            pass
-                    if sess and usr:
-                        # メール確認OFFの場合は即ログイン
-                        _set_current_user(supabase, sess, usr, get_secret)
-                        st.success("アカウントを作成しました。")
-                        st.rerun()
+                    st.image("assets/aibou_icon.png", width=78)
+                except Exception:
+                    pass
+            st.markdown("<div class='login-title'>相棒AI</div>"
+                        "<div class='login-sub'>起動シークエンス</div>", unsafe_allow_html=True)
+
+            tab_login, tab_signup = st.tabs(["🔓 ログイン", "✨ 新規登録"])
+
+            with tab_login:
+                email = st.text_input("メールアドレス", key="login_email")
+                pw = st.text_input("パスワード", type="password", key="login_pw")
+                if st.button("ログイン", use_container_width=True, type="primary", key="btn_login"):
+                    try:
+                        res = supabase.auth.sign_in_with_password({"email": email.strip(), "password": pw})
+                        sess = getattr(res, "session", None)
+                        usr = getattr(res, "user", None)
+                        if sess and usr:
+                            _set_current_user(supabase, sess, usr, get_secret)
+                            st.rerun()
+                        else:
+                            st.error("ログインに失敗しました。メール確認が未完了の可能性があります。")
+                    except Exception as e:
+                        st.error(f"ログインに失敗しました：{e}")
+
+            with tab_signup:
+                s_email = st.text_input("メールアドレス", key="signup_email")
+                s_pw = st.text_input("パスワード（8文字以上推奨）", type="password", key="signup_pw")
+                s_pw2 = st.text_input("パスワード（確認）", type="password", key="signup_pw2")
+                with st.expander("📜 利用規約を読む", expanded=False):
+                    st.markdown(TERMS_TEXT)
+                agreed = st.checkbox("利用規約に同意します", key="signup_agree")
+                if st.button("アカウントを作成", use_container_width=True, type="primary", key="btn_signup"):
+                    if not s_email.strip() or not s_pw:
+                        st.error("メールアドレスとパスワードを入力してください。")
+                    elif s_pw != s_pw2:
+                        st.error("パスワード（確認）が一致しません。")
+                    elif not agreed:
+                        st.error("利用規約への同意が必要です。")
                     else:
-                        st.success("確認メールを送信しました。メール内のリンクで認証後、ログインしてください。")
-                except Exception as e:
-                    st.error(f"登録に失敗しました：{e}")
+                        try:
+                            res = supabase.auth.sign_up({"email": s_email.strip(), "password": s_pw})
+                            usr = getattr(res, "user", None)
+                            sess = getattr(res, "session", None)
+                            # 規約同意時刻を記録（profile は trigger が作成。後追いで update）
+                            if usr is not None:
+                                try:
+                                    supabase.table("profiles").update(
+                                        {"accepted_terms_at": datetime.datetime.utcnow().isoformat()}
+                                    ).eq("id", getattr(usr, "id", "")).execute()
+                                except Exception:
+                                    pass
+                            if sess and usr:
+                                # メール確認OFFの場合は即ログイン
+                                _set_current_user(supabase, sess, usr, get_secret)
+                                st.success("アカウントを作成しました。")
+                                st.rerun()
+                            else:
+                                st.success("確認メールを送信しました。メール内のリンクで認証後、ログインしてください。")
+                        except Exception as e:
+                            st.error(f"登録に失敗しました：{e}")
