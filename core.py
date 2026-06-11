@@ -271,7 +271,7 @@ def inject_login_background():
         filter: blur(5px) brightness(0.5) saturate(1.05);
         transform: scale(1.08); }}
     [data-testid="stAppViewContainer"] {{ position:relative; z-index:1; background:transparent !important; }}
-    .block-container {{ max-width: 540px !important; padding-top: 8vh !important; }}
+    .block-container {{ max-width: 700px !important; padding-top: 8vh !important; }}
     /* 中央のガラスカード（st.container(border=True)） */
     [data-testid="stVerticalBlockBorderWrapper"] {{
         background: rgba(12,14,20,0.55) !important; backdrop-filter: blur(16px) !important;
