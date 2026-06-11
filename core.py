@@ -299,58 +299,55 @@ def inject_login_background():
 
 
 def render_loading_overlay(duration=4.5):
-    """親ドキュメントに全画面スプラッシュを注入し、その裏でメイン画面を構築する。
-    duration 秒後に自動でフェード＆DOM除去（重いGIFを残さずラグを防ぐ）。
-    st.rerun も st.stop も使わない＝同一ランでメインを完成させてから現す。"""
+    """ログイン直後に全画面スプラッシュを「同期描画」し、その裏で本ランがメインを構築する。
+    CSSアニメで duration 秒後に自動フェード（opacity0+visibility:hidden＝クリック透過）。
+    重いGIFは JS(components) で表示後に DOM 除去し、残存ラグを防ぐ。"""
     uri, _ = _asset_data_uri("loading_bg", ["gif", "png", "jpg", "jpeg", "webp"])
     bg_css = (f"#000 url('{uri}') center/cover no-repeat"
               if uri else "radial-gradient(circle at 50% 50%, #1b1d26 0%, #000 70%)")
-    ms = int(float(duration) * 1000)
-    tmpl = r"""
-    <script>
-    (function(){
-      try {
-        var doc = window.parent.document;
-        if (doc.getElementById('forge-splash-ov')) return;
-        var css = doc.createElement('style'); css.id = 'forge-splash-css';
-        css.textContent =
-          "#forge-splash-ov{position:fixed;inset:0;z-index:2147483600;background:__BG__;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:'Share Tech Mono',monospace;transition:opacity .6s ease;animation:fov-in .8s ease-out;}"
-          + "@keyframes fov-in{from{opacity:0;transform:scale(1.12)}to{opacity:1;transform:scale(1)}}"
-          + "#forge-splash-ov::after{content:'';position:absolute;inset:0;background:rgba(0,0,0,.42);}"
-          + "#forge-splash-ov>*{position:relative;z-index:1;}"
-          + "#forge-splash-ov .ttl{color:#fff;letter-spacing:14px;font-weight:800;font-size:26px;text-shadow:0 0 22px rgba(255,255,255,.7);}"
-          + "#forge-splash-ov .sub{color:#cfd6dd;letter-spacing:7px;font-size:11px;margin-top:12px;}"
-          + "#forge-splash-ov .log{margin-top:22px;min-height:94px;font-size:12px;color:#9fe7ff;letter-spacing:2px;text-align:left;}"
-          + "#forge-splash-ov .log div{opacity:0;animation:flog .5s ease forwards;}"
-          + "@keyframes flog{to{opacity:1;}}"
-          + "#forge-splash-ov .bar{width:260px;height:3px;margin-top:18px;background:rgba(255,255,255,.15);border-radius:3px;overflow:hidden;}"
-          + "#forge-splash-ov .bar>i{display:block;height:100%;width:0;background:#fff;box-shadow:0 0 14px #fff;animation:fbar __SEC__s ease-in-out forwards;}"
-          + "@keyframes fbar{to{width:100%;}}";
-        doc.head.appendChild(css);
-        var ov = doc.createElement('div'); ov.id = 'forge-splash-ov';
-        ov.innerHTML =
-          "<div class='ttl'>THE FORGE OS</div><div class='sub'>SYSTEM BOOTING…</div>"
-          + "<div class='log'>"
-          + "<div style='animation-delay:.3s'>&#9656; AUTH SESSION ............ OK</div>"
-          + "<div style='animation-delay:__D1__s'>&#9656; SECURE VAULT ........... LOADED</div>"
-          + "<div style='animation-delay:__D2__s'>&#9656; AI CORE ................ ONLINE</div>"
-          + "<div style='animation-delay:__D3__s'>&#9656; WORKSPACE SYNC ......... DONE</div>"
-          + "</div><div class='bar'><i></i></div>";
-        doc.body.appendChild(ov);
-        setTimeout(function(){
-          ov.style.opacity = '0'; ov.style.pointerEvents = 'none';
-          setTimeout(function(){ try{ov.remove();css.remove();}catch(e){} }, 650);
-        }, __MS__);
-      } catch(e) {}
-    })();
-    </script>
-    """
-    html = (tmpl.replace("__BG__", bg_css).replace("__MS__", str(ms))
-                .replace("__SEC__", str(float(duration)))
-                .replace("__D1__", f"{duration*0.32:.2f}")
-                .replace("__D2__", f"{duration*0.55:.2f}")
-                .replace("__D3__", f"{duration*0.78:.2f}"))
-    st.components.v1.html(html, height=0)
+    d = float(duration)
+    total = d + 0.6
+    hold = int(d / total * 100)
+    st.markdown(f"""
+    <style>
+    #forge-splash-ov {{ position:fixed; inset:0; z-index:2147483600; background:{bg_css};
+        display:flex; flex-direction:column; align-items:center; justify-content:center;
+        font-family:'Share Tech Mono',monospace; animation: fov-life {total:.2f}s ease forwards; }}
+    @keyframes fov-life {{ 0%{{opacity:0; transform:scale(1.1)}} 6%{{opacity:1; transform:scale(1)}}
+        {hold}%{{opacity:1; visibility:visible}} 100%{{opacity:0; visibility:hidden}} }}
+    #forge-splash-ov::after {{ content:""; position:absolute; inset:0; background:rgba(0,0,0,.42); }}
+    #forge-splash-ov > * {{ position:relative; z-index:1; }}
+    #forge-splash-ov .ttl {{ color:#fff; letter-spacing:14px; font-weight:800; font-size:26px;
+        text-shadow:0 0 22px rgba(255,255,255,.7); }}
+    #forge-splash-ov .sub {{ color:#cfd6dd; letter-spacing:7px; font-size:11px; margin-top:12px; }}
+    #forge-splash-ov .log {{ margin-top:22px; min-height:94px; font-size:12px; color:#9fe7ff;
+        letter-spacing:2px; text-align:left; }}
+    #forge-splash-ov .log div {{ opacity:0; animation: flog .5s ease forwards; }}
+    @keyframes flog {{ to {{ opacity:1; }} }}
+    #forge-splash-ov .bar {{ width:260px; height:3px; margin-top:18px; background:rgba(255,255,255,.15);
+        border-radius:3px; overflow:hidden; }}
+    #forge-splash-ov .bar > i {{ display:block; height:100%; width:0; background:#fff;
+        box-shadow:0 0 14px #fff; animation: fbar {d:.2f}s ease-in-out forwards; }}
+    @keyframes fbar {{ to {{ width:100%; }} }}
+    </style>
+    <div id="forge-splash-ov">
+        <div class="ttl">THE FORGE OS</div>
+        <div class="sub">SYSTEM BOOTING…</div>
+        <div class="log">
+            <div style="animation-delay:.3s">&#9656; AUTH SESSION ............ OK</div>
+            <div style="animation-delay:{d*0.32:.2f}s">&#9656; SECURE VAULT ........... LOADED</div>
+            <div style="animation-delay:{d*0.55:.2f}s">&#9656; AI CORE ................ ONLINE</div>
+            <div style="animation-delay:{d*0.78:.2f}s">&#9656; WORKSPACE SYNC ......... DONE</div>
+        </div>
+        <div class="bar"><i></i></div>
+    </div>
+    """, unsafe_allow_html=True)
+    # 重いGIFを表示後にDOM除去（残存ラグ防止）。JSは components 経由でのみ実行可。
+    _rm = int(total * 1000) + 120
+    st.components.v1.html(
+        "<script>(function(){try{var d=window.parent.document;setTimeout(function(){"
+        "var e=d.getElementById('forge-splash-ov');if(e){e.remove();}},"
+        + str(_rm) + ");}catch(e){}})();</script>", height=0)
 
 
 # ==========================================
