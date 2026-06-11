@@ -134,8 +134,26 @@ except Exception:
     def generate_thumbnail(*a, **k): return None
     def generate_image(*a, **k): return None, None
 
+# === 🔐 Auth（Supabase Auth）/ 💳 Billing（Stripe）レイヤを読み込む ==========
+# 失敗してもアプリを落とさない。AUTH_MODE=supabase のときのみ本物の認証を使う。
 try:
-    supabase: Client = create_client(get_secret("SUPABASE_URL"), get_secret("SUPABASE_KEY"))
+    import auth
+    AUTH_MODULE = True
+except Exception:
+    AUTH_MODULE = False
+try:
+    import billing
+    BILLING_AVAILABLE = True
+except Exception:
+    BILLING_AVAILABLE = False
+
+try:
+    # Auth + RLS を効かせるため、アプリは anon（publishable）キーを優先して使う。
+    # headless（GitHub Actions）はサービスロールを使用（scripts 側の設定）。
+    supabase: Client = create_client(
+        get_secret("SUPABASE_URL"),
+        get_secret("SUPABASE_ANON_KEY") or get_secret("SUPABASE_KEY"),
+    )
     hasher = hashlib.sha256(get_secret("MASTER_ENCRYPTION_KEY").encode('utf-8')).digest()
     cipher_suite = Fernet(base64.urlsafe_b64encode(hasher))
     DB_CONNECTED = True
@@ -143,10 +161,24 @@ except Exception as e:
     DB_CONNECTED = False
     supabase = None
 
+def _vault_uid():
+    """Auth有効時のみ current_user の id を返す（per-user vault のキー）。
+    legacy/未ログイン時は None（従来のグローバル vault_data id=1 を使う）。"""
+    try:
+        if 'AUTH_MODULE' in globals() and AUTH_MODULE and auth.enabled(get_secret, supabase if DB_CONNECTED else None):
+            return (st.session_state.get("current_user") or {}).get("id")
+    except Exception:
+        pass
+    return None
+
 def load_vault():
     if not DB_CONNECTED: return {}
+    uid = _vault_uid()
     try:
-        res = supabase.table("vault_data").select("encrypted_keys").eq("id", 1).execute()
+        if uid:
+            res = supabase.table("user_vaults").select("encrypted_keys").eq("user_id", uid).limit(1).execute()
+        else:
+            res = supabase.table("vault_data").select("encrypted_keys").eq("id", 1).execute()
         if res.data and res.data[0].get("encrypted_keys"):
             enc_data = res.data[0]["encrypted_keys"]
             if enc_data == '': return {} # 初期状態
@@ -158,23 +190,26 @@ def load_vault():
 
 def save_vault(data):
     if not DB_CONNECTED: return False
+    uid = _vault_uid()
     try:
         encrypted = cipher_suite.encrypt(json.dumps(data).encode('utf-8')).decode('utf-8')
-        res = supabase.table("vault_data").upsert({"id": 1, "encrypted_keys": encrypted}).execute()
+        if uid:
+            supabase.table("user_vaults").upsert({"user_id": uid, "encrypted_keys": encrypted}).execute()
+        else:
+            supabase.table("vault_data").upsert({"id": 1, "encrypted_keys": encrypted}).execute()
         return True
     except Exception as e:
         st.error(f"🚨 【DB書き込みエラー】: {e}")
         return False
 
-# === システム起動時の「金庫の鍵」自動読み込み ===
-if "global_api_keys" not in st.session_state:
-    st.session_state.global_api_keys = {}
-    vd = load_vault()
-    st.session_state.global_api_keys = vd.get("api_keys", {})
-    # 用途別キー（マルチアカウント）も同じVaultから読み込む
-    st.session_state.key_slots = vd.get("key_slots", {})
-if "key_slots" not in st.session_state:
-    st.session_state.key_slots = {}
+# === 金庫の鍵をセッションへ読み込む（Auth有効時はログイン後に per-user で実行） ===
+def hydrate_vault_into_session(force=False):
+    if force or "global_api_keys" not in st.session_state:
+        vd = load_vault()
+        st.session_state.global_api_keys = vd.get("api_keys", {})
+        st.session_state.key_slots = vd.get("key_slots", {})
+    if "key_slots" not in st.session_state:
+        st.session_state.key_slots = {}
 
 # === 🧠 全ページ共通のAI会話履歴（ページ移動で文脈が消えないようにする） ===
 if "global_chat_history" not in st.session_state:
@@ -199,27 +234,64 @@ except Exception:
     pass
 
 # ==========================================
-# 🔐 1. ログインシステム
+# 🔐 1. 認証（Supabase Auth または 従来の共有パスワード）
 # ==========================================
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 
-if not st.session_state.logged_in:
-    _lc1, _lc2, _lc3 = st.columns([2, 1, 2])
-    with _lc2:
+# AUTH_MODE=supabase かつ DB接続時のみ本物の認証。それ以外は従来パスワードへフォールバック。
+AUTH_ON = False
+try:
+    AUTH_ON = ('AUTH_MODULE' in globals() and AUTH_MODULE
+               and auth.enabled(get_secret, supabase if DB_CONNECTED else None))
+except Exception:
+    AUTH_ON = False
+
+if AUTH_ON:
+    _cu = None
+    try:
+        _cu = auth.restore_session(supabase)
+    except Exception:
+        _cu = None
+    if not _cu:
+        auth.render_login(supabase, get_secret)
+        st.stop()
+    # Stripe 決済からの復帰（?checkout=success）を検証して購読を反映
+    if BILLING_AVAILABLE:
         try:
-            st.image("assets/aibou_icon.png", width=180)
+            _bm = billing.handle_return(supabase, get_secret, auth.current_user())
+            if _bm:
+                st.session_state["_billing_msg"] = _bm
         except Exception:
             pass
-    st.title("相棒AI 起動シークエンス")
-    password = st.text_input("Password", type="password")
-    if st.button("システム起動"):
-        if password == st.secrets.get("APP_PASSWORD", "boss"): 
-            st.session_state.logged_in = True
-            st.rerun()
-        else:
-            st.error("パスワードが違います。")
-    st.stop()
+else:
+    if not st.session_state.logged_in:
+        _lc1, _lc2, _lc3 = st.columns([2, 1, 2])
+        with _lc2:
+            try:
+                st.image("assets/aibou_icon.png", width=180)
+            except Exception:
+                pass
+        st.title("相棒AI 起動シークエンス")
+        password = st.text_input("Password", type="password")
+        if st.button("システム起動"):
+            if password == st.secrets.get("APP_PASSWORD", "boss"):
+                st.session_state.logged_in = True
+                st.rerun()
+            else:
+                st.error("パスワードが違います。")
+        st.stop()
+
+# ログイン後：金庫(APIキー)をセッションへ読み込む（Auth有効時は per-user）
+hydrate_vault_into_session()
+
+# 決済などの一度きりメッセージ
+_bm = st.session_state.pop("_billing_msg", None)
+if _bm:
+    try:
+        st.toast(_bm)
+    except Exception:
+        st.info(_bm)
 
 # ==========================================
 # 🧭 2. THE AIbou OS セントラルルーティング
@@ -273,16 +345,24 @@ else:
         st.rerun()
     st.sidebar.markdown("---")
 
-    # 📁 フォルダ(モード) / 📄 ファイル(各部屋) のツリー表示
+    # 📁 フォルダ(モード) / 📄 ファイル(各部屋) のツリー表示（権限で出し分け）
     st.sidebar.caption("MODES")
     _cur = st.session_state.current_mode
+    _is_owner = (not AUTH_ON) or auth.is_owner()
+    _income_ok = (not AUTH_ON) or auth.income_active()
     for _m in FORGE_MODES:
         if not _m["rooms"]:
             continue  # CORE（対話モード）はページが無いので RETURN TO HUB に集約
-        _targets = [t for _, _, t in _m["rooms"]]
+        # 自己進化（Core Upgrade）は owner 専用 → 非ownerには出さない
+        _rooms = [r for r in _m["rooms"] if not (r[2] == "Core Upgrade" and not _is_owner)]
+        if not _rooms:
+            continue
+        _targets = [t for _, _, t in _rooms]
         with st.sidebar.expander(f"📁 {_m.get('icon', '')} {_m['name']}", expanded=(_cur in _targets)):
-            for _disp, _sub, _target in _m["rooms"]:
-                if st.button((("● " if _target == _cur else "📄 ") + _disp), key=f"side_{_target}", use_container_width=True):
+            for _disp, _sub, _target in _rooms:
+                _lock = (_target == "Auto Income" and not _income_ok)
+                _icon = ("● " if _target == _cur else ("🔒 " if _lock else "📄 "))
+                if st.button(_icon + _disp, key=f"side_{_target}", use_container_width=True):
                     st.session_state.current_mode = _target
                     st.rerun()
 
@@ -353,7 +433,10 @@ if video_base64:
     """, unsafe_allow_html=True)
 
 if st.sidebar.button("Logout"):
-    st.session_state.logged_in = False
+    if AUTH_ON:
+        auth.sign_out(supabase)
+    else:
+        st.session_state.logged_in = False
     st.rerun()
 
 # ==========================================
@@ -669,6 +752,48 @@ if INCOME_AVAILABLE:
         pass
 
 # ==========================================
+# 🔒 アクセス制御（owner専用 / 課金ゲート）の画面
+# ==========================================
+def render_owner_only(feature_name):
+    st.markdown(f"<h2 style='letter-spacing:2px;'>🔒 {feature_name}</h2>", unsafe_allow_html=True)
+    st.warning("この機能はオーナー（管理者）専用です。")
+    st.caption("自己進化モードはシステム全体（全ユーザー）に影響し得るため、オーナーのみが実行できます。")
+    if st.button("⬅️ HUB に戻る", key="owner_only_back"):
+        st.session_state.current_mode = "HUB"; st.rerun()
+
+def render_income_paywall():
+    st.markdown("<h2 style='letter-spacing:2px;'>💰 Auto Income — サブスクリプション</h2>", unsafe_allow_html=True)
+    st.info("Auto Income（副業自動化）は有料プランの機能です。オーナーは無料で利用できます。")
+    user = auth.current_user() or {}
+    # 最新の購読状態を同期（解約の反映＝Webhook無しのフォールバック）
+    if BILLING_AVAILABLE:
+        try:
+            billing.sync_status(supabase, get_secret, user)
+            auth.refresh_profile(supabase)
+            user = auth.current_user() or {}
+        except Exception:
+            pass
+    if auth.income_active(user):
+        st.success("購読は有効です。下のボタンで読み込み直してください。")
+        if st.button("🔄 再読み込み", key="paywall_reload"):
+            st.rerun()
+        return
+    if BILLING_AVAILABLE and billing.enabled(get_secret):
+        url, err = billing.create_checkout_url(get_secret, user)
+        if url:
+            try:
+                st.link_button("💳 サブスクに登録する（Stripe）", url, use_container_width=True, type="primary")
+            except Exception:
+                st.markdown(f"[💳 サブスクに登録する（Stripe）]({url})")
+        else:
+            st.error(err or "決済リンクを作成できませんでした。")
+            st.caption("オーナーが Stripe（STRIPE_SECRET_KEY / STRIPE_PRICE_ID / APP_BASE_URL）を設定する必要があります。")
+    else:
+        st.warning("現在オンライン決済は準備中です。オーナーにお問い合わせください（手動で解放することも可能です）。")
+    if st.button("⬅️ HUB に戻る", key="paywall_back"):
+        st.session_state.current_mode = "HUB"; st.rerun()
+
+# ==========================================
 # 🖥️ 4. メイン画面の表示 (モジュール・ルーター)
 # ==========================================
 
@@ -691,7 +816,10 @@ elif page == "App Archive" or page == "APP ARCHIVE":
     with open("views/6_📦_App_Archive.py", "r", encoding="utf-8") as f: exec(f.read())
 
 elif page == "Auto Income" or page == "💰 AUTO INCOME":
-    with open("views/10_💰_Auto_Income.py", "r", encoding="utf-8") as f: exec(f.read())
+    if AUTH_ON and not auth.income_active():
+        render_income_paywall()
+    else:
+        with open("views/10_💰_Auto_Income.py", "r", encoding="utf-8") as f: exec(f.read())
 
 elif page == "Task History" or page == "🕰️ 過去のタスク":
     with open("views/7_🕰️_Task_History.py", "r", encoding="utf-8") as f: exec(f.read())
@@ -700,7 +828,10 @@ elif page == "Settings" or page == "⚙️ SETTINGS":
     with open("views/8_⚙️_Settings.py", "r", encoding="utf-8") as f: exec(f.read())
 
 elif page == "Core Upgrade":
-    with open("views/9_🚀_Core_Upgrade.py", "r", encoding="utf-8") as f: exec(f.read())
+    if AUTH_ON and not auth.is_owner():
+        render_owner_only("Core Upgrade（自己進化）")
+    else:
+        with open("views/9_🚀_Core_Upgrade.py", "r", encoding="utf-8") as f: exec(f.read())
 
 # ==========================================
 # 🎨 DESIGN SYSTEM (assets/style.css)

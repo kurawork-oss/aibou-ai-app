@@ -26,15 +26,20 @@ col_menu, col_content = st.columns([2, 8], gap="large")
 
 with col_menu:
     st.markdown("<div style='font-weight:bold; color:#718096; margin-bottom:10px;'>[ MENU ]</div>", unsafe_allow_html=True)
-    setting_mode = st.radio("設定メニュー", [
+    _menu = [
+        "👤 アカウント",
         "🛠️ 基本設定",
         "🧠 コア設定",
-        "🕰️ システム復元", 
+        "🕰️ システム復元",
         "🔐 Secure Vault",
         "💰 副業自動化",
         "📖 取扱説明書",
-        "🚪 ログアウト"
-    ], label_visibility="collapsed")
+        "🚪 ログアウト",
+    ]
+    # オーナーのみ：ユーザー管理メニューを追加
+    if globals().get("AUTH_ON") and globals().get("auth") and auth.is_owner():
+        _menu.insert(1, "👑 ユーザー管理")
+    setting_mode = st.radio("設定メニュー", _menu, label_visibility="collapsed")
 
 with col_content:
     # ================================
@@ -548,9 +553,80 @@ with col_content:
             st.markdown("1. [GitHubのトークン設定画面](https://github.com/settings/tokens) にアクセス。\n2. 「Generate new token (classic)」を選ぶ。\n3. 「No expiration」にし「repo」にチェックを入れて生成。")
 
     # ================================
+    elif setting_mode == "👤 アカウント":
+        st.markdown("#### 👤 アカウント")
+        if globals().get("AUTH_ON") and globals().get("auth"):
+            u = auth.current_user() or {}
+            st.write(f"**メール**: {u.get('email', '-')}")
+            st.write(f"**権限**: {'👑 オーナー（管理者）' if auth.is_owner(u) else '一般ユーザー'}")
+            st.write(f"**Auto Income**: {'✅ 有効' if auth.income_active(u) else '⬜ 未契約'}")
+            if globals().get("BILLING_AVAILABLE") and not auth.is_owner(u):
+                st.markdown("---")
+                st.caption("副業自動化（Auto Income）のサブスクリプション")
+                cbb1, cbb2 = st.columns(2)
+                if cbb1.button("🔄 購読状態を更新", use_container_width=True):
+                    billing.sync_status(globals().get("supabase"), get_secret, u)
+                    auth.refresh_profile(globals().get("supabase"))
+                    st.rerun()
+                if not auth.income_active(u) and billing.enabled(get_secret):
+                    url, err = billing.create_checkout_url(get_secret, u)
+                    if url:
+                        try:
+                            cbb2.link_button("💳 サブスクに登録", url, use_container_width=True, type="primary")
+                        except Exception:
+                            cbb2.markdown(f"[💳 サブスクに登録]({url})")
+                    elif err:
+                        cbb2.caption(err)
+            st.markdown("---")
+            if st.button("🚪 ログアウト", type="primary"):
+                auth.sign_out(globals().get("supabase"))
+                st.rerun()
+        else:
+            st.info("現在は共有パスワード方式（AUTH_MODE=legacy）です。Supabase Auth を有効化すると、"
+                    "アカウント毎の保存・権限・課金管理が利用できます（MULTI_TENANT_SETUP.md 参照）。")
+
+    # ================================
+    elif setting_mode == "👑 ユーザー管理":
+        st.markdown("#### 👑 ユーザー管理（オーナー専用）")
+        if not (globals().get("AUTH_ON") and globals().get("auth") and auth.is_owner()):
+            st.warning("この画面はオーナー専用です。")
+        else:
+            profs = auth.list_profiles(globals().get("supabase"))
+            st.caption(f"登録ユーザー：{len(profs)} 名")
+            _me = (auth.current_user() or {}).get("id")
+            for p in profs:
+                with st.container(border=True):
+                    c1, c2, c3 = st.columns([4, 2, 3])
+                    c1.write(f"**{p.get('email', '(no email)')}**")
+                    c1.caption(f"id: {str(p.get('id', ''))[:8]} / 登録: {str(p.get('created_at', ''))[:10]}")
+                    _role = p.get("role", "user")
+                    _inc = p.get("income_status", "inactive")
+                    c2.write(f"権限: {'👑 owner' if _role == 'owner' else 'user'}")
+                    c2.write(f"課金: {'✅ active' if _inc == 'active' else '⬜ inactive'}")
+                    if p.get("id") == _me:
+                        c3.caption("（自分）")
+                    else:
+                        if _role == "owner":
+                            if c3.button("ownerを解除", key=f"role_{p['id']}", use_container_width=True):
+                                auth.set_role(globals().get("supabase"), p["id"], "user"); st.rerun()
+                        else:
+                            if c3.button("ownerに昇格", key=f"role_{p['id']}", use_container_width=True):
+                                auth.set_role(globals().get("supabase"), p["id"], "owner"); st.rerun()
+                        if _inc == "active":
+                            if c3.button("課金を無効化", key=f"inc_{p['id']}", use_container_width=True):
+                                auth.set_income_status(globals().get("supabase"), p["id"], "inactive"); st.rerun()
+                        else:
+                            if c3.button("課金を手動有効化", key=f"inc_{p['id']}", use_container_width=True):
+                                auth.set_income_status(globals().get("supabase"), p["id"], "active"); st.rerun()
+            st.caption("※「課金を手動有効化」は Stripe を介さずに Auto Income を解放する管理用スイッチです。")
+
+    # ================================
     elif setting_mode == "🚪 ログアウト":
         st.markdown("#### 🚪 LOGOUT")
         st.warning("システムをロックしてログイン画面に戻ります。")
         if st.button("LOGOUT 🔒", type="primary"):
-            st.session_state.logged_in = False
+            if globals().get("AUTH_ON") and globals().get("auth"):
+                auth.sign_out(globals().get("supabase"))
+            else:
+                st.session_state.logged_in = False
             st.rerun()
