@@ -22,7 +22,7 @@ st.markdown("""
     /* 1. 全体をダーク＆サイバーパンクな雰囲気に */
     [data-testid="stAppViewContainer"] {
         background-color: #030b14 !important;
-        background-image: radial-gradient(circle at 50% 120%, rgba(0, 150, 255, 0.15), transparent) !important;
+        background-image: radial-gradient(circle at 50% 120%, rgba(150, 200, 255, 0.15), transparent) !important;
         color: #e2e8f0 !important;
     }
 
@@ -32,14 +32,14 @@ st.markdown("""
         font-weight: 900;
         letter-spacing: 6px;
         margin-bottom: 5px;
-        text-shadow: 0 0 10px rgba(0, 243, 255, 0.6), 0 0 20px rgba(0, 150, 255, 0.4) !important;
+        text-shadow: 0 0 10px rgba(197, 198, 199, 0.6), 0 0 20px rgba(150, 200, 255, 0.4) !important;
         text-align: center;
     }
     .central-logo {
         text-align: center;
         font-size: 70px;
-        color: #00f3ff !important;
-        text-shadow: 0 0 15px rgba(0, 243, 255, 0.8), 0 0 30px rgba(0, 150, 255, 0.5) !important;
+        color: #c5c6c7 !important;
+        text-shadow: 0 0 15px rgba(197, 198, 199, 0.8), 0 0 30px rgba(150, 200, 255, 0.5) !important;
         margin: 30px 0 10px 0;
     }
     .central-logo-sub {
@@ -132,7 +132,7 @@ st.markdown("""
     .stApp:has(button:hover) .default-desc { opacity: 0 !important; transform: translateY(-10px) !important; }
     .stApp:has([data-testid="stHorizontalBlock"] button:hover) .desc-display-area {
         border-color: #ffffff !important;
-        box-shadow: 0 0 20px rgba(0, 243, 255, 0.4), inset 0 0 10px rgba(0, 243, 255, 0.2) !important;
+        box-shadow: 0 0 20px rgba(197, 198, 199, 0.4), inset 0 0 10px rgba(197, 198, 199, 0.2) !important;
         background: rgba(15, 30, 50, 0.8) !important;
     }
 
@@ -144,9 +144,9 @@ st.markdown("""
         transform: translateX(-50%);
         width: 600px;
         height: 150px;
-        background: radial-gradient(ellipse at 50% 50%, rgba(0, 243, 255, 0.15), transparent 70%);
+        background: radial-gradient(ellipse at 50% 50%, rgba(197, 198, 199, 0.15), transparent 70%);
         border-radius: 50%;
-        box-shadow: 0 0 50px rgba(0, 243, 255, 0.2);
+        box-shadow: 0 0 50px rgba(197, 198, 199, 0.2);
         pointer-events: none;
         z-index: -1;
     }
@@ -154,7 +154,7 @@ st.markdown("""
     /* 🌟 【絶対解決版】プロジェクトカード（強烈なセレクタ＋ハッキリ見える色） */
     div[data-testid="stVerticalBlockBorderWrapper"] {
         background-color: #1e293b !important; /* ← 絶対に漆黒から浮き出るスレートグレー！ */
-        border: 2px solid rgba(0, 243, 255, 0.5) !important; /* ← 確実に見える2pxのシアン枠！ */
+        border: 2px solid rgba(197, 198, 199, 0.5) !important; /* ← 確実に見える2pxのシアン枠！ */
         border-radius: 16px !important;
         box-shadow: 0 10px 25px rgba(0, 0, 0, 0.8) !important; /* 濃い影で浮かせる */
         transition: all 0.3s ease !important;
@@ -163,8 +163,8 @@ st.markdown("""
     /* 🌟 プロジェクトカードにマウスを乗せた時のホバーエフェクト */
     div[data-testid="stVerticalBlockBorderWrapper"]:hover {
         background-color: #334155 !important; /* ホバーでさらに一段階明るく！ */
-        border-color: #00f3ff !important; /* ネオンシアン発光 */
-        box-shadow: 0 15px 35px rgba(0, 0, 0, 0.9), 0 0 20px rgba(0, 243, 255, 0.4) !important;
+        border-color: #c5c6c7 !important; /* ネオンシアン発光 */
+        box-shadow: 0 15px 35px rgba(0, 0, 0, 0.9), 0 0 20px rgba(197, 198, 199, 0.4) !important;
         transform: translateY(-5px) !important;
     }
     </style>
@@ -205,10 +205,10 @@ if st.session_state.current_forge_ws is None and st.session_state.selected_forge
     st.markdown("""
         <div class="desc-display-area">
             <div class="desc-text default-desc">HOVER OVER AN ENGINE TO VIEW SPECIFICATIONS</div>
-            <div class="desc-text app-desc">🤖 <b style="color:#00f3ff;">[ APP STUDIO ]</b><br>ボスの指示から、美しくバグのないアプリケーションのUIとロジックを自律的に構築・プレビューします。</div>
-            <div class="desc-text img-desc">🎨 <b style="color:#00f3ff;">[ IMAGE GENERATOR ]</b><br>画像生成AIのための完璧な英語プロンプトを構築し、照明や画角を計算した最高の1枚を引き出します。</div>
-            <div class="desc-text vid-desc">🎬 <b style="color:#00f3ff;">[ VIDEO PRODUCTION ]</b><br>SoraやVeo等の最先端動画生成AIに向けた、プロ品質の絵コンテとカメラワーク指定を作成します。</div>
-            <div class="desc-text slide-desc">📊 <b style="color:#00f3ff;">[ SLIDE DECK ]</b><br>論理的なプレゼン構成を考案し、説得力のあるスライド資料(.pptx)を即座に出力します。</div>
+            <div class="desc-text app-desc">🤖 <b style="color:#c5c6c7;">[ APP STUDIO ]</b><br>ボスの指示から、美しくバグのないアプリケーションのUIとロジックを自律的に構築・プレビューします。</div>
+            <div class="desc-text img-desc">🎨 <b style="color:#c5c6c7;">[ IMAGE GENERATOR ]</b><br>画像生成AIのための完璧な英語プロンプトを構築し、照明や画角を計算した最高の1枚を引き出します。</div>
+            <div class="desc-text vid-desc">🎬 <b style="color:#c5c6c7;">[ VIDEO PRODUCTION ]</b><br>SoraやVeo等の最先端動画生成AIに向けた、プロ品質の絵コンテとカメラワーク指定を作成します。</div>
+            <div class="desc-text slide-desc">📊 <b style="color:#c5c6c7;">[ SLIDE DECK ]</b><br>論理的なプレゼン構成を考案し、説得力のあるスライド資料(.pptx)を即座に出力します。</div>
         </div>
     """, unsafe_allow_html=True)
 
@@ -256,7 +256,7 @@ elif st.session_state.current_forge_ws is None and st.session_state.selected_for
             for idx, (ws_name, ws_data) in enumerate(mode_workspaces.items()):
                 with cols[idx % 2]:
                     with st.container(border=True):
-                        st.markdown(f"<span style='border:1px solid #00f3ff; color:#00f3ff; padding:2px 8px; border-radius:4px; font-size:10px;'>{ws_data['type']}</span>", unsafe_allow_html=True)
+                        st.markdown(f"<span style='border:1px solid #c5c6c7; color:#c5c6c7; padding:2px 8px; border-radius:4px; font-size:10px;'>{ws_data['type']}</span>", unsafe_allow_html=True)
                         st.markdown(f"<h4 style='color:#ffffff; font-weight:800; margin-top:10px;'>{ws_name}</h4>", unsafe_allow_html=True)
                         st.markdown(f"<p style='font-size: 11px; color: #718096;'>ONLINE | Logs: {len(ws_data['chat'])}</p>", unsafe_allow_html=True)
                         
@@ -292,7 +292,7 @@ else:
     st.markdown("---")
 
     with st.sidebar:
-        st.markdown(f"<div style='text-align:center; font-weight:800; color:#00f3ff; margin-bottom:10px;'>[ {ws_name} ]</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='text-align:center; font-weight:800; color:#c5c6c7; margin-bottom:10px;'>[ {ws_name} ]</div>", unsafe_allow_html=True)
         with st.form("forge_sidebar_form", clear_on_submit=True):
             placeholder_text = "Type your prompt here..."
             if ws_type == "APP": placeholder_text = "例：シンプルな計算機アプリ"

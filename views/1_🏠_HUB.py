@@ -82,6 +82,11 @@ def _room_buttons(rooms, side):
             st.rerun()
 
 
+# コア設定の状態を先に初期化（col_c のポップオーバーで使用）
+for _k, _v in {"show_chat_input": True, "mic_enabled": False, "voice_enabled": True, "voice_slow": False}.items():
+    if _k not in st.session_state:
+        st.session_state[_k] = _v
+
 col_l, col_c, col_r = st.columns([1.1, 1.7, 1.1])
 with col_l:
     _room_buttons(_left, "L")
@@ -93,21 +98,15 @@ with col_c:
             st.audio(base64.b64decode(st.session_state.ai_voice_base64), format="audio/mp3", autoplay=True)
         except Exception:
             pass
-with col_r:
-    _room_buttons(_right, "R")
-
-# --- ⚙️ コア設定（旧「コアタッチ設定」の復活：入力/マイク/読み上げを制御） ---
-for _k, _v in {"show_chat_input": True, "mic_enabled": False, "voice_enabled": True, "voice_slow": False}.items():
-    if _k not in st.session_state:
-        st.session_state[_k] = _v
-_sc1, _sc2, _sc3 = st.columns([2, 1.4, 2])
-with _sc2:
+    # ⚙️ コア設定（コア直下＝コアを操作する感覚で開く。中身は全てネイティブ＝安定）
     with st.popover("⚙️ コア設定", use_container_width=True):
         st.session_state.show_chat_input = st.toggle("💬 コマンド入力欄を表示", value=st.session_state.show_chat_input)
         st.session_state.mic_enabled = st.toggle("🎙️ 音声入力(マイク)", value=st.session_state.mic_enabled)
         st.session_state.voice_enabled = st.toggle("🔊 AIの読み上げ", value=st.session_state.voice_enabled)
         st.session_state.voice_slow = st.toggle("🐢 ゆっくり読み上げ", value=st.session_state.voice_slow)
         st.caption("※ 設定は即時反映されます。")
+with col_r:
+    _room_buttons(_right, "R")
 
 # --- AI会話履歴（あればコンパクト表示） ---
 if st.session_state.global_chat_history:

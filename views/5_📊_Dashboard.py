@@ -15,9 +15,9 @@ st.markdown("""
     <style>
     .cyber-title { color: #2b6cb0; font-weight: 800; letter-spacing: 2px; margin-bottom: 5px; text-shadow: 2px 2px 4px rgba(255,255,255,0.8); }
     .dash-card { background: rgba(255, 255, 255, 0.04); backdrop-filter: blur(10px); border: 1px solid #20202a; border-radius: 15px; padding: 20px; box-shadow: 6px 6px 15px #000000, -4px -4px 12px #15151c; height: 100%; }
-    .stat-value { font-size: 32px; font-weight: 900; color: #00f3ff; }
+    .stat-value { font-size: 32px; font-weight: 900; color: #c5c6c7; }
     .stat-label { font-size: 14px; font-weight: bold; color: #9aa0a8; }
-    .event-item { border-left: 4px solid #00e676; margin-bottom: 10px; background: rgba(255,255,255,0.05); padding: 12px; border-radius: 5px; box-shadow: 2px 2px 5px rgba(0,0,0,0.4);}
+    .event-item { border-left: 4px solid #c5c6c7; margin-bottom: 10px; background: rgba(255,255,255,0.05); padding: 12px; border-radius: 5px; box-shadow: 2px 2px 5px rgba(0,0,0,0.4);}
     
     /* Miro V2 CSS: キャンバスを最大化 */
     .miro-container { background: #0b0b12; border-radius: 15px; box-shadow: inset 5px 5px 15px #000000, inset -5px -5px 15px #15151c; padding: 5px; margin-top: 10px; }
@@ -40,7 +40,7 @@ with tab_miro:
     else:
         # 🌟 要望9: 複数ダッシュボードの管理
         if 'miro_boards' not in st.session_state:
-            default_style = {"background": "#0b0b12", "border": "2px solid #00f3ff", "borderRadius": "12px", "color": "#e6e8ec", "fontWeight": "bold", "padding": "15px", "boxShadow": "5px 5px 10px #000000"}
+            default_style = {"background": "#0b0b12", "border": "2px solid #c5c6c7", "borderRadius": "12px", "color": "#e6e8ec", "fontWeight": "bold", "padding": "15px", "boxShadow": "5px 5px 10px #000000"}
             initial_node = StreamlitFlowNode(id='core_node', pos=(250, 250), data={'content': '🧠 AIBOU Core'}, node_type='default', source_position='right', target_position='left', style=default_style)
             st.session_state.miro_boards = {"Main Board": StreamlitFlowState([initial_node], [])}
         
@@ -104,14 +104,18 @@ with tab_miro:
 
         # 🗺️ 思考キャンバスの描画（高さを700に拡大して全画面に近い操作感へ）
         st.markdown("<div class='miro-container'>", unsafe_allow_html=True)
-        streamlit_flow(
+        # 🌟 返り値(最新状態)を session_state に必ず戻す → ドラッグ/結線/削除が保存される
+        #    （以前は返り値を捨てていたため操作が消えていた＝Miroが正しく動かない原因）
+        _new_state = streamlit_flow(
             f"miro_board_{current_board}",
             st.session_state.miro_boards[current_board],
             height=700,
             fit_view=True,
-            enable_node_menu=True, # 🌟 要望5: メニューから削除可能に
-            enable_edge_menu=True  # 結線も削除可能に
+            enable_node_menu=True,   # メニューから削除可能
+            enable_edge_menu=True,   # 結線も削除可能
         )
+        if _new_state is not None:
+            st.session_state.miro_boards[current_board] = _new_state
         st.markdown("</div>", unsafe_allow_html=True)
 
 # ====================================================
@@ -137,7 +141,7 @@ with tab_system:
     with col1:
         st.markdown(f"<div class='dash-card'><div class='stat-label'>⚡ Gemini API</div><div class='stat-value'>{stats_data.get('gemini_api_calls', 0)} <span style='font-size:16px;'>回</span></div></div>", unsafe_allow_html=True)
     with col2:
-        st.markdown("<div class='dash-card'><div class='stat-label'>🚀 OS 稼働状態</div><div class='stat-value' style='color:#00e676;'>ONLINE</div></div>", unsafe_allow_html=True)
+        st.markdown("<div class='dash-card'><div class='stat-label'>🚀 OS 稼働状態</div><div class='stat-value' style='color:#c5c6c7;'>ONLINE</div></div>", unsafe_allow_html=True)
     with col3:
         st.markdown(f"<div class='dash-card'><div class='stat-label'>📧 同期アカウント</div><div style='font-size: 13px; font-weight:bold; margin-top:10px; color:#e6e8ec; word-break: break-all;'>{my_email if my_email else 'Vault未設定'}</div></div>", unsafe_allow_html=True)
 
@@ -173,4 +177,4 @@ with tab_system:
 
     with col_log:
         st.markdown("#### 📡 SYSTEM ACTIVITY")
-        st.markdown("<div class='dash-card' style='height: 300px; overflow-y: scroll; font-family: monospace; font-size:12px;'><span style='color:#a0aec0;'>[SYSTEM] Dashboard initialized.</span><br><span style='color:#00e676;'>[VAULT] Secure keys loaded.</span><br></div>", unsafe_allow_html=True)
+        st.markdown("<div class='dash-card' style='height: 300px; overflow-y: scroll; font-family: monospace; font-size:12px;'><span style='color:#a0aec0;'>[SYSTEM] Dashboard initialized.</span><br><span style='color:#c5c6c7;'>[VAULT] Secure keys loaded.</span><br></div>", unsafe_allow_html=True)

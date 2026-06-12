@@ -895,7 +895,8 @@ if INCOME_AVAILABLE:
 # ==========================================
 def render_core(height=240):
     h = int(height)
-    glow = int(h * 0.46); o1 = int(h * 0.60); o2 = int(h * 0.78); o3 = int(h * 0.94)
+    glow = int(h * 0.42); o1 = int(h * 0.98); o2 = int(h * 0.84); o3 = int(h * 0.84)
+    cont = max(o1, o2, o3)
     st.markdown(f"""
     <div class="forge-core" style="height:{h}px">
       <div class="fc-3d">
@@ -908,7 +909,7 @@ def render_core(height=240):
     <style>
     .forge-core {{ position:relative; width:100%; display:flex; align-items:center; justify-content:center;
         perspective:{h*3}px; }}
-    .fc-3d {{ position:relative; width:{o3}px; height:{o3}px; transform-style:preserve-3d;
+    .fc-3d {{ position:relative; width:{cont}px; height:{cont}px; transform-style:preserve-3d;
         display:flex; align-items:center; justify-content:center; }}
     .fc-glow {{ width:{glow}px; height:{glow}px; border-radius:50%;
         background: radial-gradient(circle, #ffffff 0%, #dbeaff 30%, rgba(140,190,255,0.30) 58%, transparent 74%);
