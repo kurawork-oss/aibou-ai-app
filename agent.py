@@ -272,6 +272,31 @@ TOOLS = [
             "query": "検索クエリ",
         },
     },
+    {
+        "name": "create_task",
+        "description": "新しいタスクを作成して『現在のタスク』(Google Sheets)に追加する",
+        "requires_confirmation": False,
+        "parameters": {
+            "goal": "目標/プロジェクト名",
+            "content": "タスク内容",
+        },
+    },
+    {
+        "name": "list_tasks",
+        "description": "現在のタスク一覧（ステータス付き）を取得して報告する",
+        "requires_confirmation": False,
+        "parameters": {
+            "status_filter": "絞り込むステータス（任意：未着手/実行中/確認待ち/完了）",
+        },
+    },
+    {
+        "name": "enqueue_income_theme",
+        "description": "副業オートメーション(Auto Income)にテーマを投入し、各媒体メタデータを生成して承認待ちInboxに追加する",
+        "requires_confirmation": False,
+        "parameters": {
+            "theme": "生成テーマ（例：雪のロッジの環境音）",
+        },
+    },
 ]
 
 CONFIRM_TOOLS = {t["name"] for t in TOOLS if t.get("requires_confirmation")}
@@ -361,6 +386,38 @@ def execute_tool(tool_name, params):
                 }, timeout=60,
             )
             return r.json()["choices"][0]["message"]["content"]
+
+        if tool_name == "create_task":
+            sheet = _SERVICES.get("sheet")
+            if not sheet:
+                return "❌ スプレッドシートに接続されていません。"
+            if not hasattr(sheet, "append_row"):
+                return "⚠️ このスプレッドシートは追記に未対応です（GOOGLE_CREDENTIALS を確認）。"
+            tid = "T-" + datetime.datetime.now().strftime("%m%d%H%M%S")
+            sheet.append_row([tid, params.get("goal", ""), params.get("content", ""), "未着手", "", ""])
+            return f"✅ タスクを作成しました（ID: {tid}）：{params.get('content', '')}"
+
+        if tool_name == "list_tasks":
+            sheet = _SERVICES.get("sheet")
+            if not sheet:
+                return "❌ スプレッドシートに接続されていません。"
+            rows = sheet.get_all_values()[1:]
+            flt = (params.get("status_filter") or "").strip()
+            out = []
+            for r in rows:
+                r = (list(r) + [""] * 6)[:6]
+                if flt and r[3] != flt:
+                    continue
+                out.append(f"[{r[0]}] {r[2]} — {r[3]}")
+            return ("現在のタスク：\n" + "\n".join(out[:30])) if out else "該当するタスクはありません。"
+
+        if tool_name == "enqueue_income_theme":
+            try:
+                import income_engine
+            except Exception:
+                return "⚠️ income_engine を読み込めませんでした。"
+            _job, _msg = income_engine.enqueue_theme(params.get("theme", ""))
+            return _msg
 
         return f"❌ 不明なツール: {tool_name}"
     except Exception as e:
