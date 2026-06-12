@@ -1,0 +1,27 @@
+name: Daily Memory Digest
+
+# 毎日、直近24hの会話を要約して「記憶」に保存する（日報）。
+on:
+  schedule:
+    - cron: "0 15 * * *"   # 毎日 15:00 UTC = 00:00 JST
+  workflow_dispatch:
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install deps
+        run: pip install --quiet supabase google-generativeai
+      - name: Summarize the day into memory
+        env:
+          MEMORY_SUPABASE_URL: ${{ secrets.MEMORY_SUPABASE_URL }}
+          MEMORY_SUPABASE_KEY: ${{ secrets.MEMORY_SUPABASE_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python scripts/daily_digest.py

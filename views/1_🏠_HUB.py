@@ -203,13 +203,27 @@ if st.session_state.global_chat_history and st.session_state.global_chat_history
     ]
     with st.chat_message("assistant", avatar="◈"):
         with st.spinner(" "):
-            ai_text, _updated, pending = run_agent(last_prompt, prior_history)
-            if pending:
-                st.session_state.pending_action = pending
+            try:
+                import commands as _cmds
+            except Exception:
+                _cmds = None
+            _is_cmd = bool(_cmds and _cmds.is_command(last_prompt))
+            pending = None
+            if _is_cmd:
+                # "/" 始まりはアプリ専用コマンドとして即実行（run_agent を介さない）
+                ai_text = _cmds.handle(last_prompt)
+                if ai_text == "__CLEAR__":
+                    st.session_state.global_chat_history = []
+                    st.rerun()
+            else:
+                ai_text, _updated, pending = run_agent(last_prompt, prior_history)
+                if pending:
+                    st.session_state.pending_action = pending
 
             st.markdown(ai_text)
 
-            if st.session_state.get("voice_enabled", True):
+            # 読み上げ（コマンド応答は読み上げない）
+            if (not _is_cmd) and st.session_state.get("voice_enabled", True):
                 try:
                     clean_text = ai_text.replace("*", "").replace("#", "").replace("`", "").replace("_", "")
                     if clean_text.strip():
