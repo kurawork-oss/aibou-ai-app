@@ -1,4 +1,13 @@
 import streamlit as st
+
+# 🚨 set_page_config は「最初の Streamlit コマンド」である必要がある（厳格なバージョンでは
+#    これより前に他の st.* が走るとクラッシュ）。確実に最上部で実行する。
+try:
+    from PIL import Image as _PILImage
+    _APP_ICON = _PILImage.open("assets/aibou_icon.png")
+except Exception:
+    _APP_ICON = "❖"
+st.set_page_config(page_title="AIbou", page_icon=_APP_ICON, layout="wide")
 import google.generativeai as genai
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
@@ -219,15 +228,7 @@ if "global_chat_history" not in st.session_state:
 if "pending_action" not in st.session_state:
     st.session_state.pending_action = None
 
-# === アプリアイコン（ブラウザタブ）＆共通ロゴ ===
-try:
-    from PIL import Image as _PILImage
-    _APP_ICON = _PILImage.open("assets/aibou_icon.png")
-except Exception:
-    _APP_ICON = "❖"
-
-st.set_page_config(page_title="AIbou", page_icon=_APP_ICON, layout="wide")
-
+# === アプリ共通ロゴ（set_page_config は最上部で実行済み） ===
 # 画面左上の共通ロゴ（対応バージョンのみ。失敗しても無視）
 try:
     st.logo("assets/aibou_icon.png")
@@ -497,6 +498,14 @@ else:
                     st.session_state.current_mode = _target
                     st.rerun()
 
+    st.sidebar.markdown("---")
+    if st.sidebar.button("🚪 Logout", use_container_width=True):
+        if AUTH_ON:
+            auth.sign_out(supabase)
+        else:
+            st.session_state.logged_in = False
+        st.rerun()
+
     page = st.session_state.current_mode
 
 @st.cache_data(show_spinner=False)
@@ -564,12 +573,7 @@ if video_base64:
         </style>
     """, unsafe_allow_html=True)
 
-if st.sidebar.button("Logout"):
-    if AUTH_ON:
-        auth.sign_out(supabase)
-    else:
-        st.session_state.logged_in = False
-    st.rerun()
+# （Logout はサブページのサイドバー内に移動。HUBではサイドバー自体を生成しない）
 
 # ==========================================
 # 🧠 3. バックグラウンド接続 (Fail-Safe 実装済)

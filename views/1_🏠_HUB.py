@@ -129,9 +129,21 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# 🎙️ 音声入力（旧コンポーネント）は安定性のため既定オフ。ボタンで明示的に有効化。
+if "mic_enabled" not in st.session_state:
+    st.session_state.mic_enabled = False
+spoken_text = None
 col1, col2, col3 = st.columns([4, 4, 4])
 with col2:
-    spoken_text = speech_to_text(language='ja', start_prompt="◈ PUSH TO TALK", stop_prompt="⬡ TAP TO SEND", use_container_width=True, just_once=True, key='STT')
+    if st.session_state.mic_enabled:
+        try:
+            spoken_text = speech_to_text(language='ja', start_prompt="◈ PUSH TO TALK", stop_prompt="⬡ TAP TO SEND", use_container_width=True, just_once=True, key='STT')
+        except Exception:
+            spoken_text = None
+    else:
+        if st.button("🎙️ 音声入力をON", use_container_width=True, key="mic_enable_btn"):
+            st.session_state.mic_enabled = True
+            st.rerun()
 
 if not st.session_state.pending_action:
     if spoken_text:

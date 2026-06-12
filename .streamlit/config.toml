@@ -1,15 +1,7 @@
 [theme]
-# THE FORGE OS — 漆黒 × 純白 × ライト水色
+# THE FORGE OS — 白 × 銀 × 黒（モノトーン）。アクセントは銀（水色/シアンは撤去）。
 base = "dark"
-
-# コア＆アクティブカラー（ライト水色 / ネオンシアン）
-primaryColor = "#66FCF1"
-
-# ベース背景（漆黒）
+primaryColor = "#C5C6C7"
 backgroundColor = "#0B0C10"
-
-# サブ背景（サイドバー等）
-secondaryBackgroundColor = "#0d0f15"
-
-# 本文の文字色（ライトシルバー）
+secondaryBackgroundColor = "#15171c"
 textColor = "#C5C6C7"
