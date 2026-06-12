@@ -151,3 +151,36 @@ div[role="radiogroup"] > label p { color: var(--fg) !important; }
 .stat-value, .inbox-theme { color: var(--fg-strong) !important; }
 .miro-container { background: var(--bg2) !important; box-shadow: 0 6px 18px var(--shadow) !important; }
 .status-done, .status-badge { background: var(--accent) !important; color: #0c0d10 !important; }
+
+/* =====================================================================
+   ✨ ポリッシュ（配色そのまま・全部屋共通の質感向上）
+   ===================================================================== */
+/* 主要見出しにコアの淡いグローを添えて統一感を出す */
+.stApp h1, .stApp h2, .cyber-title, .hub-title, .mc-title, .saas-title {
+    text-shadow: 0 0 18px var(--glow) !important;
+}
+/* 区切り線：銀のグラデーション */
+hr, [data-testid="stDivider"] hr {
+    border: none !important; height: 1px !important;
+    background: linear-gradient(90deg, transparent, var(--panel-bd), transparent) !important;
+}
+/* カード/Expander/メトリクス：滑らかなホバーで銀に発光＆わずかに浮上 */
+[data-testid="stVerticalBlockBorderWrapper"], [data-testid="stExpander"], [data-testid="stMetric"] {
+    transition: border-color .25s ease, box-shadow .25s ease, transform .2s ease !important;
+}
+[data-testid="stVerticalBlockBorderWrapper"]:hover, [data-testid="stExpander"]:hover, [data-testid="stMetric"]:hover {
+    border-color: var(--line) !important;
+    box-shadow: 0 10px 26px var(--shadow), 0 0 18px var(--glow) !important;
+    transform: translateY(-2px);
+}
+/* タブのインジケータを銀グローに */
+.stTabs [data-baseweb="tab-highlight"] { box-shadow: 0 0 10px var(--glow); }
+/* テキスト選択＝銀ハイライト */
+.stApp ::selection { background: rgba(197,198,199,0.35); color: #ffffff; }
+/* カスタムスクロールバー（ダーク × 銀） */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg2); }
+::-webkit-scrollbar-thumb { background: rgba(197,198,199,0.25); border-radius: 6px; border: 2px solid var(--bg2); }
+::-webkit-scrollbar-thumb:hover { background: rgba(197,198,199,0.45); }
+/* 入口カード：ホバーをよりリッチに */
+.mode-card { transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease; }

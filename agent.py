@@ -297,6 +297,34 @@ TOOLS = [
             "theme": "生成テーマ（例：雪のロッジの環境音）",
         },
     },
+    {
+        "name": "generate_app",
+        "description": "要望から単一ファイルのStreamlitミニアプリを生成し、App Archiveに保存する（後でApp Archiveから起動）",
+        "requires_confirmation": False,
+        "parameters": {
+            "description": "作りたいアプリの説明（例：割り勘計算アプリ）",
+        },
+    },
+    {
+        "name": "search_vault",
+        "description": "Document Vault(保存済みメモ/ノート)を検索して該当内容を返す",
+        "requires_confirmation": False,
+        "parameters": {
+            "query": "検索キーワード（空なら全件の概要）",
+        },
+    },
+    {
+        "name": "approve_income",
+        "description": "Auto Income の承認待ちアセットを一括承認し、配信キューへ送る",
+        "requires_confirmation": True,
+        "parameters": {},
+    },
+    {
+        "name": "income_status",
+        "description": "Auto Income の状況（承認待ち/承認済/完了/失敗の件数と概算収益）を報告する",
+        "requires_confirmation": False,
+        "parameters": {},
+    },
 ]
 
 CONFIRM_TOOLS = {t["name"] for t in TOOLS if t.get("requires_confirmation")}
@@ -418,6 +446,59 @@ def execute_tool(tool_name, params):
                 return "⚠️ income_engine を読み込めませんでした。"
             _job, _msg = income_engine.enqueue_theme(params.get("theme", ""))
             return _msg
+
+        if tool_name == "generate_app":
+            desc = (params.get("description") or "").strip()
+            if not desc:
+                return "❌ 作りたいアプリの説明が必要です。"
+            sysp = ("あなたはStreamlitアプリ職人です。以下の要望から、単一ファイルで完結する"
+                    "Streamlitミニアプリのコードだけを出力してください。説明・前置き・コードフェンスは不要。"
+                    "使用可能ライブラリは streamlit(as st) / pandas(as pd) / datetime / time / os / json のみ。")
+            code = get_ai_response(sysp + "\n\n【要望】\n" + desc) or ""
+            code = code.replace("```python", "").replace("```", "").strip()
+            if not code or code.startswith("⚠️"):
+                return "❌ コード生成に失敗しました（AIキーを確認してください）。"
+            import re as _re
+            name = (_re.sub(r"[^a-z0-9]+", "_", desc.lower())[:30].strip("_")) or "app"
+            os.makedirs("forge_apps", exist_ok=True)
+            with open(os.path.join("forge_apps", f"{name}.py"), "w", encoding="utf-8") as f:
+                f.write(code)
+            return f"✅ ミニアプリ「{name}」を生成し App Archive に保存しました（App Archive から起動できます）。"
+
+        if tool_name == "search_vault":
+            supabase = _SERVICES.get("supabase")
+            if not supabase:
+                return "⚠️ Supabase未接続のため検索できません。"
+            q = (params.get("query") or "").lower()
+            rows = supabase.table("vault_notebooks").select("name,docs").execute().data or []
+            hits = []
+            for r in rows:
+                docs = r.get("docs") or {}
+                if isinstance(docs, dict):
+                    for title, content in docs.items():
+                        if not q or q in f"{title} {content}".lower():
+                            hits.append(f"📓 {r.get('name','')} / {title}: {str(content)[:200]}")
+            return ("Vault検索結果：\n" + "\n".join(hits[:10])) if hits else "該当するメモは見つかりませんでした。"
+
+        if tool_name == "approve_income":
+            try:
+                import income_engine
+            except Exception:
+                return "⚠️ income_engine を読み込めませんでした。"
+            n = income_engine.approve_all_pending()
+            return f"✅ 承認待ちの {n} 件を承認し、配信キューに送りました。"
+
+        if tool_name == "income_status":
+            try:
+                import income_engine
+                s = income_engine.system_status() or {}
+                c = s.get("counts", {}) or {}
+                rev = (income_engine.get_stats() or {}).get("revenue", {}) or {}
+                total = sum(v for v in rev.values() if isinstance(v, (int, float)))
+                return (f"💰 Auto Income：承認待ち {c.get('pending',0)} / 承認済 {c.get('approved',0)} / "
+                        f"完了 {c.get('completed',0)} / 失敗 {c.get('failed',0)}。今月収益(概算) ¥{total:,.0f}")
+            except Exception as e:
+                return f"❌ 状況取得に失敗: {e}"
 
         return f"❌ 不明なツール: {tool_name}"
     except Exception as e:
