@@ -77,9 +77,7 @@ else:
                     st.error(f"解析エラー: {e}")
 
     with col_preview:
-        core_height = 150
-        vault_core_html = MASTER_CORE_TEMPLATE.replace("H_VAL", str(core_height)).replace("MAX_Wpx", "200").replace("V_DATA", "").replace("A_PLAY", "")
-        st.components.v1.html(vault_core_html, height=core_height + 10)
+        render_core(150)
         st.markdown("<p style='font-weight:bold; color:#718096;'>[ MATERIAL MANAGEMENT ]</p>", unsafe_allow_html=True)
         with st.container(border=True):
             st.markdown("#### 📥 UPLOAD DATA (PDF, TXT, MD)")

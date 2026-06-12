@@ -303,20 +303,26 @@ else:
             forge_prompt = st.text_area("PROMPT", placeholder=placeholder_text, height=150, label_visibility="collapsed")
             submitted = st.form_submit_button("EXECUTE", use_container_width=True, type="primary")
         
-        st.markdown("<style>iframe[title*='mic'] { mix-blend-mode: multiply; opacity: 0.8; margin-top: 10px; }</style>", unsafe_allow_html=True)
-        spoken_text = speech_to_text(language='ja', start_prompt="🎙️ VOICE COMMAND", stop_prompt="🛑 SEND", use_container_width=True, just_once=True, key='Forge_STT')
+        # 🎙️ 音声入力は安定性のため既定オフ（旧コンポーネント）。HUBで有効化したときのみ。
+        spoken_text = None
+        if st.session_state.get("mic_enabled"):
+            try:
+                spoken_text = speech_to_text(language='ja', start_prompt="🎙️ VOICE COMMAND", stop_prompt="🛑 SEND", use_container_width=True, just_once=True, key='Forge_STT')
+            except Exception:
+                spoken_text = None
 
     col_log, col_preview = st.columns([3, 7])
     
     with col_log:
         st.markdown("<p style='font-weight:bold; color:#a0aec0; font-size:12px;'>[ SYSTEM CONSOLE ]</p>", unsafe_allow_html=True)
-        core_height = 200 
-        v_data = st.session_state.ai_voice_base64 if st.session_state.ai_voice_base64 else ""
-        autoplay = "autoplay" if st.session_state.just_generated_audio else ""
-        st.session_state.just_generated_audio = False 
-
-        core_html = MASTER_CORE_TEMPLATE.replace("H_VAL", str(core_height)).replace("MAX_Wpx", "200").replace("V_DATA", v_data).replace("A_PLAY", autoplay)
-        st.components.v1.html(core_html, height=core_height + 10)
+        _fresh = bool(st.session_state.get("just_generated_audio"))
+        st.session_state.just_generated_audio = False
+        render_core(200)
+        if st.session_state.get("ai_voice_base64") and _fresh:
+            try:
+                st.audio(base64.b64decode(st.session_state.ai_voice_base64), format="audio/mp3", autoplay=True)
+            except Exception:
+                pass
 
         with st.container(height=400, border=False):
             if not ws_data["chat"]:

@@ -345,12 +345,8 @@ def render_loading_overlay(duration=4.5):
         <div class="bar"><i></i></div>
     </div>
     """, unsafe_allow_html=True)
-    # 重いGIFを表示後にDOM除去（残存ラグ防止）。JSは components 経由でのみ実行可。
-    _rm = int(total * 1000) + 120
-    st.components.v1.html(
-        "<script>(function(){try{var d=window.parent.document;setTimeout(function(){"
-        "var e=d.getElementById('forge-splash-ov');if(e){e.remove();}},"
-        + str(_rm) + ");}catch(e){}})();</script>", height=0)
+    # ※ JS無し。CSSアニメ(fov-life)が duration 後に opacity:0 + visibility:hidden で
+    #    自動的に隠す（クリック透過）。components.html(JS)は安定性のため使わない。
 
 
 # ==========================================
@@ -892,6 +888,32 @@ if INCOME_AVAILABLE:
         )
     except Exception:
         pass
+
+# ==========================================
+# 🔮 中央コア（純CSS・JS無し＝Streamlitフロントを落とさない安定版）
+#   旧 MASTER_CORE_TEMPLATE（st.components.v1.html の重いJSキャンバス）の置換。
+# ==========================================
+def render_core(height=240):
+    st.markdown(f"""
+    <div class="forge-core" style="height:{height}px">
+      <div class="fc-ring fc-ring2"></div>
+      <div class="fc-ring"></div>
+      <div class="fc-glow"></div>
+    </div>
+    <style>
+    .forge-core {{ position:relative; width:100%; display:flex; align-items:center; justify-content:center; }}
+    .forge-core .fc-glow {{ width:118px; height:118px; border-radius:50%;
+        background: radial-gradient(circle, #ffffff 0%, #dbeaff 32%, rgba(140,190,255,0.30) 58%, transparent 74%);
+        box-shadow: 0 0 70px 14px rgba(150,200,255,0.30); animation: fc-pulse 3.4s ease-in-out infinite; }}
+    .forge-core .fc-ring {{ position:absolute; width:188px; height:188px; border-radius:50%;
+        border:1px solid rgba(180,210,255,0.55); animation: fc-spin 16s linear infinite; }}
+    .forge-core .fc-ring2 {{ width:224px; height:224px; border-color:rgba(180,210,255,0.22);
+        animation: fc-spin 26s linear infinite reverse; }}
+    @keyframes fc-pulse {{ 0%,100%{{transform:scale(0.95); opacity:.9}} 50%{{transform:scale(1.07); opacity:1}} }}
+    @keyframes fc-spin {{ to {{ transform: rotate(360deg); }} }}
+    </style>
+    """, unsafe_allow_html=True)
+
 
 # ==========================================
 # 🔒 アクセス制御（owner専用 / 課金ゲート）の画面

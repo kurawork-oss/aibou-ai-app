@@ -86,11 +86,13 @@ col_l, col_c, col_r = st.columns([1.1, 1.7, 1.1])
 with col_l:
     _room_buttons(_left, "L")
 with col_c:
-    core_height = 240
-    core_html = (MASTER_CORE_TEMPLATE
-                 .replace("H_VAL", str(core_height)).replace("MAX_Wpx", "260")
-                 .replace("V_DATA", v_data).replace("A_PLAY", autoplay_attr))
-    st.components.v1.html(core_html, height=core_height + 20)
+    render_core(240)
+    # AI音声（生成時のみネイティブ再生＝旧 <audio> コンポーネントを廃止）
+    if st.session_state.get("ai_voice_base64") and autoplay_attr:
+        try:
+            st.audio(base64.b64decode(st.session_state.ai_voice_base64), format="audio/mp3", autoplay=True)
+        except Exception:
+            pass
 with col_r:
     _room_buttons(_right, "R")
 
