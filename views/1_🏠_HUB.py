@@ -96,6 +96,19 @@ with col_c:
 with col_r:
     _room_buttons(_right, "R")
 
+# --- ⚙️ コア設定（旧「コアタッチ設定」の復活：入力/マイク/読み上げを制御） ---
+for _k, _v in {"show_chat_input": True, "mic_enabled": False, "voice_enabled": True, "voice_slow": False}.items():
+    if _k not in st.session_state:
+        st.session_state[_k] = _v
+_sc1, _sc2, _sc3 = st.columns([2, 1.4, 2])
+with _sc2:
+    with st.popover("⚙️ コア設定", use_container_width=True):
+        st.session_state.show_chat_input = st.toggle("💬 コマンド入力欄を表示", value=st.session_state.show_chat_input)
+        st.session_state.mic_enabled = st.toggle("🎙️ 音声入力(マイク)", value=st.session_state.mic_enabled)
+        st.session_state.voice_enabled = st.toggle("🔊 AIの読み上げ", value=st.session_state.voice_enabled)
+        st.session_state.voice_slow = st.toggle("🐢 ゆっくり読み上げ", value=st.session_state.voice_slow)
+        st.caption("※ 設定は即時反映されます。")
+
 # --- AI会話履歴（あればコンパクト表示） ---
 if st.session_state.global_chat_history:
     with st.container(height=200, border=False):
@@ -131,30 +144,25 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 🎙️ 音声入力（旧コンポーネント）は安定性のため既定オフ。ボタンで明示的に有効化。
-if "mic_enabled" not in st.session_state:
-    st.session_state.mic_enabled = False
+# 🎙️ 音声入力（コア設定でON/OFF。既定オフ＝安定）。ONのときだけコンポーネントを描画。
 spoken_text = None
-col1, col2, col3 = st.columns([4, 4, 4])
-with col2:
-    if st.session_state.mic_enabled:
+if st.session_state.get("mic_enabled"):
+    _m1, _m2, _m3 = st.columns([4, 4, 4])
+    with _m2:
         try:
             spoken_text = speech_to_text(language='ja', start_prompt="◈ PUSH TO TALK", stop_prompt="⬡ TAP TO SEND", use_container_width=True, just_once=True, key='STT')
         except Exception:
             spoken_text = None
-    else:
-        if st.button("🎙️ 音声入力をON", use_container_width=True, key="mic_enable_btn"):
-            st.session_state.mic_enabled = True
-            st.rerun()
 
 if not st.session_state.pending_action:
     if spoken_text:
         st.session_state.global_chat_history.append({"role": "user", "avatar": "👤", "content": spoken_text})
         st.rerun()
 
-    if prompt := st.chat_input("/// コマンドを入力してください、ボス", key="console_input"):
-        st.session_state.global_chat_history.append({"role": "user", "avatar": "👤", "content": prompt})
-        st.rerun()
+    if st.session_state.get("show_chat_input", True):
+        if prompt := st.chat_input("/// コマンドを入力してください、ボス", key="console_input"):
+            st.session_state.global_chat_history.append({"role": "user", "avatar": "👤", "content": prompt})
+            st.rerun()
 
 if st.session_state.global_chat_history and st.session_state.global_chat_history[-1]["role"] == "user" and not st.session_state.pending_action:
     last_prompt = st.session_state.global_chat_history[-1]["content"]
@@ -171,16 +179,17 @@ if st.session_state.global_chat_history and st.session_state.global_chat_history
 
             st.markdown(ai_text)
 
-            try:
-                clean_text = ai_text.replace("*", "").replace("#", "").replace("`", "").replace("_", "")
-                if clean_text.strip():
-                    tts = gTTS(text=clean_text[:200], lang='ja')
-                    audio_fp = io.BytesIO()
-                    tts.write_to_fp(audio_fp)
-                    st.session_state.ai_voice_base64 = base64.b64encode(audio_fp.getvalue()).decode()
-                    st.session_state.just_generated_audio = True
-            except Exception:
-                pass
+            if st.session_state.get("voice_enabled", True):
+                try:
+                    clean_text = ai_text.replace("*", "").replace("#", "").replace("`", "").replace("_", "")
+                    if clean_text.strip():
+                        tts = gTTS(text=clean_text[:200], lang='ja', slow=st.session_state.get("voice_slow", False))
+                        audio_fp = io.BytesIO()
+                        tts.write_to_fp(audio_fp)
+                        st.session_state.ai_voice_base64 = base64.b64encode(audio_fp.getvalue()).decode()
+                        st.session_state.just_generated_audio = True
+                except Exception:
+                    pass
 
             st.session_state.global_chat_history.append({"role": "assistant", "avatar": "◈", "content": ai_text})
             st.rerun()

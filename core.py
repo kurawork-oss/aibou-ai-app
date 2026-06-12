@@ -920,9 +920,9 @@ def render_core(height=240):
     .fc-o1 {{ width:{o1}px; height:{o1}px; border:1px solid rgba(200,222,255,0.65); animation: fc-orb1 7s linear infinite; }}
     .fc-o2 {{ width:{o2}px; height:{o2}px; border:1px solid rgba(190,215,255,0.40); animation: fc-orb2 12s linear infinite; }}
     .fc-o3 {{ width:{o3}px; height:{o3}px; border:1px solid rgba(185,210,255,0.22); animation: fc-orb3 17s linear infinite; }}
-    @keyframes fc-orb1 {{ from{{transform:rotateX(72deg) rotateZ(0)}} to{{transform:rotateX(72deg) rotateZ(360deg)}} }}
-    @keyframes fc-orb2 {{ from{{transform:rotateX(58deg) rotateY(42deg) rotateZ(0)}} to{{transform:rotateX(58deg) rotateY(42deg) rotateZ(-360deg)}} }}
-    @keyframes fc-orb3 {{ from{{transform:rotateY(68deg) rotateZ(0)}} to{{transform:rotateY(68deg) rotateZ(360deg)}} }}
+    @keyframes fc-orb1 {{ from{{transform:rotateX(74deg) rotateZ(0)}} to{{transform:rotateX(74deg) rotateZ(360deg)}} }}
+    @keyframes fc-orb2 {{ from{{transform:rotateZ(-50deg) rotateX(66deg) rotateZ(0)}} to{{transform:rotateZ(-50deg) rotateX(66deg) rotateZ(360deg)}} }}
+    @keyframes fc-orb3 {{ from{{transform:rotateZ(50deg) rotateX(66deg) rotateZ(0)}} to{{transform:rotateZ(50deg) rotateX(66deg) rotateZ(-360deg)}} }}
     @keyframes fc-pulse {{ 0%,100%{{transform:scale(0.95); opacity:.92}} 50%{{transform:scale(1.06); opacity:1}} }}
     </style>
     """, unsafe_allow_html=True)
@@ -1011,31 +1011,10 @@ elif page == "Core Upgrade":
         with open("views/9_🚀_Core_Upgrade.py", "r", encoding="utf-8") as f: exec(f.read())
 
 # ==========================================
-# 🎨 DESIGN SYSTEM (assets/style.css)：白×銀×黒で統一。
-#   既定=ライト（作業画面）。HUB のみダーク変数を上書きしてログインと地続きに。
+# 🎨 DESIGN SYSTEM (assets/style.css)：白×銀×黒、コア基調のダークで全ページ統一。
 # ==========================================
 try:
     with open("assets/style.css", "r", encoding="utf-8") as _css:
         st.markdown(f"<style>{_css.read()}</style>", unsafe_allow_html=True)
-    if page == "HUB":
-        st.markdown("""
-        <style>:root{
-            --bg:#0a0b0f; --bg2:#0d0f14; --panel:rgba(255,255,255,0.06); --panel-bd:rgba(197,198,199,0.30);
-            --fg:#c9ccd2; --fg-strong:#ffffff; --muted:#8b8f97; --line:#c5c6c7; --accent:#c5c6c7;
-            --input-bg:rgba(255,255,255,0.06); --input-bd:rgba(197,198,199,0.42);
-            --btn-bg:rgba(255,255,255,0.07); --btn-bd:rgba(197,198,199,0.5); --btn-fg:#eef1f4;
-            --shadow:rgba(0,0,0,0.55); --card:#f2f3f5; --card-fg:#0c0d10; --card-sub:#5a5f66;
-        }
-        /* HUB：シルバークリアの枠を強調（モード選択/入口ボタン・コマンド入力） */
-        div.stButton > button { border:1px solid rgba(197,198,199,0.5) !important;
-            background:rgba(255,255,255,0.06) !important; color:#eef1f4 !important; letter-spacing:.12em !important; }
-        div.stButton > button:hover { border-color:#c5c6c7 !important;
-            background:rgba(255,255,255,0.12) !important; box-shadow:0 0 16px rgba(197,198,199,0.35) !important; }
-        [data-testid="stChatInput"], [data-testid="stChatInput"] textarea {
-            border:1px solid rgba(197,198,199,0.42) !important; background:rgba(255,255,255,0.05) !important; }
-        [data-testid="stChatInput"]:focus-within { border-color:#c5c6c7 !important;
-            box-shadow:0 0 16px rgba(197,198,199,0.35) !important; }
-        </style>
-        """, unsafe_allow_html=True)
 except Exception:
     pass

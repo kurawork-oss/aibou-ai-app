@@ -1,27 +1,28 @@
 /* =====================================================================
-   THE FORGE OS — Unified Design System（白 × 銀 × 黒 / モノトーン）
-   テーマは CSS 変数で切替：作業画面=ライト（既定）／ HUB=ダーク（core.py が
-   :root をダーク値に上書き）。各 view の CSS の「後」に読み込み、!important で統一。
+   THE FORGE OS — Unified Design System（白 × 銀 × 黒 / コア基調のダーク統一）
+   コア（淡い青白の発光）に合わせ、全ページをダーク基調で統一。CSS変数で一元管理。
+   各 view の CSS の「後」に読み込み、!important で確実に上書きする。
    ===================================================================== */
 :root {
-  --bg:        #eef0f2;                  /* ページ背景（ライト既定） */
-  --bg2:       #e7e9ed;                  /* ヘッダ/サイドバー */
-  --panel:     rgba(255,255,255,0.72);  /* カード/コンテナ */
-  --panel-bd:  rgba(0,0,0,0.10);        /* カード枠 */
-  --fg:        #2a2d33;                  /* 本文 */
-  --fg-strong: #0c0d10;                  /* 見出し */
-  --muted:     #6b6f76;                  /* キャプション */
-  --line:      #aeb3ba;                  /* 銀ライン/アクセント */
-  --accent:    #6b7077;                  /* アクセント（銀寄りグレー） */
-  --input-bg:  rgba(255,255,255,0.88);
-  --input-bd:  rgba(0,0,0,0.18);
-  --btn-bg:    rgba(255,255,255,0.62);
-  --btn-bd:    rgba(0,0,0,0.18);
-  --btn-fg:    #1a1c20;
-  --shadow:    rgba(0,0,0,0.16);
-  --card:      #ffffff;                  /* HUBの入口カード */
+  --bg:        #0a0b0f;                   /* ページ背景（ダーク統一） */
+  --bg2:       #0d0f14;                   /* ヘッダ/サイドバー */
+  --panel:     rgba(255,255,255,0.05);   /* カード/コンテナ */
+  --panel-bd:  rgba(197,198,199,0.28);   /* 銀の枠 */
+  --fg:        #c9ccd2;                   /* 本文（ライトシルバー） */
+  --fg-strong: #ffffff;                  /* 見出し（純白） */
+  --muted:     #8b8f97;                   /* キャプション */
+  --line:      #c5c6c7;                   /* 銀ライン/アクセント */
+  --accent:    #c5c6c7;
+  --glow:      rgba(150,200,255,0.30);   /* コアの淡い青白グロー */
+  --input-bg:  rgba(255,255,255,0.05);
+  --input-bd:  rgba(197,198,199,0.40);
+  --btn-bg:    rgba(255,255,255,0.06);
+  --btn-bd:    rgba(197,198,199,0.50);
+  --btn-fg:    #eef1f4;
+  --shadow:    rgba(0,0,0,0.55);
+  --card:      #f2f3f5;                   /* HUBの入口カード（白銀でダーク地に映える） */
   --card-fg:   #0c0d10;
-  --card-sub:  #6b6f76;
+  --card-sub:  #5a5f66;
 }
 
 /* ---- ベース背景 ---- */
@@ -44,102 +45,109 @@
 }
 [data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] * { color: var(--muted) !important; }
 .stApp a { color: var(--fg-strong) !important; text-decoration: underline; }
-.stApp code, .stApp kbd { color: var(--fg-strong) !important; background: rgba(127,127,127,0.16) !important; }
+.stApp code, .stApp kbd { color: var(--fg-strong) !important; background: rgba(255,255,255,0.08) !important; }
 
-/* ---- ボタン（白銀黒ガラス・水色なし） ---- */
+/* ---- ボタン（銀クリア枠・ホバーで淡く発光・水色なし） ---- */
 div.stButton > button, .stDownloadButton > button,
-[data-testid="stFormSubmitButton"] button, .stLinkButton > a {
+[data-testid="stFormSubmitButton"] button, .stLinkButton > a, [data-testid="stPopover"] button {
     background: var(--btn-bg) !important; backdrop-filter: blur(10px) !important;
-    border: 1px solid var(--btn-bd) !important; border-radius: 8px !important;
+    border: 1px solid var(--btn-bd) !important; border-radius: 10px !important;
     color: var(--btn-fg) !important; font-weight: 700 !important; letter-spacing: 0.08em !important;
     box-shadow: 0 3px 10px var(--shadow) !important; transition: all 0.2s ease !important;
 }
 div.stButton > button:hover, .stDownloadButton > button:hover,
-[data-testid="stFormSubmitButton"] button:hover, .stLinkButton > a:hover {
+[data-testid="stFormSubmitButton"] button:hover, .stLinkButton > a:hover, [data-testid="stPopover"] button:hover {
     color: var(--fg-strong) !important; border-color: var(--line) !important;
-    box-shadow: 0 6px 16px var(--shadow) !important; transform: translateY(-1px);
+    background: rgba(255,255,255,0.12) !important; box-shadow: 0 0 16px var(--glow) !important; transform: translateY(-1px);
 }
-div.stButton > button:active, [data-testid="stFormSubmitButton"] button:active { transform: translateY(1px); }
+/* ボタン内テキストもテーマ色に追従（view側の白固定などを上書き） */
+div.stButton > button p, div.stButton > button span, div.stButton > button div,
+.stDownloadButton > button p, [data-testid="stFormSubmitButton"] button p,
+[data-testid="stFormSubmitButton"] button span {
+    color: var(--btn-fg) !important; text-shadow: none !important;
+}
 
 /* ---- コンテナ / カード / メトリクス / フォーム / チャット ---- */
 [data-testid="stVerticalBlockBorderWrapper"], [data-testid="stMetric"],
 [data-testid="stChatMessage"], [data-testid="stForm"] {
     background: var(--panel) !important; backdrop-filter: blur(10px);
-    border: 1px solid var(--panel-bd) !important; border-radius: 12px !important;
+    border: 1px solid var(--panel-bd) !important; border-radius: 14px !important;
     box-shadow: 0 6px 18px var(--shadow) !important;
 }
-[data-testid="stExpander"], [data-testid="stExpander"] details {
-    background: var(--panel) !important; border: 1px solid var(--panel-bd) !important; border-radius: 10px !important;
+[data-testid="stExpander"], [data-testid="stExpander"] details, [data-testid="stPopoverBody"] {
+    background: var(--panel) !important; border: 1px solid var(--panel-bd) !important; border-radius: 12px !important;
 }
 [data-testid="stMetricValue"] { color: var(--fg-strong) !important; }
 [data-testid="stMetricLabel"], [data-testid="stMetricLabel"] * { color: var(--muted) !important; }
 
-/* ---- 入力 ---- */
+/* ---- 入力（テキスト/数値/セレクト） ---- */
 [data-testid="stTextInput"] input, [data-testid="stTextArea"] textarea, [data-testid="stNumberInput"] input,
-[data-baseweb="select"] > div, [data-testid="stChatInput"], [data-testid="stChatInput"] textarea {
+[data-baseweb="select"] > div {
     background: var(--input-bg) !important; color: var(--fg-strong) !important;
-    -webkit-text-fill-color: var(--fg-strong) !important;
+    -webkit-text-fill-color: var(--fg-strong) !important; text-shadow: none !important;
     border: 1px solid var(--input-bd) !important; border-radius: 10px !important;
 }
-[data-testid="stTextInput"] input:focus, [data-testid="stTextArea"] textarea:focus,
-[data-testid="stChatInput"]:focus-within {
-    border-color: var(--line) !important; box-shadow: 0 0 12px var(--shadow) !important;
+[data-testid="stTextInput"] input:focus, [data-testid="stTextArea"] textarea:focus {
+    border-color: var(--line) !important; box-shadow: 0 0 12px var(--glow) !important;
 }
-.stApp ::placeholder { color: var(--muted) !important; opacity: 1; }
+.stApp ::placeholder { color: var(--muted) !important; opacity: 1; text-shadow: none !important; }
 
-/* ---- タブ / ラジオ / プログレス ---- */
+/* ---- コマンド入力(チャット)：枠は外側だけ・textareaは透明＝文字の重なり防止 ---- */
+[data-testid="stChatInput"] {
+    background: var(--input-bg) !important; border: 1px solid var(--input-bd) !important;
+    border-radius: 14px !important; box-shadow: 0 4px 14px var(--shadow) !important;
+}
+[data-testid="stChatInput"] textarea, [data-testid="stChatInput"] > div, [data-testid="stChatInput"] [data-baseweb] {
+    background: transparent !important; border: none !important; box-shadow: none !important;
+    color: var(--fg-strong) !important; -webkit-text-fill-color: var(--fg-strong) !important; text-shadow: none !important;
+}
+[data-testid="stChatInput"]:focus-within { border-color: var(--line) !important; box-shadow: 0 0 16px var(--glow) !important; }
+
+/* ---- タブ / ラジオ / トグル / プログレス ---- */
 .stTabs [data-baseweb="tab"] { color: var(--muted) !important; }
 .stTabs [aria-selected="true"] { color: var(--fg-strong) !important; }
 .stTabs [data-baseweb="tab-highlight"], .stTabs [data-baseweb="tab-border"] { background-color: var(--line) !important; }
 div[role="radiogroup"] > label { background: var(--panel) !important; border: 1px solid var(--panel-bd) !important; border-radius: 10px !important; }
 div[role="radiogroup"] > label p { color: var(--fg) !important; }
-div[role="radiogroup"] > label[data-checked="true"] { border-color: var(--line) !important; }
 [data-testid="stProgress"] > div > div > div { background-color: var(--accent) !important; }
 
-/* ---- ページ余白（HUB含む全体を縦圧縮） ---- */
+/* ---- ページ余白 ---- */
 [data-testid="stMainBlockContainer"], .block-container, [data-testid="stAppViewBlockContainer"] {
     padding-top: 1.3rem !important; padding-bottom: 1.0rem !important;
 }
 
 /* =====================================================================
-   HUB：コマンドデッキ（HUB は core.py がダーク変数を注入して黒地に）
+   HUB：コマンドデッキ
    ===================================================================== */
 .forge-logo-wrap { display:flex; align-items:center; justify-content:center; gap:13px; margin:0 0 4px; }
-.forge-logo-wrap img { width:44px; height:44px; border-radius:11px; box-shadow:0 0 16px var(--shadow); }
+.forge-logo-wrap img { width:44px; height:44px; border-radius:11px; box-shadow:0 0 16px var(--glow); }
 .hub-title {
     color: var(--fg-strong); font-weight:900; letter-spacing:8px; margin:0; font-size:1.5rem;
     font-family:'Share Tech Mono','Segoe UI',sans-serif;
 }
-.forge-logo-wrap .hub-title { text-shadow: 0 0 16px var(--shadow) !important; }
+.forge-logo-wrap .hub-title { text-shadow: 0 0 18px var(--glow) !important; }
 .mode-desc {
     text-align:center; color: var(--muted) !important; letter-spacing:2px; font-size:11.5px;
     font-family:'Share Tech Mono','Segoe UI',sans-serif; margin:2px 0 4px;
 }
 
-/* 入口カード（銀/白・黒文字） */
+/* 入口カード（銀/白・黒文字でダーク地に映える） */
 .room-col { display:flex; flex-direction:column; gap:12px; justify-content:center; height:100%; }
 .mode-card {
     display:block; text-decoration:none !important; background: var(--card); border-radius:8px;
     padding:13px 15px; border:1px solid var(--panel-bd);
     box-shadow:0 4px 12px var(--shadow); transition:all 0.2s ease;
 }
-.mode-card:hover { transform:translateY(-2px); box-shadow:0 8px 18px var(--shadow); border-color: var(--line); }
+.mode-card:hover { transform:translateY(-2px); box-shadow:0 8px 18px var(--glow); border-color: var(--line); }
 .mode-card .mc-name { font-weight:800 !important; letter-spacing:0.5px; font-size:14px; color: var(--card-fg) !important; }
 .mode-card .mc-sub  { font-size:10px; color: var(--card-sub) !important; font-family:monospace; margin-top:3px; }
 
 /* =====================================================================
-   各 view の独自クラス/色を palette へ寄せる（水色・青を撤去して白銀黒に統一）
+   各 view の独自クラス/色を palette へ寄せる（水色・青を撤去）
    ===================================================================== */
 .cyber-title { color: var(--fg-strong) !important; text-shadow: none !important; }
 .mc-title { color: var(--fg-strong) !important; }
 .mc-sub, .stat-label { color: var(--muted) !important; }
 .stat-value, .inbox-theme { color: var(--fg-strong) !important; }
 .miro-container { background: var(--bg2) !important; box-shadow: 0 6px 18px var(--shadow) !important; }
-/* 完了バッジ等は銀グレーに */
-.status-done, .status-badge { background: var(--accent) !important; color: #fff !important; }
-/* ボタン内テキストもテーマ色に追従（view側の白固定を上書き＝ライト地で文字が消えるのを防ぐ） */
-div.stButton > button p, div.stButton > button span, div.stButton > button div,
-.stDownloadButton > button p, [data-testid="stFormSubmitButton"] button p,
-[data-testid="stFormSubmitButton"] button span {
-    color: var(--btn-fg) !important; text-shadow: none !important;
-}
+.status-done, .status-badge { background: var(--accent) !important; color: #0c0d10 !important; }
