@@ -36,6 +36,12 @@ try:
 except Exception:
     KEY_MANAGER_AVAILABLE = False
 
+try:
+    import memory as _memory
+    MEMORY_AVAILABLE = True
+except Exception:
+    MEMORY_AVAILABLE = False
+
 
 # === 外部サービス（core.py から注入される道具箱） ============================
 _SERVICES = {}
@@ -325,6 +331,22 @@ TOOLS = [
         "requires_confirmation": False,
         "parameters": {},
     },
+    {
+        "name": "remember",
+        "description": "ユーザーが『覚えておいて』と言った事実・好み・重要情報を長期記憶に保存する",
+        "requires_confirmation": False,
+        "parameters": {
+            "content": "覚える内容（例：私の誕生日は6月12日）",
+        },
+    },
+    {
+        "name": "recall",
+        "description": "長期記憶から過去の事実・文脈を検索して思い出す",
+        "requires_confirmation": False,
+        "parameters": {
+            "query": "思い出したいキーワード",
+        },
+    },
 ]
 
 CONFIRM_TOOLS = {t["name"] for t in TOOLS if t.get("requires_confirmation")}
@@ -500,6 +522,18 @@ def execute_tool(tool_name, params):
             except Exception as e:
                 return f"❌ 状況取得に失敗: {e}"
 
+        if tool_name == "remember":
+            if not MEMORY_AVAILABLE:
+                return "⚠️ 記憶機能が利用できません。"
+            _memory.add("fact", params.get("content", ""), importance=2)
+            return f"🧠 覚えました：{params.get('content', '')}"
+
+        if tool_name == "recall":
+            if not MEMORY_AVAILABLE:
+                return "⚠️ 記憶機能が利用できません。"
+            r = _memory.retrieve(params.get("query", ""))
+            return r or "関連する記憶は見つかりませんでした。"
+
         return f"❌ 不明なツール: {tool_name}"
     except Exception as e:
         return f"❌ ツール実行エラー（{tool_name}）: {e}"
@@ -593,7 +627,15 @@ def run_agent(user_input, chat_history=None):
     承認後に execute_tool() を呼ぶことで“承認ゲート”を実現する。
     """
     chat_history = chat_history or []
-    messages = ([{"role": "system", "content": _build_system_prompt()}]
+    sys_content = _build_system_prompt()
+    if MEMORY_AVAILABLE:
+        try:
+            _mem = _memory.retrieve(user_input)
+            if _mem:
+                sys_content += "\n\n" + _mem + "\n（上記の記憶を踏まえ、必要に応じて自然に参照して応答すること。）"
+        except Exception:
+            pass
+    messages = ([{"role": "system", "content": sys_content}]
                 + [{"role": m.get("role"), "content": m.get("content", "")} for m in chat_history
                    if m.get("role") in ("user", "assistant")]
                 + [{"role": "user", "content": user_input}])
@@ -624,6 +666,14 @@ def run_agent(user_input, chat_history=None):
         final_text = (preface + "\n\n" + result).strip() if preface else result
 
     final_text = (final_text or "").replace(TOOL_CALL_MARKER, "").strip()
+    # 長期記憶へ会話を保存（次回以降の文脈として想起される）
+    if MEMORY_AVAILABLE:
+        try:
+            _memory.add("user", user_input)
+            if final_text:
+                _memory.add("assistant", final_text)
+        except Exception:
+            pass
     updated_history = chat_history + [
         {"role": "user", "content": user_input},
         {"role": "assistant", "content": final_text},

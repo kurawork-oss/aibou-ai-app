@@ -156,6 +156,11 @@ try:
     BILLING_AVAILABLE = True
 except Exception:
     BILLING_AVAILABLE = False
+try:
+    import memory as _memory_layer
+    MEMORY_LAYER = True
+except Exception:
+    MEMORY_LAYER = False
 
 try:
     # Auth + RLS を効かせるため、アプリは anon（publishable）キーを優先して使う。
@@ -886,6 +891,14 @@ if INCOME_AVAILABLE:
             supabase=(supabase if DB_CONNECTED else None),
             get_ai_response=get_ai_response,
         )
+    except Exception:
+        pass
+
+# 🧠 長期記憶レイヤに本体Supabase（JWT適用済＝RLS有効）を渡す。
+#    MEMORY_SUPABASE_* が設定されていれば memory.py 側が別プロジェクトを使う。
+if MEMORY_LAYER:
+    try:
+        _memory_layer.register_main(supabase if DB_CONNECTED else None)
     except Exception:
         pass
 
