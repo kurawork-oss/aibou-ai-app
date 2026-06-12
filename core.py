@@ -894,23 +894,36 @@ if INCOME_AVAILABLE:
 #   旧 MASTER_CORE_TEMPLATE（st.components.v1.html の重いJSキャンバス）の置換。
 # ==========================================
 def render_core(height=240):
+    h = int(height)
+    glow = int(h * 0.46); o1 = int(h * 0.60); o2 = int(h * 0.78); o3 = int(h * 0.94)
     st.markdown(f"""
-    <div class="forge-core" style="height:{height}px">
-      <div class="fc-ring fc-ring2"></div>
-      <div class="fc-ring"></div>
-      <div class="fc-glow"></div>
+    <div class="forge-core" style="height:{h}px">
+      <div class="fc-3d">
+        <div class="fc-glow"></div>
+        <div class="fc-orbit fc-o1"></div>
+        <div class="fc-orbit fc-o2"></div>
+        <div class="fc-orbit fc-o3"></div>
+      </div>
     </div>
     <style>
-    .forge-core {{ position:relative; width:100%; display:flex; align-items:center; justify-content:center; }}
-    .forge-core .fc-glow {{ width:118px; height:118px; border-radius:50%;
-        background: radial-gradient(circle, #ffffff 0%, #dbeaff 32%, rgba(140,190,255,0.30) 58%, transparent 74%);
-        box-shadow: 0 0 70px 14px rgba(150,200,255,0.30); animation: fc-pulse 3.4s ease-in-out infinite; }}
-    .forge-core .fc-ring {{ position:absolute; width:188px; height:188px; border-radius:50%;
-        border:1px solid rgba(180,210,255,0.55); animation: fc-spin 16s linear infinite; }}
-    .forge-core .fc-ring2 {{ width:224px; height:224px; border-color:rgba(180,210,255,0.22);
-        animation: fc-spin 26s linear infinite reverse; }}
-    @keyframes fc-pulse {{ 0%,100%{{transform:scale(0.95); opacity:.9}} 50%{{transform:scale(1.07); opacity:1}} }}
-    @keyframes fc-spin {{ to {{ transform: rotate(360deg); }} }}
+    .forge-core {{ position:relative; width:100%; display:flex; align-items:center; justify-content:center;
+        perspective:{h*3}px; }}
+    .fc-3d {{ position:relative; width:{o3}px; height:{o3}px; transform-style:preserve-3d;
+        display:flex; align-items:center; justify-content:center; }}
+    .fc-glow {{ width:{glow}px; height:{glow}px; border-radius:50%;
+        background: radial-gradient(circle, #ffffff 0%, #dbeaff 30%, rgba(140,190,255,0.30) 58%, transparent 74%);
+        box-shadow: 0 0 {int(h*0.3)}px {int(h*0.06)}px rgba(150,200,255,0.30);
+        animation: fc-pulse 3.4s ease-in-out infinite; }}
+    .fc-orbit {{ position:absolute; inset:0; margin:auto; border-radius:50%; transform-style:preserve-3d; }}
+    .fc-orbit::before {{ content:""; position:absolute; top:-3px; left:50%; width:6px; height:6px; margin-left:-3px;
+        border-radius:50%; background:#ffffff; box-shadow:0 0 10px 2px rgba(200,225,255,0.95); }}
+    .fc-o1 {{ width:{o1}px; height:{o1}px; border:1px solid rgba(200,222,255,0.65); animation: fc-orb1 7s linear infinite; }}
+    .fc-o2 {{ width:{o2}px; height:{o2}px; border:1px solid rgba(190,215,255,0.40); animation: fc-orb2 12s linear infinite; }}
+    .fc-o3 {{ width:{o3}px; height:{o3}px; border:1px solid rgba(185,210,255,0.22); animation: fc-orb3 17s linear infinite; }}
+    @keyframes fc-orb1 {{ from{{transform:rotateX(72deg) rotateZ(0)}} to{{transform:rotateX(72deg) rotateZ(360deg)}} }}
+    @keyframes fc-orb2 {{ from{{transform:rotateX(58deg) rotateY(42deg) rotateZ(0)}} to{{transform:rotateX(58deg) rotateY(42deg) rotateZ(-360deg)}} }}
+    @keyframes fc-orb3 {{ from{{transform:rotateY(68deg) rotateZ(0)}} to{{transform:rotateY(68deg) rotateZ(360deg)}} }}
+    @keyframes fc-pulse {{ 0%,100%{{transform:scale(0.95); opacity:.92}} 50%{{transform:scale(1.06); opacity:1}} }}
     </style>
     """, unsafe_allow_html=True)
 
