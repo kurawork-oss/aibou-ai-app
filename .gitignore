@@ -4,3 +4,7 @@ __pycache__/
 .env
 drafts/
 rendered/
+# ランタイム生成物（アプリ/テスト実行時に作られるローカルデータ。永続化はSupabase側）
+system_stats.json
+forge_apps/
+backups/
