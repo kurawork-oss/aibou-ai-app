@@ -19,6 +19,23 @@ v_data = st.session_state.ai_voice_base64 if st.session_state.ai_voice_base64 el
 autoplay_attr = "autoplay" if st.session_state.just_generated_audio else ""
 st.session_state.just_generated_audio = False
 
+# --- 左上 ON/OFF インジケータ（中心核GeminiのAPIキー保存でONLINE） ---
+_gem_on = bool((st.session_state.get("global_api_keys") or {}).get("gemini")) or bool(get_secret("GEMINI_API_KEY"))
+_ol_txt, _ol_cls = ("ONLINE", "on") if _gem_on else ("OFFLINE", "off")
+st.markdown(f"""
+<div class="forge-online forge-online-{_ol_cls}"><span class="dot"></span>{_ol_txt}</div>
+<style>
+.forge-online {{ position:fixed; top:12px; left:16px; z-index:1000; font-family:'Share Tech Mono',monospace;
+    font-size:11px; letter-spacing:2px; font-weight:800; display:flex; align-items:center; gap:7px; }}
+.forge-online .dot {{ width:8px; height:8px; border-radius:50%; }}
+.forge-online-on {{ color:#eaf4ff; }}
+.forge-online-on .dot {{ background:#cfe9ff; box-shadow:0 0 10px 2px rgba(150,200,255,0.85); animation: ol-pulse 2.4s ease-in-out infinite; }}
+.forge-online-off {{ color:#6b6f76; }}
+.forge-online-off .dot {{ background:#444; }}
+@keyframes ol-pulse {{ 0%,100%{{opacity:.6}} 50%{{opacity:1}} }}
+</style>
+""", unsafe_allow_html=True)
+
 # --- ① ロゴ（上部・小マージン） ---
 if "icon_b64" not in st.session_state:
     st.session_state.icon_b64 = get_base64_video("assets/aibou_icon.png") or ""
@@ -91,20 +108,34 @@ col_l, col_c, col_r = st.columns([1.1, 1.7, 1.1])
 with col_l:
     _room_buttons(_left, "L")
 with col_c:
-    render_core(240)
     # AI音声（生成時のみネイティブ再生＝旧 <audio> コンポーネントを廃止）
     if st.session_state.get("ai_voice_base64") and autoplay_attr:
         try:
             st.audio(base64.b64decode(st.session_state.ai_voice_base64), format="audio/mp3", autoplay=True)
         except Exception:
             pass
-    # ⚙️ コア設定（コア直下＝コアを操作する感覚で開く。中身は全てネイティブ＝安定）
-    with st.popover("⚙️ コア設定", use_container_width=True):
+    st.markdown("<div class='core-tap-hint'>⌖ コアをタップで設定</div>", unsafe_allow_html=True)
+    render_core(240)
+    # ⚙️ コア設定：専用ボタンは置かず「コアをタップ」で開く（トリガーをCSSでコアに重ねて透明化）
+    with st.popover("⚙", use_container_width=True):
         st.session_state.show_chat_input = st.toggle("💬 コマンド入力欄を表示", value=st.session_state.show_chat_input)
         st.session_state.mic_enabled = st.toggle("🎙️ 音声入力(マイク)", value=st.session_state.mic_enabled)
         st.session_state.voice_enabled = st.toggle("🔊 AIの読み上げ", value=st.session_state.voice_enabled)
         st.session_state.voice_slow = st.toggle("🐢 ゆっくり読み上げ", value=st.session_state.voice_slow)
         st.caption("※ 設定は即時反映されます。")
+    st.markdown("""
+    <style>
+    .core-tap-hint { text-align:center; color:var(--muted); font-size:10px; letter-spacing:3px; opacity:.6; margin-bottom:2px; }
+    /* col_c のポップオーバーのトリガーをコアに重ねて透明化＝コアをタップで設定が開く */
+    div[data-testid="column"]:nth-of-type(2) [data-testid="stPopover"] { margin-top:-252px !important; position:relative; z-index:40; }
+    div[data-testid="column"]:nth-of-type(2) [data-testid="stPopover"] button {
+        width:100% !important; height:246px !important; background:transparent !important;
+        border:none !important; box-shadow:none !important; color:transparent !important; cursor:pointer !important; }
+    div[data-testid="column"]:nth-of-type(2) [data-testid="stPopover"] button * { color:transparent !important; }
+    div[data-testid="column"]:nth-of-type(2) [data-testid="stPopover"] button:hover {
+        background: radial-gradient(circle at 50% 45%, rgba(150,200,255,0.10), transparent 70%) !important; }
+    </style>
+    """, unsafe_allow_html=True)
 with col_r:
     _room_buttons(_right, "R")
 

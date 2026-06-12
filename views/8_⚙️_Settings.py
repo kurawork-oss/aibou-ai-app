@@ -28,6 +28,7 @@ with col_menu:
     st.markdown("<div style='font-weight:bold; color:#718096; margin-bottom:10px;'>[ MENU ]</div>", unsafe_allow_html=True)
     _menu = [
         "👤 アカウント",
+        "📜 ルール",
         "🛠️ 基本設定",
         "🧠 コア設定",
         "🕰️ システム復元",
@@ -619,6 +620,29 @@ with col_content:
                             if c3.button("課金を手動有効化", key=f"inc_{p['id']}", use_container_width=True):
                                 auth.set_income_status(globals().get("supabase"), p["id"], "active"); st.rerun()
             st.caption("※「課金を手動有効化」は Stripe を介さずに Auto Income を解放する管理用スイッチです。")
+
+    # ================================
+    elif setting_mode == "📜 ルール":
+        st.markdown("#### 📜 AIへの常時ルール（CLAUDE rules 的）")
+        st.caption("ここに書いた内容は、コアとの全ての会話で常に適用されます（口調・前提・禁止事項など）。")
+        try:
+            _cur_rules = st.session_state.get("user_rules")
+            if _cur_rules is None:
+                _cur_rules = (load_vault() or {}).get("rules", "")
+            _new_rules = st.text_area(
+                "ルール", value=_cur_rules, height=260, label_visibility="collapsed",
+                placeholder="例：\n・常に敬語で簡潔に。要点から3行以内。\n・専門用語は避けて噛み砕く。\n・私の呼び名はボス。\n・金額は円表記。",
+            )
+            if st.button("💾 ルールを保存", type="primary", use_container_width=True):
+                _v = load_vault() or {}
+                _v["rules"] = _new_rules
+                if save_vault(_v):
+                    st.session_state.user_rules = _new_rules
+                    st.success("ルールを保存しました。次の会話から常に適用されます。")
+                else:
+                    st.error("保存に失敗しました（DB接続を確認してください）。")
+        except Exception as _e:
+            st.error(f"ルール画面を表示できませんでした: {_e}")
 
     # ================================
     elif setting_mode == "🚪 ログアウト":

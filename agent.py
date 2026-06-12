@@ -628,6 +628,13 @@ def run_agent(user_input, chat_history=None):
     """
     chat_history = chat_history or []
     sys_content = _build_system_prompt()
+    # ユーザー設定ルール（アプリ内で設定・常時適用＝CLAUDE rules的）
+    try:
+        _rules = (st.session_state.get("user_rules") or "").strip()
+        if _rules:
+            sys_content += "\n\n【ユーザー設定ルール（常に厳守）】\n" + _rules
+    except Exception:
+        pass
     if MEMORY_AVAILABLE:
         try:
             _mem = _memory.retrieve(user_input)

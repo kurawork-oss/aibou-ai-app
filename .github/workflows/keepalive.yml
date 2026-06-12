@@ -1,0 +1,25 @@
+name: Supabase Keep-Alive
+
+# 無料枠Supabaseは「7日間アクセスが無い」と自動一時停止する。
+# 3日ごとに本体＋記憶の両プロジェクトへ軽いクエリを投げて起こし続ける。
+on:
+  schedule:
+    - cron: "17 2 */3 * *"   # 3日ごと 02:17 UTC
+  workflow_dispatch:           # 手動実行も可
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Ping Supabase projects
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          MEMORY_SUPABASE_URL: ${{ secrets.MEMORY_SUPABASE_URL }}
+          MEMORY_SUPABASE_KEY: ${{ secrets.MEMORY_SUPABASE_KEY }}
+        run: python scripts/keepalive.py

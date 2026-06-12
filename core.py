@@ -223,6 +223,7 @@ def hydrate_vault_into_session(force=False):
         vd = load_vault()
         st.session_state.global_api_keys = vd.get("api_keys", {})
         st.session_state.key_slots = vd.get("key_slots", {})
+        st.session_state.user_rules = vd.get("rules", "")  # AIへの常時ルール（CLAUDE rules的）
     if "key_slots" not in st.session_state:
         st.session_state.key_slots = {}
 
