@@ -14,7 +14,10 @@ _ais = list(_vault.get("custom_ais", []) or [])
 def _save_ais(ais):
     v = load_vault() or {}
     v["custom_ais"] = ais
-    return save_vault(v)
+    ok = save_vault(v)
+    if ok:
+        st.session_state.custom_ais = ais  # コア(ask_custom_ai)が参照する最新一覧
+    return ok
 
 
 if "studio_sel" not in st.session_state:
@@ -51,8 +54,13 @@ with col_main:
         name = st.text_input("名前", value=_e.get("name", ""), placeholder="例：法務アシスタント")
         prompt = st.text_area(
             "人格・指示（このAIが毎回参照する。CLAUDE.md的）",
-            value=_e.get("prompt", ""), height=220,
+            value=_e.get("prompt", ""), height=200,
             placeholder="例：あなたは丁寧で正確な法務アシスタント。日本法に基づき、断定を避け、根拠条文を添える。…",
+        )
+        rules = st.text_area(
+            "ルール（箇条書き・常に厳守。人格とは別の絶対条件）",
+            value=_e.get("rules", ""), height=110,
+            placeholder="・必ず日本語で回答\n・推測は『推測』と明示\n・社外秘は出力しない",
         )
         c1, c2 = st.columns(2)
         provider = c1.selectbox("プロバイダ", _provs,
@@ -67,10 +75,11 @@ with col_main:
                 st.error("名前を入力してください。")
             else:
                 if sel:
-                    sel.update({"name": name, "prompt": prompt, "provider": provider, "model": model, "api_key": api_key})
+                    sel.update({"name": name, "prompt": prompt, "rules": rules,
+                                "provider": provider, "model": model, "api_key": api_key})
                 else:
                     nid = uuid.uuid4().hex[:8]
-                    _ais.append({"id": nid, "name": name, "prompt": prompt,
+                    _ais.append({"id": nid, "name": name, "prompt": prompt, "rules": rules,
                                  "provider": provider, "model": model, "api_key": api_key})
                     st.session_state.studio_sel = nid
                 if _save_ais(_ais):
@@ -109,7 +118,8 @@ with col_main:
             st.rerun()
         if msg := st.chat_input(f"{sel.get('name')} に話しかける", key=f"studio_in_{sel['id']}"):
             st.session_state[hkey].append({"role": "user", "content": msg})
-            convo = ([{"role": "system", "content": sel.get("prompt", "")}]
+            _sys = sel.get("prompt", "") + (("\n\n【厳守ルール】\n" + sel["rules"]) if sel.get("rules") else "")
+            convo = ([{"role": "system", "content": _sys}]
                      + [{"role": x["role"], "content": x["content"]} for x in st.session_state[hkey]])
             with st.spinner("..."):
                 try:

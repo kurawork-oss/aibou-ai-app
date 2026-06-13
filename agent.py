@@ -368,6 +368,21 @@ TOOLS = [
             "query": "思い出したいキーワード",
         },
     },
+    {
+        "name": "ask_custom_ai",
+        "description": "STUDIOで作った自分専用AI（専門家AI）に質問を委譲して回答を得る",
+        "requires_confirmation": False,
+        "parameters": {
+            "name": "呼び出すAIの名前",
+            "message": "そのAIへの質問・指示",
+        },
+    },
+    {
+        "name": "list_custom_ais",
+        "description": "STUDIOで作成済みの自分専用AIの一覧を返す",
+        "requires_confirmation": False,
+        "parameters": {},
+    },
 ]
 
 CONFIRM_TOOLS = {t["name"] for t in TOOLS if t.get("requires_confirmation")}
@@ -554,6 +569,34 @@ def execute_tool(tool_name, params):
                 return "⚠️ 記憶機能が利用できません。"
             r = _memory.retrieve(params.get("query", ""))
             return r or "関連する記憶は見つかりませんでした。"
+
+        if tool_name in ("ask_custom_ai", "list_custom_ais"):
+            try:
+                ais = st.session_state.get("custom_ais", []) or []
+            except Exception:
+                ais = []
+            if tool_name == "list_custom_ais":
+                if not ais:
+                    return "登録済みのカスタムAIはありません（STUDIOで作成できます）。"
+                return "登録済みカスタムAI：\n" + "\n".join(
+                    f"・{a.get('name', '')}（{a.get('provider', 'gemini')}）" for a in ais)
+            nm = (params.get("name") or "").strip().lower()
+            target = next((a for a in ais if a.get("name", "").lower() == nm), None) \
+                or next((a for a in ais if nm and nm in a.get("name", "").lower()), None)
+            if not target:
+                names = "、".join(a.get("name", "") for a in ais) or "(なし)"
+                return f"⚠️「{params.get('name')}」というAIが見つかりません。登録済み：{names}"
+            persona = target.get("prompt", "")
+            rules = target.get("rules", "")
+            sysmsg = persona + (("\n\n【厳守ルール】\n" + rules) if rules else "")
+            reply = direct_chat(
+                [{"role": "system", "content": sysmsg},
+                 {"role": "user", "content": params.get("message", "")}],
+                provider=target.get("provider"),
+                api_key=(target.get("api_key") or None),
+                model=(target.get("model") or None),
+            )
+            return f"🤖 {target.get('name')}：\n{reply}"
 
         return f"❌ 不明なツール: {tool_name}"
     except Exception as e:
