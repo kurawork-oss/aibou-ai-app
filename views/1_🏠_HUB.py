@@ -108,34 +108,13 @@ col_l, col_c, col_r = st.columns([1.1, 1.7, 1.1])
 with col_l:
     _room_buttons(_left, "L")
 with col_c:
-    # AI音声（生成時のみネイティブ再生＝旧 <audio> コンポーネントを廃止）
+    render_core(240)
+    # AI音声（生成時のみネイティブ再生）
     if st.session_state.get("ai_voice_base64") and autoplay_attr:
         try:
             st.audio(base64.b64decode(st.session_state.ai_voice_base64), format="audio/mp3", autoplay=True)
         except Exception:
             pass
-    st.markdown("<div class='core-tap-hint'>⌖ コアをタップで設定</div>", unsafe_allow_html=True)
-    render_core(240)
-    # ⚙️ コア設定：専用ボタンは置かず「コアをタップ」で開く（トリガーをCSSでコアに重ねて透明化）
-    with st.popover("⚙", use_container_width=True):
-        st.session_state.show_chat_input = st.toggle("💬 コマンド入力欄を表示", value=st.session_state.show_chat_input)
-        st.session_state.mic_enabled = st.toggle("🎙️ 音声入力(マイク)", value=st.session_state.mic_enabled)
-        st.session_state.voice_enabled = st.toggle("🔊 AIの読み上げ", value=st.session_state.voice_enabled)
-        st.session_state.voice_slow = st.toggle("🐢 ゆっくり読み上げ", value=st.session_state.voice_slow)
-        st.caption("※ 設定は即時反映されます。")
-    st.markdown("""
-    <style>
-    .core-tap-hint { text-align:center; color:var(--muted); font-size:10px; letter-spacing:3px; opacity:.6; margin-bottom:2px; }
-    /* col_c のポップオーバーのトリガーをコアに重ねて透明化＝コアをタップで設定が開く */
-    div[data-testid="column"]:nth-of-type(2) [data-testid="stPopover"] { margin-top:-252px !important; position:relative; z-index:40; }
-    div[data-testid="column"]:nth-of-type(2) [data-testid="stPopover"] button {
-        width:100% !important; height:246px !important; background:transparent !important;
-        border:none !important; box-shadow:none !important; color:transparent !important; cursor:pointer !important; }
-    div[data-testid="column"]:nth-of-type(2) [data-testid="stPopover"] button * { color:transparent !important; }
-    div[data-testid="column"]:nth-of-type(2) [data-testid="stPopover"] button:hover {
-        background: radial-gradient(circle at 50% 45%, rgba(150,200,255,0.10), transparent 70%) !important; }
-    </style>
-    """, unsafe_allow_html=True)
 with col_r:
     _room_buttons(_right, "R")
 

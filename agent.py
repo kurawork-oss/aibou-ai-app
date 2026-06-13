@@ -226,6 +226,27 @@ def get_ai_response(prompt_or_messages, tools=None, model=None, provider=None, p
         return f"⚠️ AI呼び出しエラー: {e}"
 
 
+def direct_chat(prompt_or_messages, provider=None, api_key=None, model=None):
+    """カスタムAI(STUDIO)用：明示の provider / api_key / model で直接呼び出す。
+    api_key 未指定なら通常の get_ai_response（Vaultのキー）にフォールバック。raiseしない。"""
+    messages = _to_messages(prompt_or_messages)
+    if not api_key:
+        return get_ai_response(messages, model=model, provider=provider)
+    try:
+        p = (provider or "gemini").lower()
+        if p in ("claude", "anthropic"):
+            return _call_claude(messages, api_key, model)
+        if p == "grok":
+            return _call_openai_like(messages, api_key, "https://api.x.ai/v1/chat/completions",
+                                     model if (model and "grok" in str(model)) else "grok-3")
+        if p == "openai":
+            return _call_openai_like(messages, api_key, "https://api.openai.com/v1/chat/completions",
+                                     model if (model and "gpt" in str(model)) else "gpt-4o")
+        return _call_gemini(messages, api_key, model)
+    except Exception as e:
+        return f"⚠️ AI呼び出しエラー: {e}"
+
+
 # === ツール定義 =============================================================
 # requires_confirmation=True のツールは「外部に作用する操作」。
 # run_agent はこれらを即実行せず、UI側（HUB）に承認を委ねる。

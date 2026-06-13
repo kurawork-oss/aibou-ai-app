@@ -51,7 +51,12 @@ with col_content:
     # ================================
     elif setting_mode == "🧠 コア設定":
         st.markdown("#### 🧠 コア設定 (Core)")
-        st.info("コアの脈動、色、音声フィルターなどの設定パネルにアクセスする機能をここに追加します。")
+        st.caption("HUBのコア周りの挙動を設定します（即時反映）。")
+        st.session_state.show_chat_input = st.toggle("💬 コマンド入力欄を表示", value=st.session_state.get("show_chat_input", True))
+        st.session_state.mic_enabled = st.toggle("🎙️ 音声入力(マイク)を有効化", value=st.session_state.get("mic_enabled", False))
+        st.session_state.voice_enabled = st.toggle("🔊 AIの読み上げ（TTS）", value=st.session_state.get("voice_enabled", True))
+        st.session_state.voice_slow = st.toggle("🐢 ゆっくり読み上げ", value=st.session_state.get("voice_slow", False))
+        st.caption("※ マイクは旧コンポーネントのため、不安定なら無効のままを推奨します。")
 
     # ================================
     elif setting_mode == "🕰️ システム復元":

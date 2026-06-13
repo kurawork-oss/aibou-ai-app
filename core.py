@@ -460,6 +460,8 @@ FORGE_MODES = [
      "rooms": [("Auto Income", "AUTO INCOME", "Auto Income")]},
     {"name": "BRAIN", "icon": "◈", "desc": "知識の保管とアイデアの可視化。",
      "rooms": [("Data Vault", "DATA VAULT", "Document Vault"), ("Miro Board", "MIRO BOARD", "Dashboard")]},
+    {"name": "STUDIO", "icon": "🎨", "desc": "自分専用AIを作る（Dify風）。人格・APIを設定して育てる。",
+     "rooms": [("AI Studio", "AI STUDIO", "AI Studio")]},
     {"name": "SYSTEM", "icon": "⚙", "desc": "システムの進化と環境設定。",
      "rooms": [("Evolution", "EVOLUTION", "Core Upgrade"), ("Settings", "SETTINGS", "Settings")]},
 ]
@@ -1024,6 +1026,9 @@ elif page == "Core Upgrade":
         render_owner_only("Core Upgrade（自己進化）")
     else:
         with open("views/9_🚀_Core_Upgrade.py", "r", encoding="utf-8") as f: exec(f.read())
+
+elif page == "AI Studio":
+    with open("views/11_🎨_AI_Studio.py", "r", encoding="utf-8") as f: exec(f.read())
 
 # ==========================================
 # 🎨 DESIGN SYSTEM (assets/style.css)：白×銀×黒、コア基調のダークで全ページ統一。
