@@ -225,6 +225,7 @@ def hydrate_vault_into_session(force=False):
         st.session_state.key_slots = vd.get("key_slots", {})
         st.session_state.user_rules = vd.get("rules", "")  # AIへの常時ルール（CLAUDE rules的）
         st.session_state.custom_ais = vd.get("custom_ais", [])  # STUDIOの自分専用AI（コアから委譲可能に）
+        st.session_state.onboarded = vd.get("onboarded", False)  # 初回ガイド表示済みフラグ
     if "key_slots" not in st.session_state:
         st.session_state.key_slots = {}
 
@@ -467,6 +468,20 @@ FORGE_MODES = [
      "rooms": [("Evolution", "EVOLUTION", "Core Upgrade"), ("Settings", "SETTINGS", "Settings")]},
 ]
 
+# 各部屋の日本語ひとこと説明（ガイド／ツールチップ用）
+ROOM_JP = {
+    "Forge Lab": "アプリ/画像/動画/スライドをAIで生成",
+    "App Archive": "生成したミニアプリの保管・起動",
+    "Active Tasks": "実行中タスクの管理・確認待ち対応",
+    "Task History": "完了タスクのアーカイブ",
+    "Auto Income": "副業の自動化（テーマ→生成→承認）",
+    "Document Vault": "資料・メモの保管と検索",
+    "Dashboard": "アイデアボード(Miro)＆システム監視",
+    "AI Studio": "自分専用AIの作成＋ワークフロー自動化",
+    "Core Upgrade": "自己進化（オーナー専用）",
+    "Settings": "APIキー・ルール・ユーザー管理",
+}
+
 if st.session_state.current_mode == "HUB":
     st.markdown("""
         <style>
@@ -499,7 +514,8 @@ else:
             for _disp, _sub, _target in _rooms:
                 _lock = (_target == "Auto Income" and not _income_ok)
                 _icon = ("● " if _target == _cur else ("🔒 " if _lock else "📄 "))
-                if st.button(_icon + _disp, key=f"side_{_target}", use_container_width=True):
+                if st.button(_icon + _disp, key=f"side_{_target}", use_container_width=True,
+                             help=ROOM_JP.get(_target)):
                     st.session_state.current_mode = _target
                     st.rerun()
 
