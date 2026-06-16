@@ -1,4 +1,5 @@
 st.title("📋 現在のタスク")
+room_help("Active Tasks")
 raw_data = sheet.get_all_values() 
 
 if len(raw_data) > 1:
@@ -44,4 +45,4 @@ if len(raw_data) > 1:
     styled_df = current_df.style.map(color_status, subset=['ステータス'])
     st.dataframe(styled_df, use_container_width=True)
 else:
-    st.info("現在、登録されているタスクはありません。")
+    st.info("現在、登録されているタスクはありません。HUBのコアに作業を依頼すると、ここに実行中タスクとして表示されます。")

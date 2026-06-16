@@ -23,6 +23,7 @@ div.stButton > button:hover { color:#00f3ff !important;
 
 st.markdown("<div class='mc-title'>💰 MISSION CONTROL</div>", unsafe_allow_html=True)
 st.markdown("<div class='mc-sub'>ASSET MULTI-USE · AI INCOME ORCHESTRATOR</div>", unsafe_allow_html=True)
+room_help("Auto Income")
 
 if not globals().get("INCOME_AVAILABLE", False):
     st.error("⚠️ income_engine を読み込めませんでした。リポジトリ直下に income_engine.py があるか確認してください。")

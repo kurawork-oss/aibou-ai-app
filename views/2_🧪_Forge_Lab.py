@@ -185,6 +185,7 @@ if st.session_state.current_forge_ws is None and st.session_state.selected_forge
     st.markdown('<div class="central-logo">⬡</div>', unsafe_allow_html=True)
     st.markdown("<h2 class='saas-title'>❖ FORGE STUDIO ❖</h2>", unsafe_allow_html=True)
     st.markdown("<p class='central-logo-sub'>SELECT SYSTEM ENGINE</p>", unsafe_allow_html=True)
+    room_help("Forge Lab")
     
     st.markdown('<div class="hologram-platform"></div>', unsafe_allow_html=True)
 

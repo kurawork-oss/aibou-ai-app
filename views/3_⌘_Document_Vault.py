@@ -5,6 +5,7 @@ if "current_vault_nb" not in st.session_state:
 
 if st.session_state.current_vault_nb is None:
     st.markdown("<h2 class='cyber-title'>⌘ DOCUMENT VAULT</h2>", unsafe_allow_html=True)
+    room_help("Document Vault")
     st.caption("資料保管庫（ノートブック）を選択、または新規作成してください。")
     
     items = ["__NEW__"] + list(st.session_state.vault_notebooks.keys())

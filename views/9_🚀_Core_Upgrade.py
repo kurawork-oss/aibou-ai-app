@@ -13,6 +13,7 @@ col_left, col_right = st.columns(2, gap="large")
 with col_left:
     st.markdown("<h2 style='color: #2b6cb0; font-weight: 800; letter-spacing: 2px;'>[ PROJECT EVOLUTION ]</h2>", unsafe_allow_html=True)
     st.caption("/// WARNING: CORE SYSTEM OVERRIDE PROTOCOL ///")
+    room_help("Core Upgrade")
     model_choice = st.radio("ENGINE CLASS:", ["[ STANDARD ] Gemini Flash", "[ ADVANCED ] Gemini Pro"], index=0, horizontal=True, label_visibility="collapsed")
     
     with st.expander("> CURRENT_CORE.py", expanded=False):

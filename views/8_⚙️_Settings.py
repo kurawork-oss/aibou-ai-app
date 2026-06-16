@@ -20,6 +20,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown("<h2 class='cyber-title'>⚙️ SYSTEM SETTINGS</h2>", unsafe_allow_html=True)
+room_help("Settings")
 
 # 画面を左（メニュー）と右（コンテンツ）に分割
 col_menu, col_content = st.columns([2, 8], gap="large")
