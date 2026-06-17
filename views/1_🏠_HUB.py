@@ -15,6 +15,13 @@ if "ai_voice_base64" not in st.session_state: st.session_state.ai_voice_base64 =
 if "just_generated_audio" not in st.session_state: st.session_state.just_generated_audio = False
 if "pending_action" not in st.session_state: st.session_state.pending_action = None
 
+# チャット履歴をVault(Supabase)から復元（初回のみ。再起動でも会話ログが残る）
+if not st.session_state.get("_chat_hydrated"):
+    _saved_chat = vault_get("chat_history", [])
+    if _saved_chat and not st.session_state.global_chat_history:
+        st.session_state.global_chat_history = _saved_chat
+    st.session_state._chat_hydrated = True
+
 v_data = st.session_state.ai_voice_base64 if st.session_state.ai_voice_base64 else ""
 autoplay_attr = "autoplay" if st.session_state.just_generated_audio else ""
 st.session_state.just_generated_audio = False
@@ -232,6 +239,7 @@ if st.session_state.global_chat_history and st.session_state.global_chat_history
                 ai_text = _cmds.handle(last_prompt)
                 if ai_text == "__CLEAR__":
                     st.session_state.global_chat_history = []
+                    persist_vault_key("chat_history", [])  # クリアも永続化
                     st.rerun()
             else:
                 ai_text, _updated, pending = run_agent(last_prompt, prior_history)
@@ -254,4 +262,5 @@ if st.session_state.global_chat_history and st.session_state.global_chat_history
                     pass
 
             st.session_state.global_chat_history.append({"role": "assistant", "avatar": "◈", "content": ai_text})
+            persist_vault_key("chat_history", st.session_state.global_chat_history[-50:])  # 直近50件を永続化
             st.rerun()

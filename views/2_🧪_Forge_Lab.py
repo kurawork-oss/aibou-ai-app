@@ -609,6 +609,9 @@ if st.session_state.current_forge_ws and "APP" in ws_data.get("type", ""):
                 try:
                     with open(os.path.join("forge_apps", safe_name), "w", encoding="utf-8") as f:
                         f.write(app_code_input)
+                    _apps = vault_get("forge_apps", {}) or {}
+                    _apps[safe_name] = app_code_input
+                    persist_vault_key("forge_apps", _apps)  # 再起動でも残るようVaultにも保存
                     st.success(f"✅ インストール完了！ `{safe_name}` をAPP ARCHIVEに保存しました。")
                     st.balloons()
                 except Exception as e:

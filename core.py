@@ -240,6 +240,30 @@ def save_vault(data):
         st.error(f"🚨 【DB書き込みエラー】: {e}")
         return False
 
+def vault_get(key, default=None):
+    """暗号化Vault(Supabase)から1キーを取得する。DB未接続なら default。
+    App Archive のアプリ、Document Vault のノート、チャット履歴の永続化に使う。"""
+    if not DB_CONNECTED:
+        return default
+    try:
+        return (load_vault() or {}).get(key, default)
+    except Exception as e:
+        log_error(f"vault_get.{key}", e)
+        return default
+
+def persist_vault_key(key, value):
+    """暗号化Vault(Supabase)の1キーだけ更新して保存する（他キーは保持）。
+    DB未接続時は何もしない（=このセッション内のみ。再起動で消える）。成否を返す。"""
+    if not DB_CONNECTED:
+        return False
+    try:
+        v = load_vault() or {}
+        v[key] = value
+        return save_vault(v)
+    except Exception as e:
+        log_error(f"persist.{key}", e)
+        return False
+
 # === 金庫の鍵をセッションへ読み込む（Auth有効時はログイン後に per-user で実行） ===
 def hydrate_vault_into_session(force=False):
     if force or "global_api_keys" not in st.session_state:
