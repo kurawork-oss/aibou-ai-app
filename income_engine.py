@@ -77,6 +77,24 @@ def _session():
         return None
 
 
+def _log_err(where, err):
+    """DB等の失敗を握り潰さず、共有の診断ログ（st.session_state._error_log）とstderrに記録する。
+    core.py の log_error と同じ _error_log に書き込むため、Settings の診断ログに集約表示される。"""
+    import sys, datetime as _dt
+    msg = f"{_dt.datetime.now():%H:%M:%S} [income:{where}] {type(err).__name__}: {err}"
+    try:
+        ss = _session()
+        if ss is not None:
+            if "_error_log" not in ss:
+                ss["_error_log"] = []
+            log = ss["_error_log"]
+            log.append(msg)
+            del log[:-50]
+    except Exception:
+        pass
+    print("AIBOU-ERR", msg, file=sys.stderr)
+
+
 # === 信頼性：指数バックオフ・リトライ（要件 §3.1） ==========================
 # 外部API（AI生成）が一時的に落ちている / レート制限(429)の場合に再試行する。
 # 5秒 → 10秒 → 20秒 → 40秒 → 60秒（最大5回）。成功時はsleepしない。
@@ -325,8 +343,8 @@ def set_status(job_id, status, log=None):
         try:
             db.table("income_jobs").update(patch).eq("id", job_id).execute()
             return True
-        except Exception:
-            pass  # DB失敗 → ローカルへフォールバック
+        except Exception as e:
+            _log_err("set_status", e)  # DB失敗 → ローカルへフォールバック
     for j in _local_jobs():
         if j.get("id") == job_id:
             j.update(patch)
@@ -382,8 +400,8 @@ def get_stats():
                     d = json.loads(d)
                 return {**DEFAULT_STATS, **d}
             return dict(DEFAULT_STATS)  # DB正常・行なし → デフォルト
-        except Exception:
-            pass  # DB失敗 → ローカルへフォールバック
+        except Exception as e:
+            _log_err("get_stats", e)  # DB失敗 → ローカルへフォールバック
     ss = _session()
     if ss is not None:
         return ss.get("income_stats_local", dict(DEFAULT_STATS))
@@ -397,8 +415,8 @@ def update_stats(data):
         try:
             db.table("income_stats").upsert({"id": 1, "data": merged}).execute()
             return True
-        except Exception:
-            pass  # DB失敗 → ローカルへフォールバック
+        except Exception as e:
+            _log_err("update_stats", e)  # DB失敗 → ローカルへフォールバック
     ss = _session()
     if ss is not None:
         ss.income_stats_local = merged

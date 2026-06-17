@@ -376,7 +376,7 @@ else:
                 
         elif ws_type == "VIDEO":
             if ws_data["code"]:
-                st.info("🔌 API Integration Pending: ここに動画生成APIを接続しMP4を表示します。")
+                st.warning("🚧 動画の書き出し（MP4生成）は準備中です。現在はスクリプト／絵コンテと動画プロンプトの生成までご利用いただけます。")
                 st.success("✅ スクリプトとビデオプロンプトが準備完了しました。")
                 
                 with st.expander("📝 STORYBOARD & PROMPT", expanded=True):

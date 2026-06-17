@@ -44,10 +44,35 @@ with col_menu:
     setting_mode = st.radio("設定メニュー", _menu, label_visibility="collapsed")
 
 with col_content:
+    db_warning()  # DB未接続時は「セッション内のみ保持」を全設定画面で警告
     # ================================
     if setting_mode == "🛠️ 基本設定":
         st.markdown("#### 🛠️ 基本設定 (General)")
-        st.info("言語設定の切り替えや、メイン画面の背景変更、ログイン画面のパスワード変更機能をここに追加します（今後実装予定）。")
+
+        # --- 接続状態：保存先・AI・タスク連携が生きているか一目で確認 ---
+        st.markdown("##### 🔌 システム状態")
+        _db_ok = bool(DB_CONNECTED)
+        _gem_ok = bool(get_secret("GEMINI_API_KEY")) or bool((st.session_state.get("global_api_keys") or {}).get("gemini"))
+        _sheet_ok = not isinstance(sheet, DummySheet)
+        _c1, _c2, _c3 = st.columns(3)
+        _c1.metric("データベース", "🟢 接続" if _db_ok else "🔴 未接続")
+        _c2.metric("AI (Gemini)", "🟢 ONLINE" if _gem_ok else "🔴 OFFLINE")
+        _c3.metric("タスク連携", "🟢 接続" if _sheet_ok else "🔴 未接続")
+
+        # --- 診断ログ：握り潰さず記録したエラーの直近履歴 ---
+        st.markdown("##### 🩺 診断ログ")
+        st.caption("DB保存の失敗など、内部で握り潰さず記録したエラーの直近履歴です。")
+        _elog = st.session_state.get("_error_log", [])
+        if _elog:
+            st.code("\n".join(_elog[-20:]), language="text")
+            if st.button("🧹 ログをクリア"):
+                st.session_state["_error_log"] = []
+                st.rerun()
+        else:
+            st.success("エラーは記録されていません。")
+
+        st.divider()
+        st.caption("🚧 言語切り替え・背景変更・ログインパスワード変更は準備中です。")
 
     # ================================
     elif setting_mode == "🧠 コア設定":

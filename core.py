@@ -186,6 +186,27 @@ def _vault_uid():
         pass
     return None
 
+def log_error(context, err):
+    """例外を握り潰さず、共有の診断ログ（st.session_state._error_log）とstderrに記録する。
+    Settings → 基本設定 の「🩺 診断ログ」で直近の記録を確認できる。"""
+    import sys
+    msg = f"{datetime.datetime.now():%H:%M:%S} [{context}] {type(err).__name__}: {err}"
+    try:
+        if "_error_log" not in st.session_state:
+            st.session_state["_error_log"] = []
+        log = st.session_state["_error_log"]
+        log.append(msg)
+        del log[:-50]  # 直近50件だけ保持
+    except Exception:
+        pass
+    print("AIBOU-ERR", msg, file=sys.stderr)
+
+def db_warning():
+    """DB未接続時に「保存はこのセッション内のみ」と警告する共通バナー。"""
+    if not DB_CONNECTED:
+        st.warning("⚠️ データベース未接続：変更はこのセッション内のみ保持され、再読み込みで失われます。"
+                   "永続化するには Settings → 🔐 Secure Vault で Supabase の設定をご確認ください。")
+
 def load_vault():
     if not DB_CONNECTED: return {}
     uid = _vault_uid()
@@ -200,6 +221,7 @@ def load_vault():
             decrypted = cipher_suite.decrypt(enc_data.encode('utf-8'))
             return json.loads(decrypted.decode('utf-8'))
     except Exception as e:
+        log_error("vault.load", e)
         st.error(f"🚨 【DB読み込みエラー】: {e}")
     return {}
 
@@ -214,6 +236,7 @@ def save_vault(data):
             supabase.table("vault_data").upsert({"id": 1, "encrypted_keys": encrypted}).execute()
         return True
     except Exception as e:
+        log_error("vault.save", e)
         st.error(f"🚨 【DB書き込みエラー】: {e}")
         return False
 
