@@ -12,6 +12,8 @@ google-auth-oauthlib
 supabase
 cryptography
 python-pptx
+openpyxl
+python-docx
 streamlit-flow-component
 requests
 python-dotenv

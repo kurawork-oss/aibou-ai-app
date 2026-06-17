@@ -189,29 +189,34 @@ if st.session_state.current_forge_ws is None and st.session_state.selected_forge
     
     st.markdown('<div class="hologram-platform"></div>', unsafe_allow_html=True)
 
-    c1, c2, c3, c4 = st.columns(4, gap="large")
-    with c1:
-        if st.button("APP STUDIO", use_container_width=True): 
+    r1 = st.columns(3, gap="large")
+    with r1[0]:
+        if st.button("APP STUDIO", use_container_width=True):
             st.session_state.selected_forge_mode = "APP"; st.rerun()
-    with c2:
-        if st.button("IMAGE GENERATOR", use_container_width=True): 
+    with r1[1]:
+        if st.button("IMAGE GENERATOR", use_container_width=True):
             st.session_state.selected_forge_mode = "IMAGE"; st.rerun()
-    with c3:
-        if st.button("VIDEO PRODUCTION", use_container_width=True): 
+    with r1[2]:
+        if st.button("VIDEO PRODUCTION", use_container_width=True):
             st.session_state.selected_forge_mode = "VIDEO"; st.rerun()
-    with c4:
-        if st.button("SLIDE DECK", use_container_width=True): 
+    r2 = st.columns(3, gap="large")
+    with r2[0]:
+        if st.button("SLIDE DECK", use_container_width=True):
             st.session_state.selected_forge_mode = "SLIDE"; st.rerun()
+    with r2[1]:
+        if st.button("SHEET BUILDER", use_container_width=True):
+            st.session_state.selected_forge_mode = "SHEET"; st.rerun()
+    with r2[2]:
+        if st.button("DOC WRITER", use_container_width=True):
+            st.session_state.selected_forge_mode = "DOC"; st.rerun()
 
     st.markdown("""
         <div class="desc-display-area">
-            <div class="desc-text default-desc">HOVER OVER AN ENGINE TO VIEW SPECIFICATIONS</div>
-            <div class="desc-text app-desc">🤖 <b style="color:#c5c6c7;">[ APP STUDIO ]</b><br>ボスの指示から、美しくバグのないアプリケーションのUIとロジックを自律的に構築・プレビューします。</div>
-            <div class="desc-text img-desc">🎨 <b style="color:#c5c6c7;">[ IMAGE GENERATOR ]</b><br>画像生成AIのための完璧な英語プロンプトを構築し、照明や画角を計算した最高の1枚を引き出します。</div>
-            <div class="desc-text vid-desc">🎬 <b style="color:#c5c6c7;">[ VIDEO PRODUCTION ]</b><br>SoraやVeo等の最先端動画生成AIに向けた、プロ品質の絵コンテとカメラワーク指定を作成します。</div>
-            <div class="desc-text slide-desc">📊 <b style="color:#c5c6c7;">[ SLIDE DECK ]</b><br>論理的なプレゼン構成を考案し、説得力のあるスライド資料(.pptx)を即座に出力します。</div>
+            <div class="desc-text default-desc">SELECT AN ENGINE / エンジンを選択（アプリ・画像・動画・スライド・表計算・文書）</div>
         </div>
     """, unsafe_allow_html=True)
+    st.caption("🤖 APP=アプリ生成・実行／🎨 IMAGE=画像生成／🎬 VIDEO=絵コンテ＋MP4／"
+               "📊 SLIDE=.pptx／📈 SHEET=表データ(CSV/Excel)／📝 DOC=文書(Markdown/Word)")
 
 # ==========================================
 # 🚪 ステージ2：モード別プロジェクト管理画面
@@ -300,6 +305,8 @@ else:
             elif ws_type == "IMAGE": placeholder_text = "例：サイバーパンクな都市"
             elif ws_type == "VIDEO": placeholder_text = "例：コーヒーが弾ける動画"
             elif ws_type == "SLIDE": placeholder_text = "例：AIの未来について5枚"
+            elif ws_type == "SHEET": placeholder_text = "例：2024年の月別売上表（商品別）"
+            elif ws_type == "DOC": placeholder_text = "例：新サービスの企画書を作成"
             
             forge_prompt = st.text_area("PROMPT", placeholder=placeholder_text, height=150, label_visibility="collapsed")
             submitted = st.form_submit_button("EXECUTE", use_container_width=True, type="primary")
@@ -432,6 +439,70 @@ else:
             else:
                 st.info("Canvas is empty.")
 
+        elif ws_type == "SHEET":
+            if ws_data["code"]:
+                st.success("✅ 表データが完成しました。CSV / Excel でダウンロードできます。")
+                _safe = ws_name.replace(' ', '_')
+                try:
+                    import pandas as _pd
+                    _df = _pd.read_csv(io.StringIO(ws_data["code"]))
+                    st.dataframe(_df, use_container_width=True)
+                    st.download_button("[ DOWNLOAD .csv ]", data=ws_data["code"].encode("utf-8-sig"),
+                                       file_name=f"{_safe}.csv", mime="text/csv", use_container_width=True)
+                    try:
+                        _xio = io.BytesIO()
+                        with _pd.ExcelWriter(_xio, engine="openpyxl") as _w:
+                            _df.to_excel(_w, index=False, sheet_name="Sheet1")
+                        st.download_button("[ DOWNLOAD .xlsx ]", data=_xio.getvalue(),
+                                           file_name=f"{_safe}.xlsx",
+                                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                           type="primary", use_container_width=True)
+                    except Exception:
+                        st.caption("（Excel(.xlsx)出力は openpyxl 未導入のため利用不可。CSVをご利用ください）")
+                except Exception as e:
+                    st.error(f"表の表示に失敗しました（CSV形式を確認してください）: {e}")
+                    st.code(ws_data["code"], language="text")
+                with st.expander("⚙️ CSV を編集"):
+                    edited_code = st.text_area("CSV Editor", value=ws_data["code"], height=250)
+                    if st.button("UPDATE SHEET"):
+                        ws_data["code"] = edited_code
+                        st.rerun()
+            else:
+                st.info("Canvas is empty.")
+
+        elif ws_type == "DOC":
+            if ws_data["code"]:
+                st.success("✅ 文書が完成しました。Markdown / Word でダウンロードできます。")
+                _safe = ws_name.replace(' ', '_')
+                with st.container(border=True):
+                    st.markdown(ws_data["code"])
+                st.download_button("[ DOWNLOAD .md ]", data=ws_data["code"].encode("utf-8"),
+                                   file_name=f"{_safe}.md", mime="text/markdown", use_container_width=True)
+                try:
+                    from docx import Document as _Docx
+                    _doc = _Docx()
+                    for _line in ws_data["code"].split("\n"):
+                        _s = _line.rstrip()
+                        if _s.startswith("### "): _doc.add_heading(_s[4:], level=3)
+                        elif _s.startswith("## "): _doc.add_heading(_s[3:], level=2)
+                        elif _s.startswith("# "): _doc.add_heading(_s[2:], level=1)
+                        elif _s.startswith(("- ", "* ")): _doc.add_paragraph(_s[2:], style="List Bullet")
+                        elif _s.strip(): _doc.add_paragraph(_s)
+                    _dio = io.BytesIO(); _doc.save(_dio)
+                    st.download_button("[ DOWNLOAD .docx ]", data=_dio.getvalue(),
+                                       file_name=f"{_safe}.docx",
+                                       mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                       type="primary", use_container_width=True)
+                except Exception:
+                    st.caption("（Word(.docx)出力は python-docx 未導入のため利用不可。Markdownをご利用ください）")
+                with st.expander("⚙️ 本文(Markdown)を編集"):
+                    edited_code = st.text_area("Markdown Editor", value=ws_data["code"], height=300)
+                    if st.button("UPDATE DOC"):
+                        ws_data["code"] = edited_code
+                        st.rerun()
+            else:
+                st.info("Canvas is empty.")
+
     # ==========================================
     # AI実行ロジック（4つの脳みそ切り替え）
     # ==========================================
@@ -553,7 +624,39 @@ else:
                     ...
                     
                     スライドを出力した後に、「このプレゼンを話す際のアドバイス（トークスクリプトのヒント）」を日本語で添えること。
-                    
+
+                    {history_text}
+                    """
+
+                elif "SHEET" in ws_type:
+                    system_instruction = f"""
+                    あなたは一流のデータアナリスト兼スプレッドシート設計者です。
+                    ユーザーの要望から、実用的な表データ（スプレッドシート）を設計して出力します。
+
+                    【出力ルール】
+                    1. 表データは必ずCSV形式とし、先頭行をヘッダーにして、次のコードフェンス内にのみ記述すること：
+                    ```csv
+                    列1,列2,列3
+                    値,値,値
+                    ```
+                    2. 数値は単位や桁区切りを入れず、計算可能な生の数値で出力すること。
+                    3. 行数は要望に応じて十分な実用量（目安5〜30行）を用意すること。
+
+                    CSVの後に、日本語で「この表の使い方」と「追加すると便利な列」を簡潔に添えること。
+
+                    {history_text}
+                    """
+
+                elif "DOC" in ws_type:
+                    system_instruction = f"""
+                    あなたはプロのビジネスライター兼編集者です。
+                    ユーザーの要望から、構造化された読みやすい文書をMarkdownで作成します。
+
+                    【出力ルール】
+                    1. 見出し(#, ##, ###)、箇条書き(-)、太字(**)、表、引用(>)を適切に使い、論理的な構成にすること。
+                    2. そのまま提出できる完成度で、省略（…中略…）をしないこと。
+                    3. 文書本体のみを出力し、余計な前置きは書かないこと。
+
                     {history_text}
                     """
 
@@ -575,8 +678,21 @@ else:
                         ws_data["media"] = prompt_match.group(1).strip()
                         reply_text = ai_text.replace(prompt_match.group(0), "").strip()
                 
+                elif "SHEET" in ws_type:
+                    csv_match = re.search(r'```csv\n(.*?)\n```', ai_text, re.DOTALL)
+                    if csv_match:
+                        ws_data["code"] = csv_match.group(1).strip()
+                        reply_text = ai_text.replace(csv_match.group(0), "").strip() or "表データを作成しました。"
+                    else:
+                        ws_data["code"] = ai_text  # フェンスが無い場合もそのまま保持
+                        reply_text = "表データを作成しました。"
+
+                elif "DOC" in ws_type:
+                    ws_data["code"] = ai_text
+                    reply_text = "文書を作成しました。右のプレビューを確認してください。"
+
                 elif "VIDEO" in ws_type or "SLIDE" in ws_type:
-                    ws_data["code"] = ai_text 
+                    ws_data["code"] = ai_text
                     reply_text = "資料の作成が完了しました。右のプレビュー画面を確認してください。"
 
                 # 音声の生成と保存
