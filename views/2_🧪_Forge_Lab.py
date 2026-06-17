@@ -383,8 +383,47 @@ else:
                 
         elif ws_type == "VIDEO":
             if ws_data["code"]:
-                st.warning("🚧 動画の書き出し（MP4生成）は準備中です。現在はスクリプト／絵コンテと動画プロンプトの生成までご利用いただけます。")
-                st.success("✅ スクリプトとビデオプロンプトが準備完了しました。")
+                st.success("✅ 絵コンテ／動画プロンプトが完成。画像＋ナレーションでMP4を生成できます。")
+
+                if st.button("🎬 動画(MP4)を生成", use_container_width=True, type="primary"):
+                    import renderer
+                    _txt = ws_data["code"]
+                    # 英語の動画プロンプト（バッククォート内）を抽出
+                    _ep = ""
+                    _m = re.search(r'プロンプト[^\n]*\n+`+\s*([^`]+?)\s*`+', _txt, re.DOTALL)
+                    if not _m:
+                        _m = re.search(r'`([^`]{20,})`', _txt)
+                    if _m:
+                        _ep = _m.group(1).strip()
+                    # シーン（Scene N: 説明）を抽出。無ければコンセプト全体を1シーンに。
+                    _scenes = []
+                    for _line in _txt.split("\n"):
+                        _sm = re.search(r'Scene\s*\d+[^:：]*[:：]\s*(.+)', _line)
+                        if _sm:
+                            _narr = re.sub(r'[*`#>_]', '', _sm.group(1)).strip(" -")
+                            if _narr:
+                                _scenes.append({"narration": _narr, "visual": _ep})
+                    if not _scenes:
+                        _concept = re.sub(r'[*`#>_]', '', _txt)[:500].strip()
+                        _scenes = [{"narration": _concept or "AI generated video", "visual": _ep}]
+
+                    if not renderer.is_available():
+                        st.error("⚠️ 動画合成にはFFmpegが必要です。packages.txt に ffmpeg を追加済みのため、再デプロイ後に利用できます。")
+                    else:
+                        with st.spinner("🎬 画像とナレーションからMP4を合成中…（数十秒かかります）"):
+                            _vp = renderer.render_forge_video(_scenes, _ep)
+                        if _vp:
+                            ws_data["video_path"] = _vp
+                            st.rerun()
+                        else:
+                            st.error("動画の生成に失敗しました（画像取得・ネットワーク・FFmpegをご確認ください）。")
+
+                if ws_data.get("video_path") and os.path.exists(ws_data["video_path"]):
+                    st.video(ws_data["video_path"])
+                    with open(ws_data["video_path"], "rb") as _vf:
+                        st.download_button("[ DOWNLOAD .mp4 ]", data=_vf.read(),
+                                           file_name=f"{ws_name.replace(' ', '_')}.mp4",
+                                           mime="video/mp4", use_container_width=True)
                 
                 with st.expander("📝 STORYBOARD & PROMPT", expanded=True):
                     edited_code = st.text_area("Markdown Editor", value=ws_data["code"], height=300)

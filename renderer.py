@@ -108,3 +108,97 @@ def build_assets(job):
     except Exception:
         pass
     return assets
+
+
+# =================================================================
+# Forge Lab 用：絵コンテ（複数シーン）から画像＋ナレーションのMP4を合成する
+# =================================================================
+def _fetch_image_bytes(prompt, width=1280, height=720, timeout=60):
+    """Pollinations（無料・キー不要）から画像を取得する。失敗時は None。"""
+    try:
+        import requests, urllib.parse
+        url = (f"https://image.pollinations.ai/prompt/{urllib.parse.quote(prompt or 'cinematic scene')}"
+               f"?width={width}&height={height}&nologo=true")
+        r = requests.get(url, timeout=timeout)
+        if r.status_code == 200 and r.content:
+            return r.content
+    except Exception:
+        return None
+    return None
+
+
+def _clip_from_image_audio(ff, image_path, audio_path, out_path):
+    """1枚画像＋ナレーション音声から、音声長に合わせた16:9のMP4クリップを作る。"""
+    cmd = [
+        ff, "-y",
+        "-loop", "1", "-i", image_path,
+        "-i", audio_path,
+        "-vf", "scale=1280:720:force_original_aspect_ratio=decrease,"
+               "pad=1280:720:(ow-iw)/2:(oh-ih)/2,format=yuv420p",
+        "-c:v", "libx264", "-tune", "stillimage", "-pix_fmt", "yuv420p",
+        "-c:a", "aac", "-b:a", "192k",
+        "-shortest", "-movflags", "+faststart",
+        out_path,
+    ]
+    try:
+        r = subprocess.run(cmd, capture_output=True, timeout=600)
+        if r.returncode == 0 and os.path.exists(out_path) and os.path.getsize(out_path) > 0:
+            return out_path
+    except Exception:
+        return None
+    return None
+
+
+def render_forge_video(scenes, image_prompt="", out_dir="rendered", lang="ja"):
+    """複数シーン [{"narration": 日本語, "visual": 英語(任意)}] から、
+    各シーンの画像（Pollinations）＋ナレーション（gTTS）を合成し、連結したMP4のパスを返す。
+    FFmpeg/ネットワークが無ければ None（絶対にraiseしない）。"""
+    ff = _ffmpeg()
+    if not ff or not scenes:
+        return None
+    try:
+        from gtts import gTTS
+        import tempfile, uuid
+        work = tempfile.mkdtemp(prefix="forgevid_")
+        clips = []
+        for i, sc in enumerate(scenes[:8]):  # 安全のため最大8シーン
+            narration = (sc.get("narration") or "").strip()
+            visual = (sc.get("visual") or image_prompt or narration or "cinematic scene").strip()
+            if not narration:
+                narration = visual
+            img = _fetch_image_bytes(f"{image_prompt}, {visual}" if image_prompt else visual)
+            if not img:
+                continue
+            img_path = os.path.join(work, f"img_{i}.png")
+            with open(img_path, "wb") as f:
+                f.write(img)
+            try:
+                aud_path = os.path.join(work, f"aud_{i}.mp3")
+                gTTS(text=narration[:500], lang=lang).save(aud_path)
+            except Exception:
+                continue
+            clip = _clip_from_image_audio(ff, img_path, aud_path, os.path.join(work, f"clip_{i}.mp4"))
+            if clip:
+                clips.append(clip)
+        if not clips:
+            return None
+        os.makedirs(out_dir, exist_ok=True)
+        out_path = os.path.join(out_dir, f"forge_{uuid.uuid4().hex[:8]}.mp4")
+        if len(clips) == 1:
+            shutil.copy(clips[0], out_path)
+            return out_path
+        list_file = os.path.join(work, "list.txt")
+        with open(list_file, "w", encoding="utf-8") as f:
+            for c in clips:
+                f.write(f"file '{c}'\n")
+        r = subprocess.run(
+            [ff, "-y", "-f", "concat", "-safe", "0", "-i", list_file,
+             "-c", "copy", "-movflags", "+faststart", out_path],
+            capture_output=True, timeout=600,
+        )
+        if r.returncode == 0 and os.path.exists(out_path) and os.path.getsize(out_path) > 0:
+            return out_path
+        shutil.copy(clips[0], out_path)  # 連結失敗時は先頭クリップを返す
+        return out_path
+    except Exception:
+        return None
