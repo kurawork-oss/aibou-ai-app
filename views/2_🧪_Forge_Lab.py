@@ -439,8 +439,29 @@ else:
                 st.success("✅ プレゼン構成が完了しました。下のボタンから PowerPoint をダウンロードできます！")
                 try:
                     prs = Presentation()
-                    slides_data = json.loads(ws_data["code"])
-                    
+                    # AIはMarkdown(--- 区切り)を生成する。まずJSONを試し、ダメならMarkdownを解析。
+                    try:
+                        slides_data = json.loads(ws_data["code"])
+                    except Exception:
+                        slides_data = None
+                    if not isinstance(slides_data, list):
+                        slides_data = []
+                        for _block in re.split(r'\n-{3,}\n', ws_data["code"]):
+                            _block = _block.strip()
+                            if not _block:
+                                continue
+                            _title, _bullets = "", []
+                            for _ln in _block.split("\n"):
+                                _s = _ln.strip()
+                                if not _s:
+                                    continue
+                                _h = re.match(r'^#{1,3}\s+(.*)', _s)
+                                if _h and not _title:
+                                    _title = _h.group(1).strip()
+                                else:
+                                    _bullets.append(re.sub(r'^[\-\*>#\s]+', '', _s))
+                            slides_data.append({"title": _title or "Slide", "bullets": _bullets})
+
                     for slide_info in slides_data:
                         slide_layout = prs.slide_layouts[1]
                         slide = prs.slides.add_slide(slide_layout)
@@ -470,8 +491,8 @@ else:
                     st.error(f"パワポの生成に失敗しました: {e}")
                     st.code(ws_data["code"])
                 
-                with st.expander("⚙️ SLIDE DATA (JSON)"):
-                    edited_code = st.text_area("JSON Editor", value=ws_data["code"], height=300)
+                with st.expander("⚙️ SLIDE DATA (Markdown / JSON)"):
+                    edited_code = st.text_area("Slide Editor", value=ws_data["code"], height=300)
                     if st.button("UPDATE SLIDES"):
                         ws_data["code"] = edited_code
                         st.rerun()
