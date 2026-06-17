@@ -87,6 +87,12 @@ with col_right:
         st.markdown("<br>", unsafe_allow_html=True)
         st.warning("/// LOCAL DANGER: 手元のPCの core.py を直接上書きして再起動します。")
         if st.button("!!! LOCAL OVERRIDE !!!", use_container_width=True, type="primary"):
+            import ast
+            try:
+                ast.parse(st.session_state.evolution_code or "")  # 構文チェック：壊れたコードでの自己破壊を防ぐ
+            except SyntaxError as _se:
+                st.error(f"⚠️ 生成コードに構文エラー（{_se.lineno}行目付近: {_se.msg}）があるため、上書きを中止しました。再生成してください。")
+                st.stop()
             try:
                 # 🚨 【追加】上書き前に自動バックアップ（過去5個まで保持）
                 import glob
@@ -112,6 +118,12 @@ with col_right:
         st.markdown("<br>", unsafe_allow_html=True)
         st.info("☁️ CLOUD DEPLOY: GitHub上の core.py をAPIで書き換え、クラウド環境を再デプロイします。")
         if st.button("🚀 GITHUB AUTO DEPLOY", use_container_width=True):
+            import ast
+            try:
+                ast.parse(st.session_state.evolution_code or "")  # 構文チェック：壊れたコードのデプロイを防ぐ
+            except SyntaxError as _se:
+                st.error(f"⚠️ 生成コードに構文エラー（{_se.lineno}行目付近: {_se.msg}）があるため、デプロイを中止しました。")
+                st.stop()
             gh_token = st.session_state.global_api_keys.get("gh_token", "")
             gh_owner = st.session_state.global_api_keys.get("gh_owner", "")
             gh_repo = st.session_state.global_api_keys.get("gh_repo", "")
