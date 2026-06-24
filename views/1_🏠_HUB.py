@@ -214,8 +214,25 @@ if not st.session_state.pending_action:
         st.session_state.global_chat_history.append({"role": "user", "avatar": "👤", "content": spoken_text})
         st.rerun()
 
+    # 📷 画像を添付（コアの「目」：Geminiで理解）
+    _img_file = None
+    with st.expander("📷 画像を添付して質問（コアが画像を見て答えます）", expanded=False):
+        _img_file = st.file_uploader(
+            "画像を選択（PNG/JPG/WebP）", type=["png", "jpg", "jpeg", "webp"],
+            key=f"hub_img_{st.session_state.get('img_uploader_key', 0)}",
+            label_visibility="collapsed",
+        )
+        if _img_file is not None:
+            st.image(_img_file, use_container_width=True)
+            st.caption("この状態で下のコマンド欄に質問を入力すると、画像を見て回答します。")
+
     if st.session_state.get("show_chat_input", True):
         if prompt := st.chat_input("/// コマンドを入力してください、ボス", key="console_input"):
+            if _img_file is not None:
+                st.session_state.pending_image = {"data": _img_file.getvalue(),
+                                                  "mime": _img_file.type or "image/png"}
+                st.session_state.img_uploader_key = st.session_state.get("img_uploader_key", 0) + 1
+                prompt = prompt + "　〔📷画像添付〕"
             st.session_state.global_chat_history.append({"role": "user", "avatar": "👤", "content": prompt})
             st.rerun()
 
@@ -234,7 +251,12 @@ if st.session_state.global_chat_history and st.session_state.global_chat_history
                 _cmds = None
             _is_cmd = bool(_cmds and _cmds.is_command(last_prompt))
             pending = None
-            if _is_cmd:
+            _pimg = st.session_state.get("pending_image")
+            if _pimg:
+                # 📷 画像つきの質問 → Geminiの『目』で理解して回答
+                ai_text = get_vision_response(_pimg.get("data"), last_prompt, _pimg.get("mime", "image/png"))
+                st.session_state.pop("pending_image", None)
+            elif _is_cmd:
                 # "/" 始まりはアプリ専用コマンドとして即実行（run_agent を介さない）
                 ai_text = _cmds.handle(last_prompt)
                 if ai_text == "__CLEAR__":

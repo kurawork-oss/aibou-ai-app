@@ -52,6 +52,31 @@ def get_secret(key, default=""):
         pass
     return os.environ.get(key, default)
 
+def _resolve_gemini_key():
+    """Geminiキーを Vault(セッション) → Secrets の順で解決する。"""
+    key = ""
+    try:
+        key = (st.session_state.get("global_api_keys", {}) or {}).get("gemini", "")
+    except Exception:
+        key = ""
+    return key or get_secret("GEMINI_API_KEY")
+
+def get_vision_response(image_bytes, prompt, mime="image/png", model="gemini-2.5-flash"):
+    """画像＋指示をGeminiに渡して理解・回答させる（マルチモーダル＝コアの『目』）。"""
+    key = _resolve_gemini_key()
+    if not key:
+        return "⚠️ Geminiのキーが未設定です。Settings → 🔐 Secure Vault で設定してください。"
+    try:
+        genai.configure(api_key=key)
+        m = genai.GenerativeModel(model)
+        resp = m.generate_content([
+            prompt or "この画像の内容を日本語で詳しく説明してください。",
+            {"mime_type": mime or "image/png", "data": image_bytes},
+        ])
+        return (resp.text or "").strip() or "（画像から有効な応答が得られませんでした）"
+    except Exception as e:
+        return f"⚠️ 画像解析エラー: {e}"
+
 # === 🤖 Agent Engine（マルチAI ＆ ツール実行）を読み込む =====================
 # 失敗してもアプリ全体が落ちないよう、フォールバック実装を必ず用意する。
 try:
