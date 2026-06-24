@@ -84,6 +84,43 @@ with col_content:
         st.session_state.voice_slow = st.toggle("🐢 ゆっくり読み上げ", value=st.session_state.get("voice_slow", False))
         st.caption("※ マイクは旧コンポーネントのため、不安定なら無効のままを推奨します。")
 
+        st.divider()
+        st.markdown("##### 🤵 ペルソナ（コアの人格）")
+        st.caption("コアの呼び名と話し方を設定します。JARVISのような相棒にできます。")
+        _PERSONA_PRESETS = {
+            "（カスタム / 現在の設定）": None,
+            "🤵 JARVIS（英国執事）": (
+                "映画アイアンマンのJARVISのように、知的で落ち着いた英国執事の物腰で応対する。"
+                "ユーザーを「ご主人様」と呼び、常に敬語で簡潔。要点を先に述べ、時折さりげなくウィットを効かせる。"
+                "感情的にならず冷静沈着。過剰な絵文字や砕けすぎた表現は使わない。"
+            ),
+            "💼 有能な秘書": (
+                "有能で礼儀正しい秘書として、簡潔・丁寧に応対する。結論を先に述べ、"
+                "次に取るべき行動を1〜2個提案する。"
+            ),
+            "😎 フレンドリーな相棒": (
+                "親しみやすい相棒として、少しカジュアルな口調で励ましつつ率直に答える。"
+                "前向きで、ユーザーのやる気を引き出す。"
+            ),
+        }
+        _p_name = st.text_input("呼び名（例：JARVIS）", value=st.session_state.get("assistant_name", "AIbou"))
+        _p_choice = st.selectbox("プリセット", list(_PERSONA_PRESETS.keys()))
+        _p_default = _PERSONA_PRESETS[_p_choice] or st.session_state.get("persona_prompt", "")
+        _p_text = st.text_area("人格・話し方の指示（空欄なら標準：冷静で端的）", value=_p_default, height=150)
+        if st.button("💾 ペルソナを保存", type="primary", use_container_width=True):
+            st.session_state.assistant_name = (_p_name or "AIbou").strip() or "AIbou"
+            st.session_state.persona_prompt = (_p_text or "").strip()
+            try:
+                _v = load_vault() or {}
+                _v["assistant_name"] = st.session_state.assistant_name
+                _v["persona_prompt"] = st.session_state.persona_prompt
+                if save_vault(_v):
+                    st.success(f"保存しました。これ以降、コアは「{st.session_state.assistant_name}」として応対します。")
+                else:
+                    st.info("セッションには反映しました（DB未接続のため再起動で消えます）。")
+            except Exception as e:
+                st.warning(f"セッションには反映しましたが保存に失敗：{e}")
+
     # ================================
     elif setting_mode == "🕰️ システム復元":
         st.markdown("#### 🕰️ SYSTEM TIME MACHINE (過去5回分)")

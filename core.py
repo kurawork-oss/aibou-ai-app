@@ -273,6 +273,8 @@ def hydrate_vault_into_session(force=False):
         st.session_state.user_rules = vd.get("rules", "")  # AIへの常時ルール（CLAUDE rules的）
         st.session_state.custom_ais = vd.get("custom_ais", [])  # STUDIOの自分専用AI（コアから委譲可能に）
         st.session_state.onboarded = vd.get("onboarded", False)  # 初回ガイド表示済みフラグ
+        st.session_state.assistant_name = vd.get("assistant_name", "AIbou")  # コアの呼び名（JARVIS等）
+        st.session_state.persona_prompt = vd.get("persona_prompt", "")  # コアの人格・話し方
     if "key_slots" not in st.session_state:
         st.session_state.key_slots = {}
 

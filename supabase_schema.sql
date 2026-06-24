@@ -78,3 +78,19 @@ CREATE TABLE IF NOT EXISTS income_stats (
   id   int PRIMARY KEY,
   data jsonb DEFAULT '{}'::jsonb
 );
+
+-- =====================================================================
+-- 🧠 長期記憶（“覚えてるJARVIS”）
+-- memory.py が会話の各ターンと remember() の事実をここへ保存し、毎ターン関連記憶を
+-- 想起してシステムプロンプトへ注入する。単独利用向けに user_id は text（既定 'local'）。
+-- ※ 複数ユーザー/RLSで運用する場合は supabase/migrations/ の agent_memory（uuid+RLS）を使う。
+-- =====================================================================
+CREATE TABLE IF NOT EXISTS agent_memory (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    text DEFAULT 'local',
+  role       text,                 -- 'user' | 'assistant' | 'fact'
+  content    text,
+  importance int DEFAULT 0,        -- >=1 は優先想起（remember で登録した事実）
+  created_at timestamptz DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_agent_memory_user ON agent_memory(user_id, created_at DESC);
