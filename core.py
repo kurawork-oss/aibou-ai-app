@@ -77,6 +77,37 @@ def get_vision_response(image_bytes, prompt, mime="image/png", model="gemini-2.5
     except Exception as e:
         return f"⚠️ 画像解析エラー: {e}"
 
+def synthesize_voice(text, voice=None):
+    """テキストを音声(base64 mp3)に変換する。
+    edge-tts（無料・APIキー不要の高品質ニューラル音声）を優先し、失敗時は gTTS にフォールバック。"""
+    text = (text or "").strip()
+    if not text:
+        return None
+    voice = voice or (st.session_state.get("voice_name") or "ja-JP-KeitaNeural")
+    # 1) edge-tts（無料・自然な声）
+    try:
+        import edge_tts, asyncio
+        async def _gen():
+            buf = bytearray()
+            async for chunk in edge_tts.Communicate(text[:600], voice).stream():
+                if chunk.get("type") == "audio":
+                    buf.extend(chunk["data"])
+            return bytes(buf)
+        data = asyncio.run(_gen())
+        if data:
+            return base64.b64encode(data).decode()
+    except Exception as e:
+        log_error("tts.edge", e)
+    # 2) フォールバック：gTTS
+    try:
+        from gtts import gTTS as _gTTS
+        _buf = io.BytesIO()
+        _gTTS(text=text[:200], lang="ja", slow=bool(st.session_state.get("voice_slow", False))).write_to_fp(_buf)
+        return base64.b64encode(_buf.getvalue()).decode()
+    except Exception as e:
+        log_error("tts.gtts", e)
+        return None
+
 # === 🤖 Agent Engine（マルチAI ＆ ツール実行）を読み込む =====================
 # 失敗してもアプリ全体が落ちないよう、フォールバック実装を必ず用意する。
 try:
@@ -300,6 +331,7 @@ def hydrate_vault_into_session(force=False):
         st.session_state.onboarded = vd.get("onboarded", False)  # 初回ガイド表示済みフラグ
         st.session_state.assistant_name = vd.get("assistant_name", "AIbou")  # コアの呼び名（JARVIS等）
         st.session_state.persona_prompt = vd.get("persona_prompt", "")  # コアの人格・話し方
+        st.session_state.voice_name = vd.get("voice_name", "ja-JP-KeitaNeural")  # 読み上げの声
     if "key_slots" not in st.session_state:
         st.session_state.key_slots = {}
 

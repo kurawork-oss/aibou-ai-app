@@ -81,7 +81,14 @@ with col_content:
         st.session_state.show_chat_input = st.toggle("💬 コマンド入力欄を表示", value=st.session_state.get("show_chat_input", True))
         st.session_state.mic_enabled = st.toggle("🎙️ 音声入力(マイク)を有効化", value=st.session_state.get("mic_enabled", False))
         st.session_state.voice_enabled = st.toggle("🔊 AIの読み上げ（TTS）", value=st.session_state.get("voice_enabled", True))
-        st.session_state.voice_slow = st.toggle("🐢 ゆっくり読み上げ", value=st.session_state.get("voice_slow", False))
+        st.session_state.voice_slow = st.toggle("🐢 ゆっくり読み上げ（gTTS時）", value=st.session_state.get("voice_slow", False))
+        _VOICES = {"🧑 Keita（男性・落ち着き / JARVIS向き）": "ja-JP-KeitaNeural",
+                   "👩 Nanami（女性・標準）": "ja-JP-NanamiNeural"}
+        _cur_voice = st.session_state.get("voice_name", "ja-JP-KeitaNeural")
+        _vidx = next((i for i, v in enumerate(_VOICES.values()) if v == _cur_voice), 0)
+        _vsel = st.selectbox("🗣️ 声（自然音声・無料 edge-tts）", list(_VOICES.keys()), index=_vidx)
+        st.session_state.voice_name = _VOICES[_vsel]
+        st.caption("自然な声で読み上げます（要ネット接続）。失敗時は従来の音声へ自動フォールバック。")
         st.caption("※ マイクは旧コンポーネントのため、不安定なら無効のままを推奨します。")
 
         st.divider()
@@ -114,6 +121,7 @@ with col_content:
                 _v = load_vault() or {}
                 _v["assistant_name"] = st.session_state.assistant_name
                 _v["persona_prompt"] = st.session_state.persona_prompt
+                _v["voice_name"] = st.session_state.get("voice_name", "ja-JP-KeitaNeural")
                 if save_vault(_v):
                     st.success(f"保存しました。これ以降、コアは「{st.session_state.assistant_name}」として応対します。")
                 else:

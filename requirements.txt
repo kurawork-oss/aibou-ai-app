@@ -4,6 +4,7 @@ gspread
 oauth2client
 pandas
 gTTS
+edge-tts
 streamlit-mic-recorder
 pypdf
 google-api-python-client

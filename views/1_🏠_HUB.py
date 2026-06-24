@@ -270,18 +270,13 @@ if st.session_state.global_chat_history and st.session_state.global_chat_history
 
             st.markdown(ai_text)
 
-            # 読み上げ（コマンド応答は読み上げない）
+            # 読み上げ（コマンド応答は読み上げない）。edge-tts(自然な声)→gTTSフォールバック。
             if (not _is_cmd) and st.session_state.get("voice_enabled", True):
-                try:
-                    clean_text = ai_text.replace("*", "").replace("#", "").replace("`", "").replace("_", "")
-                    if clean_text.strip():
-                        tts = gTTS(text=clean_text[:200], lang='ja', slow=st.session_state.get("voice_slow", False))
-                        audio_fp = io.BytesIO()
-                        tts.write_to_fp(audio_fp)
-                        st.session_state.ai_voice_base64 = base64.b64encode(audio_fp.getvalue()).decode()
-                        st.session_state.just_generated_audio = True
-                except Exception:
-                    pass
+                clean_text = ai_text.replace("*", "").replace("#", "").replace("`", "").replace("_", "")
+                _b64 = synthesize_voice(clean_text)
+                if _b64:
+                    st.session_state.ai_voice_base64 = _b64
+                    st.session_state.just_generated_audio = True
 
             st.session_state.global_chat_history.append({"role": "assistant", "avatar": "◈", "content": ai_text})
             persist_vault_key("chat_history", st.session_state.global_chat_history[-50:])  # 直近50件を永続化
