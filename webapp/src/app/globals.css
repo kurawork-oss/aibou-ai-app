@@ -1,0 +1,254 @@
+/* =====================================================================
+   THE FORGE OS — Unified Design System (white × silver × black)
+   Dark base keyed to the glowing core (calm pale-blue glow). All design
+   tokens live here as CSS variables; components reference them (and the
+   matching Tailwind theme) so the visual identity stays consistent with
+   the original Streamlit "FORGE OS" surface.
+   ===================================================================== */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #0a0b0f; /* page background (unified dark) */
+  --bg2: #0d0f14; /* header / secondary surfaces */
+  --panel: rgba(255, 255, 255, 0.05); /* cards / containers */
+  --panel-bd: rgba(197, 198, 199, 0.28); /* silver border */
+  --fg: #c9ccd2; /* body text (light silver) */
+  --fg-strong: #ffffff; /* headings (pure white) */
+  --muted: #8b8f97; /* captions */
+  --line: #c5c6c7; /* silver line / accent */
+  --glow: rgba(150, 200, 255, 0.3); /* core pale-blue glow */
+  --glow-strong: rgba(150, 200, 255, 0.45);
+  --accent: #00f3ff; /* focus / active accent (cyan) */
+  --input-bg: rgba(255, 255, 255, 0.05);
+  --input-bd: rgba(197, 198, 199, 0.4);
+  --btn-bg: rgba(255, 255, 255, 0.06);
+  --btn-bd: rgba(197, 198, 199, 0.5);
+  --shadow: rgba(0, 0, 0, 0.55);
+}
+
+/* ---- Base ---- */
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  background-color: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  /* Subtle pale-blue vignette behind everything — the "core" bleed. */
+  background-image: radial-gradient(
+      1200px 700px at 50% -12%,
+      rgba(150, 200, 255, 0.08),
+      transparent 60%
+    ),
+    radial-gradient(900px 600px at 50% 120%, rgba(150, 200, 255, 0.05), transparent 55%);
+  background-attachment: fixed;
+  min-height: 100dvh;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  color: var(--fg-strong);
+  font-family: var(--font-share-tech-mono), ui-monospace, monospace;
+  letter-spacing: 0.08em;
+}
+
+a {
+  color: var(--fg-strong);
+  text-decoration: none;
+}
+
+::selection {
+  background: rgba(197, 198, 199, 0.35);
+  color: #ffffff;
+}
+
+/* ---- Utilities ---- */
+
+/* Glass panel: the canonical card surface (silver border + glass blur). */
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--panel-bd);
+  border-radius: 14px;
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 6px 18px var(--shadow);
+}
+
+/* Pale-blue glow halo. */
+.glow {
+  box-shadow: 0 0 18px var(--glow);
+}
+.glow-strong {
+  box-shadow: 0 0 28px var(--glow-strong);
+}
+
+/* Text glow for the wordmark / headings. */
+.text-glow {
+  text-shadow: 0 0 18px var(--glow);
+}
+
+/* Mono label styling used for HUD labels / status text. */
+.label-mono {
+  font-family: var(--font-share-tech-mono), ui-monospace, monospace;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+/* Silver gradient divider. */
+.divider {
+  border: none;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--panel-bd), transparent);
+}
+
+/* "Thinking" shimmer — sweeps a pale-blue highlight across text. */
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--muted) 0%,
+    var(--fg-strong) 20%,
+    rgba(150, 200, 255, 0.95) 35%,
+    var(--fg-strong) 50%,
+    var(--muted) 70%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: shimmer 2.2s linear infinite;
+}
+
+/* ---- Keyframes ---- */
+
+/* Core orb pulse — slow, calm breathing. */
+@keyframes core-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.92;
+  }
+  50% {
+    transform: scale(1.04);
+    opacity: 1;
+  }
+}
+
+/* Outer glow ring expanding outward. */
+@keyframes core-halo {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.55;
+  }
+  70% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes fade-in {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Blinking caret for the streaming assistant token. */
+@keyframes caret-blink {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  51%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.caret::after {
+  content: "▌";
+  margin-left: 1px;
+  color: var(--accent);
+  animation: caret-blink 1s step-end infinite;
+}
+
+/* Three-dot typing indicator. */
+@keyframes dot-bounce {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  40% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+/* ---- Custom scrollbar (dark × silver) ---- */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg2);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(197, 198, 199, 0.25);
+  border-radius: 6px;
+  border: 2px solid var(--bg2);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(197, 198, 199, 0.45);
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(197, 198, 199, 0.25) var(--bg2);
+}
+
+/* Respect reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
