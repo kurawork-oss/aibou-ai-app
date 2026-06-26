@@ -264,3 +264,78 @@ export async function incomeSummary(): Promise<IncomeSummary> {
   if (!res.ok) throw new Error(`Income summary failed (${res.status})`);
   return (await res.json().catch(() => ({}))) as IncomeSummary;
 }
+
+/* ---------------- Forge (creation) ---------------- */
+export type ForgeKind = "app" | "image" | "slides" | "sheet" | "doc";
+
+export interface ForgeResult {
+  kind: string;
+  code?: string;        // app
+  csv?: string;         // sheet
+  markdown?: string;    // slides | doc
+  image_url?: string;   // image
+  image_prompt?: string;
+  note?: string;
+  error?: string;
+}
+
+/** POST /forge/generate — generate an artifact (app/image/slides/sheet/doc). */
+export async function forgeGenerate(kind: ForgeKind, prompt: string): Promise<ForgeResult> {
+  const res = await fetch(`${requireApiUrl()}/forge/generate`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ kind, prompt }),
+  });
+  const data = (await res.json().catch(() => ({}))) as ForgeResult;
+  if (!res.ok && !data.error) throw new Error(`Forge failed (${res.status})`);
+  return data;
+}
+
+/* ---------------- Income (Mission Control) ---------------- */
+export interface IncomeJob {
+  id?: string;
+  theme?: string;
+  status?: string;
+  payload?: Record<string, unknown>;
+  log?: string;
+  created_at?: string;
+  [key: string]: unknown;
+}
+
+/** GET /income/jobs — recent jobs (optionally filtered by status). */
+export async function incomeJobs(status?: string, limit = 50): Promise<IncomeJob[]> {
+  const q = new URLSearchParams();
+  if (status) q.set("status", status);
+  q.set("limit", String(limit));
+  const res = await fetch(`${requireApiUrl()}/income/jobs?${q.toString()}`, {
+    method: "GET",
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`Jobs failed (${res.status})`);
+  const data = (await res.json().catch(() => ({ items: [] }))) as { items?: IncomeJob[] };
+  return data.items ?? [];
+}
+
+/** POST /income/enqueue — generate metadata for a theme and queue it as pending. */
+export async function incomeEnqueue(theme: string): Promise<IncomeJob> {
+  const res = await fetch(`${requireApiUrl()}/income/enqueue`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ theme }),
+  });
+  const data = (await res.json().catch(() => ({}))) as IncomeJob & { error?: string };
+  if (!res.ok && !data.error) throw new Error(`Enqueue failed (${res.status})`);
+  return data;
+}
+
+/** POST /income/approve | /income/reject */
+export async function incomeSetStatus(id: string, action: "approve" | "reject"): Promise<boolean> {
+  const res = await fetch(`${requireApiUrl()}/income/${action}`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ id }),
+  });
+  const data = (await res.json().catch(() => ({ ok: false }))) as { ok?: boolean };
+  return Boolean(data.ok);
+}

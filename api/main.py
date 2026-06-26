@@ -28,6 +28,8 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 import config
+import forge
+import income
 from memory_store import mem_add, mem_recall, mem_recent
 
 app = FastAPI(
@@ -101,6 +103,19 @@ class Scene(BaseModel):
 class VideoRequest(BaseModel):
     scenes: List[Scene]
     image_prompt: Optional[str] = ""
+
+
+class ForgeRequest(BaseModel):
+    kind: str = "app"          # app | image | slides | sheet | doc
+    prompt: str = ""
+
+
+class EnqueueRequest(BaseModel):
+    theme: str
+
+
+class JobActionRequest(BaseModel):
+    id: str
 
 
 # =====================================================================
@@ -312,6 +327,47 @@ async def income_summary(_auth: None = Depends(require_auth)):
     except Exception:
         # テーブルが無い等。空で縮退。
         return {}
+
+
+@app.post("/forge/generate")
+async def forge_generate(req: ForgeRequest, _auth: None = Depends(require_auth)):
+    """Forge：アプリ/画像/スライド/表/文書 を生成して返す。
+    重い同期処理（Gemini）はスレッドに逃がす。"""
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(None, lambda: forge.generate(req.kind, req.prompt))
+    if isinstance(result, dict) and result.get("error"):
+        return JSONResponse(status_code=503, content=result)
+    return result
+
+
+@app.get("/income/jobs")
+async def income_jobs(status: Optional[str] = None, limit: int = 50, _auth: None = Depends(require_auth)):
+    """副業ジョブの一覧（新しい順）。status で絞り込み可。Supabase未設定なら空。"""
+    loop = asyncio.get_event_loop()
+    items = await loop.run_in_executor(None, lambda: income.list_jobs(status, limit))
+    return {"items": items}
+
+
+@app.post("/income/enqueue")
+async def income_enqueue(req: EnqueueRequest, _auth: None = Depends(require_auth)):
+    """テーマから各媒体メタデータを生成し、承認待ち(pending)で積む。"""
+    loop = asyncio.get_event_loop()
+    job = await loop.run_in_executor(None, lambda: income.enqueue(req.theme))
+    if isinstance(job, dict) and job.get("error"):
+        return JSONResponse(status_code=503, content=job)
+    return job
+
+
+@app.post("/income/approve")
+async def income_approve(req: JobActionRequest, _auth: None = Depends(require_auth)):
+    ok = await asyncio.get_event_loop().run_in_executor(None, lambda: income.set_status(req.id, "approved"))
+    return {"ok": ok}
+
+
+@app.post("/income/reject")
+async def income_reject(req: JobActionRequest, _auth: None = Depends(require_auth)):
+    ok = await asyncio.get_event_loop().run_in_executor(None, lambda: income.set_status(req.id, "rejected"))
+    return {"ok": ok}
 
 
 @app.post("/video")

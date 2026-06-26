@@ -15,7 +15,11 @@ import { useCallback, useEffect, useState } from "react";
 import BootScreen from "@/components/BootScreen";
 import Chat, { type ChatSettings } from "@/components/Chat";
 import CoreOrb, { type CoreState } from "@/components/CoreOrb";
+import Forge from "@/components/Forge";
+import Income from "@/components/Income";
 import { health } from "@/lib/api";
+
+type View = "chat" | "forge" | "income";
 
 const LS_NAME = "forge_name";
 const LS_PERSONA = "forge_persona";
@@ -37,6 +41,7 @@ function Hud() {
   const [online, setOnline] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [view, setView] = useState<View>("chat");
 
   // Hydrate settings from localStorage (client-only).
   useEffect(() => {
@@ -125,12 +130,17 @@ function Hud() {
 
       <div className="divider my-2" />
 
-      {/* Chat fills remaining space */}
+      {/* Active view fills remaining space */}
       <section className="min-h-0 flex-1">
-        {loaded && (
+        {loaded && view === "chat" && (
           <Chat settings={settings} voiceReplies={voiceReplies} onStateChange={setCoreState} />
         )}
+        {loaded && view === "forge" && <Forge />}
+        {loaded && view === "income" && <Income />}
       </section>
+
+      {/* Bottom navigation */}
+      <NavBar view={view} onChange={setView} />
 
       {/* Settings drawer */}
       <AnimatePresence>
@@ -158,6 +168,37 @@ function stateLabel(state: CoreState): string {
     default:
       return "ONLINE";
   }
+}
+
+function NavBar({ view, onChange }: { view: View; onChange: (v: View) => void }) {
+  const items: { key: View; label: string }[] = [
+    { key: "chat", label: "CHAT" },
+    { key: "forge", label: "FORGE" },
+    { key: "income", label: "INCOME" },
+  ];
+  return (
+    <nav className="mt-2 flex items-center justify-center gap-2 pt-1">
+      {items.map((it) => {
+        const activeView = it.key === view;
+        return (
+          <button
+            key={it.key}
+            type="button"
+            onClick={() => onChange(it.key)}
+            className="flex-1 rounded-forge border py-2 text-[10px] tracking-[0.2em] label-mono transition"
+            style={{
+              borderColor: activeView ? "var(--accent)" : "var(--panel-bd)",
+              color: activeView ? "var(--fg-strong)" : "var(--muted)",
+              boxShadow: activeView ? "0 0 12px var(--glow)" : "none",
+              background: activeView ? "var(--btn-bg)" : "transparent",
+            }}
+          >
+            {it.label}
+          </button>
+        );
+      })}
+    </nav>
+  );
 }
 
 function StatusDot({ online }: { online: boolean }) {
