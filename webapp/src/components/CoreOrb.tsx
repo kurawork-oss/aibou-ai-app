@@ -3,9 +3,10 @@
 /**
  * CoreOrb — THE FORGE OS centerpiece.
  *
- * A circular glowing core: pale-blue radial gradient + layered box-shadow glow
- * with a slow breathing pulse. The `state` prop subtly shifts intensity and
- * motion so the orb feels alive while listening / speaking / thinking.
+ * A glowing pale-blue core wrapped in the signature "atmosphere": three tilted
+ * 3D orbit rings, each with a light that traces its rim (ported from the
+ * original FORGE OS core). The `state` prop tunes glow + spin so the core feels
+ * alive while listening / speaking / thinking.
  */
 
 import { motion, useReducedMotion, type Transition } from "framer-motion";
@@ -29,14 +30,25 @@ interface StateStyle {
   pulseScale: [number, number, number];
   pulseDuration: number;
   ringDuration: number;
+  /** Orbit spin multiplier — <1 spins faster (more energy). */
+  orbit: number;
 }
 
 const STATE_STYLES: Record<CoreState, StateStyle> = {
-  idle: { glow: 0.3, cyan: 0.0, pulseScale: [1, 1.03, 1], pulseDuration: 4.5, ringDuration: 4.5 },
-  listening: { glow: 0.42, cyan: 0.35, pulseScale: [1, 1.06, 1], pulseDuration: 1.6, ringDuration: 1.8 },
-  speaking: { glow: 0.5, cyan: 0.28, pulseScale: [1, 1.08, 1], pulseDuration: 0.9, ringDuration: 1.2 },
-  thinking: { glow: 0.45, cyan: 0.18, pulseScale: [1, 1.05, 1], pulseDuration: 2.4, ringDuration: 2.6 },
+  idle: { glow: 0.3, cyan: 0.0, pulseScale: [1, 1.03, 1], pulseDuration: 4.5, ringDuration: 4.5, orbit: 1 },
+  listening: { glow: 0.42, cyan: 0.38, pulseScale: [1, 1.06, 1], pulseDuration: 1.6, ringDuration: 1.8, orbit: 0.5 },
+  speaking: { glow: 0.5, cyan: 0.3, pulseScale: [1, 1.08, 1], pulseDuration: 0.9, ringDuration: 1.2, orbit: 0.38 },
+  thinking: { glow: 0.45, cyan: 0.2, pulseScale: [1, 1.05, 1], pulseDuration: 2.4, ringDuration: 2.6, orbit: 0.7 },
 };
+
+// Base spin (seconds) for each tilted ring; scaled by state.orbit.
+const ORBIT_BASE = [7, 12, 17] as const;
+// Ring diameter as a fraction of the container, with rim colour.
+const ORBIT_RINGS = [
+  { scale: 0.98, color: "rgba(200,222,255,0.65)" },
+  { scale: 0.86, color: "rgba(190,215,255,0.4)" },
+  { scale: 0.86, color: "rgba(185,210,255,0.26)" },
+] as const;
 
 export default function CoreOrb({ size = 140, state = "idle", className = "" }: CoreOrbProps) {
   const reduceMotion = useReducedMotion();
@@ -67,7 +79,7 @@ export default function CoreOrb({ size = 140, state = "idle", className = "" }: 
   return (
     <div
       className={`relative grid place-items-center ${className}`}
-      style={{ width: size, height: size }}
+      style={{ width: size, height: size, perspective: size * 3 }}
       role="img"
       aria-label={`THE FORGE OS core — ${state}`}
     >
@@ -100,6 +112,25 @@ export default function CoreOrb({ size = 140, state = "idle", className = "" }: 
           transition={{ duration: s.ringDuration, repeat: Infinity, ease: "easeOut", delay: s.ringDuration / 2 }}
         />
       )}
+
+      {/* 3D orbit stage — three tilted rings, each with a tracing light. */}
+      <div aria-hidden className="forge-stage absolute inset-0">
+        {ORBIT_RINGS.map((ring, i) => {
+          const d = size * ring.scale;
+          return (
+            <span
+              key={i}
+              className={`forge-orbit forge-orbit-${i + 1}`}
+              style={{
+                width: d,
+                height: d,
+                border: `1px solid ${ring.color}`,
+                animationDuration: `${(ORBIT_BASE[i] * s.orbit).toFixed(2)}s`,
+              }}
+            />
+          );
+        })}
+      </div>
 
       {/* Thin silver rim. */}
       <span

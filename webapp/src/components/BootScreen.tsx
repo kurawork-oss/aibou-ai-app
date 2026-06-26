@@ -3,11 +3,12 @@
 /**
  * BootScreen — full-screen FORGE OS splash that MASKS backend cold-start.
  *
- * On mount we poll `${NEXT_PUBLIC_API_URL}/health` every 1.5s (up to ~60s),
- * showing the pulsing core orb, "BOOTING THE FORGE OS…", and a rotating status
- * line ("WAKING CORE…", "ESTABLISHING LINK…"). When healthy we fade out and
- * render children. If it never responds we show an offline / retry state — but
- * the user can always tap to enter. The point: never expose raw backend lag.
+ * On mount we poll `${NEXT_PUBLIC_API_URL}/health` every 1.5s (up to ~60s) over
+ * the animated loading backdrop (loading_bg.gif + holographic grid + scanline),
+ * showing the orbiting core, a boot log, and a link-progress bar. When healthy
+ * we fade out and render children. If it never responds we show an offline /
+ * retry state — but the user can always tap to enter. The point: never expose
+ * raw backend lag.
  */
 
 import { AnimatePresence, motion } from "framer-motion";
@@ -24,6 +25,13 @@ const STATUS_LINES = [
   "CALIBRATING SENSORS…",
   "SYNCING MEMORY…",
   "ALIGNING NEURAL LATTICE…",
+];
+
+const BOOT_LOG = [
+  "AUTH SESSION ............ OK",
+  "SECURE VAULT ........... LOADED",
+  "AI CORE ................ ONLINE",
+  "WORKSPACE SYNC ......... DONE",
 ];
 
 type Phase = "booting" | "ready" | "offline";
@@ -109,20 +117,34 @@ export default function BootScreen({ children }: { children: React.ReactNode }) 
         {phase !== "ready" && (
           <motion.div
             key="bootscreen"
-            className="fixed inset-0 z-50 flex flex-col items-center justify-center px-6"
+            className="fixed inset-0 z-50 flex flex-col items-center justify-center overflow-hidden px-6"
             style={{ background: "var(--bg)" }}
             initial={{ opacity: 1 }}
             exit={{ opacity: 0, transition: { duration: 0.8, ease: "easeInOut" } }}
           >
-            {/* Ambient grid / vignette backdrop. */}
+            {/* Animated loading backdrop (GIF) — blurred + dimmed for legibility. */}
             <div
               aria-hidden
               className="pointer-events-none absolute inset-0"
               style={{
-                backgroundImage:
-                  "radial-gradient(700px 480px at 50% 38%, rgba(150,200,255,0.10), transparent 60%)",
+                backgroundImage: "url('/loading_bg.gif')",
+                backgroundSize: "cover",
+                backgroundPosition: "center",
+                filter: "blur(2px) brightness(0.42) saturate(1.15)",
+                transform: "scale(1.08)",
               }}
             />
+            {/* Holographic grid + vignette + scanline over the GIF. */}
+            <div aria-hidden className="forge-grid pointer-events-none absolute inset-0 opacity-70" />
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0"
+              style={{
+                background:
+                  "radial-gradient(720px 520px at 50% 40%, rgba(150,200,255,0.10), transparent 62%), rgba(5,6,9,0.55)",
+              }}
+            />
+            <div aria-hidden className="forge-scan pointer-events-none" />
 
             <motion.div
               className="relative flex flex-col items-center text-center"
@@ -132,18 +154,36 @@ export default function BootScreen({ children }: { children: React.ReactNode }) 
             >
               <CoreOrb size={170} state={orbState} />
 
-              <h1 className="label-mono text-glow mt-9 text-[15px] font-normal text-fg-strong sm:text-base">
+              <h1 className="label-mono text-glow mt-9 text-[15px] font-normal tracking-[0.4em] text-fg-strong sm:text-base">
                 THE FORGE OS
               </h1>
 
               {phase === "booting" ? (
                 <>
-                  <p className="mt-2 text-[11px] tracking-[0.25em] text-muted label-mono">
-                    BOOTING THE FORGE OS…
-                  </p>
+                  <p className="mt-2 text-[11px] tracking-[0.25em] text-muted label-mono">SYSTEM BOOTING…</p>
+
+                  {/* Boot log — lines reveal as the link climbs. */}
+                  <div className="mt-5 min-h-[84px] w-[260px] max-w-[78vw] text-left">
+                    {BOOT_LOG.map((line, i) => {
+                      const shown = progress >= (i + 1) * 12 || elapsed > (i + 1) * 700;
+                      return (
+                        <motion.div
+                          key={line}
+                          className="text-[11px] leading-relaxed label-mono"
+                          style={{ color: "rgba(159,231,255,0.92)", letterSpacing: "0.12em" }}
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: shown ? 1 : 0 }}
+                          transition={{ duration: 0.4 }}
+                        >
+                          <span className="text-muted">▸ </span>
+                          {line}
+                        </motion.div>
+                      );
+                    })}
+                  </div>
 
                   {/* Rotating status line with a thinking shimmer. */}
-                  <div className="mt-5 h-5 overflow-hidden">
+                  <div className="mt-2 h-5 overflow-hidden">
                     <AnimatePresence mode="wait">
                       <motion.span
                         key={statusIndex}
@@ -159,21 +199,18 @@ export default function BootScreen({ children }: { children: React.ReactNode }) 
                   </div>
 
                   {/* Slim progress bar. */}
-                  <div className="mt-6 h-[3px] w-56 max-w-[70vw] overflow-hidden rounded-full bg-white/5">
+                  <div className="mt-5 h-[3px] w-56 max-w-[70vw] overflow-hidden rounded-full bg-white/5">
                     <motion.div
                       className="h-full rounded-full"
                       style={{
-                        background:
-                          "linear-gradient(90deg, rgba(150,200,255,0.5), #00f3ff)",
+                        background: "linear-gradient(90deg, rgba(150,200,255,0.5), #00f3ff)",
                         boxShadow: "0 0 12px rgba(0,243,255,0.5)",
                       }}
                       animate={{ width: `${Math.max(8, progress)}%` }}
                       transition={{ ease: "easeOut", duration: 0.3 }}
                     />
                   </div>
-                  <p className="mt-3 text-[10px] tracking-[0.2em] text-muted/70 label-mono">
-                    LINK {progress}%
-                  </p>
+                  <p className="mt-3 text-[10px] tracking-[0.2em] text-muted/70 label-mono">LINK {progress}%</p>
                 </>
               ) : (
                 // Offline / retry state.
@@ -206,9 +243,7 @@ export default function BootScreen({ children }: { children: React.ReactNode }) 
               )}
             </motion.div>
 
-            <p className="absolute bottom-6 text-[10px] tracking-[0.3em] text-muted/50 label-mono">
-              PERSONAL AI CORE
-            </p>
+            <p className="absolute bottom-6 text-[10px] tracking-[0.3em] text-muted/50 label-mono">PERSONAL AI CORE</p>
           </motion.div>
         )}
       </AnimatePresence>

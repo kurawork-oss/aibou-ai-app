@@ -13,6 +13,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useState } from "react";
 import BootScreen from "@/components/BootScreen";
+import EntryGate from "@/components/EntryGate";
 import Briefing from "@/components/Briefing";
 import Chat, { type ChatSettings } from "@/components/Chat";
 import CoreOrb, { type CoreState } from "@/components/CoreOrb";
@@ -30,9 +31,11 @@ const DEFAULT_NAME = "JARVIS";
 
 export default function Page() {
   return (
-    <BootScreen>
-      <Hud />
-    </BootScreen>
+    <EntryGate>
+      <BootScreen>
+        <Hud />
+      </BootScreen>
+    </EntryGate>
   );
 }
 
