@@ -8,6 +8,7 @@
 import { motion } from "framer-motion";
 import { useState } from "react";
 import VideoPanel from "@/components/VideoPanel";
+import { addToArchive } from "@/components/AppArchive";
 import { forgeGenerate, type ForgeKind, type ForgeResult } from "@/lib/api";
 
 const KINDS: { key: ForgeKind; label: string; hint: string; placeholder: string }[] = [
@@ -47,7 +48,14 @@ export default function Forge() {
     try {
       const r = await forgeGenerate(kind, prompt.trim());
       if (r.error) setError(r.error);
-      else setResult(r);
+      else {
+        setResult(r);
+        // Auto-save generated apps to App Archive
+        if (r.kind === "app" && r.code) {
+          const name = prompt.trim().slice(0, 40) || "Generated App";
+          addToArchive(name, prompt.trim(), r.code, r.note);
+        }
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "generation failed");
     } finally {

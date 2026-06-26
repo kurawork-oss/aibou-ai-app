@@ -31,6 +31,7 @@ export default function Vault() {
   const [docContent, setDocContent] = useState("");
   const [adding, setAdding] = useState(false);
   const [addedNote, setAddedNote] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
 
   // query
   const [question, setQuestion] = useState("");
@@ -94,6 +95,22 @@ export default function Vault() {
     } finally {
       setAdding(false);
     }
+  };
+
+  const handleFileDrop = (e: React.DragEvent | React.ChangeEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    setDragOver(false);
+    const files = "dataTransfer" in e ? e.dataTransfer.files : (e.target as HTMLInputElement).files;
+    if (!files?.length) return;
+    Array.from(files).forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const text = ev.target?.result as string;
+        setDocTitle(file.name.replace(/\.[^.]+$/, ""));
+        setDocContent(text || "");
+      };
+      reader.readAsText(file, "utf-8");
+    });
   };
 
   const ask = async () => {
@@ -187,6 +204,33 @@ export default function Vault() {
             <label className="mb-2 block text-[10px] tracking-[0.2em] text-muted label-mono">
               ADD TEXT — {selected.name}
             </label>
+
+            {/* File drop zone */}
+            <div
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={handleFileDrop}
+              className="mb-3 rounded-forge border border-dashed px-3 py-3 text-center transition"
+              style={{
+                borderColor: dragOver ? "var(--accent)" : "rgba(197,198,199,0.3)",
+                background: dragOver ? "rgba(0,243,255,0.04)" : "transparent",
+              }}
+            >
+              <p className="text-[10px] tracking-[0.16em] text-muted label-mono">
+                TXT / MD ファイルをドロップ
+              </p>
+              <label className="mt-1.5 block cursor-pointer text-[10px] text-[var(--accent)] hover:underline label-mono">
+                またはファイルを選択
+                <input
+                  type="file"
+                  accept=".txt,.md,.csv"
+                  multiple
+                  className="sr-only"
+                  onChange={handleFileDrop}
+                />
+              </label>
+            </div>
+
             <input
               value={docTitle}
               onChange={(e) => setDocTitle(e.target.value)}

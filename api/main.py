@@ -31,6 +31,8 @@ import config
 import forge
 import income
 import proactive
+import studio
+import tasks as tasks_module
 import tools
 import vault
 from memory_store import mem_add, mem_recall, mem_recent
@@ -134,6 +136,34 @@ class VaultAddRequest(BaseModel):
 class VaultQueryRequest(BaseModel):
     notebook_id: str
     question: str
+
+
+class TaskCreateRequest(BaseModel):
+    title: str
+    content: str = ""
+    status: str = "pending"
+
+
+class TaskUpdateRequest(BaseModel):
+    status: Optional[str] = None
+    response: Optional[str] = None
+    content: Optional[str] = None
+
+
+class AiCreateRequest(BaseModel):
+    name: str
+    persona: str = ""
+    model: str = "gemini-2.5-flash"
+    rules: str = ""
+
+
+class WorkflowCreateRequest(BaseModel):
+    name: str
+    steps: list = []
+
+
+class WorkflowRunRequest(BaseModel):
+    input: str = ""
 
 
 # =====================================================================
@@ -544,6 +574,109 @@ def _load_renderer():
     except Exception:
         _renderer_module = None
         return None
+
+
+# ── Tasks（アクティブタスク管理） ─────────────────────────────────
+
+@app.get("/tasks")
+async def get_tasks(status: Optional[str] = None, limit: int = 100,
+                    _auth: None = Depends(require_auth)):
+    """タスク一覧を返す。status パラメータで絞り込み可。"""
+    loop = asyncio.get_event_loop()
+    items = await loop.run_in_executor(None, lambda: tasks_module.list_tasks(status, limit))
+    return {"items": items}
+
+
+@app.post("/tasks")
+async def create_task(req: TaskCreateRequest, _auth: None = Depends(require_auth)):
+    """新しいタスクを作成する。"""
+    loop = asyncio.get_event_loop()
+    task = await loop.run_in_executor(
+        None, lambda: tasks_module.create_task(req.title, req.content, req.status)
+    )
+    if isinstance(task, dict) and task.get("error"):
+        return JSONResponse(status_code=400, content=task)
+    return task
+
+
+@app.patch("/tasks/{task_id}")
+async def update_task(task_id: str, req: TaskUpdateRequest,
+                      _auth: None = Depends(require_auth)):
+    """タスクのステータス・返答・内容を更新する。"""
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(
+        None, lambda: tasks_module.update_task(task_id, req.status, req.response, req.content)
+    )
+    if isinstance(result, dict) and result.get("error"):
+        return JSONResponse(status_code=404, content=result)
+    return result
+
+
+@app.delete("/tasks/{task_id}")
+async def delete_task(task_id: str, _auth: None = Depends(require_auth)):
+    """タスクを削除する。"""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, lambda: tasks_module.delete_task(task_id))
+
+
+# ── AI Studio（カスタムAI・ワークフロー） ──────────────────────────
+
+@app.get("/studio/ais")
+async def studio_list_ais(_auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    return {"items": await loop.run_in_executor(None, studio.list_ais)}
+
+
+@app.post("/studio/ais")
+async def studio_create_ai(req: AiCreateRequest, _auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    ai = await loop.run_in_executor(
+        None, lambda: studio.create_ai(req.name, req.persona, req.model, req.rules)
+    )
+    if isinstance(ai, dict) and ai.get("error"):
+        return JSONResponse(status_code=400, content=ai)
+    return ai
+
+
+@app.delete("/studio/ais/{ai_id}")
+async def studio_delete_ai(ai_id: str, _auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, lambda: studio.delete_ai(ai_id))
+
+
+@app.get("/studio/workflows")
+async def studio_list_workflows(_auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    return {"items": await loop.run_in_executor(None, studio.list_workflows)}
+
+
+@app.post("/studio/workflows")
+async def studio_create_workflow(req: WorkflowCreateRequest, _auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    wf = await loop.run_in_executor(
+        None, lambda: studio.create_workflow(req.name, req.steps)
+    )
+    if isinstance(wf, dict) and wf.get("error"):
+        return JSONResponse(status_code=400, content=wf)
+    return wf
+
+
+@app.delete("/studio/workflows/{wf_id}")
+async def studio_delete_workflow(wf_id: str, _auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, lambda: studio.delete_workflow(wf_id))
+
+
+@app.post("/studio/workflows/{wf_id}/run")
+async def studio_run_workflow(wf_id: str, req: WorkflowRunRequest,
+                              _auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(
+        None, lambda: studio.run_workflow(wf_id, req.input)
+    )
+    if isinstance(result, dict) and result.get("error"):
+        return JSONResponse(status_code=503, content=result)
+    return result
 
 
 # ローカル実行用エントリ（uvicorn main:app --reload と同等）
