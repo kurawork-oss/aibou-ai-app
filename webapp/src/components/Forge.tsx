@@ -7,6 +7,7 @@
 
 import { motion } from "framer-motion";
 import { useState } from "react";
+import VideoPanel from "@/components/VideoPanel";
 import { forgeGenerate, type ForgeKind, type ForgeResult } from "@/lib/api";
 
 const KINDS: { key: ForgeKind; label: string; hint: string; placeholder: string }[] = [
@@ -28,12 +29,14 @@ function download(filename: string, content: string, mime = "text/plain") {
 }
 
 export default function Forge() {
-  const [kind, setKind] = useState<ForgeKind>("app");
+  const [tab, setTab] = useState<ForgeKind | "video">("app");
   const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<ForgeResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const isVideo = tab === "video";
+  const kind: ForgeKind = isVideo ? "app" : tab;
   const active = KINDS.find((k) => k.key === kind)!;
 
   const run = async () => {
@@ -54,58 +57,74 @@ export default function Forge() {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto pb-2">
-      {/* Kind selector */}
+      {/* Kind selector (＋ VIDEO) */}
       <div className="flex flex-wrap gap-2">
         {KINDS.map((k) => (
           <button
             key={k.key}
             type="button"
-            onClick={() => setKind(k.key)}
+            onClick={() => setTab(k.key)}
             className="rounded-forge border px-3 py-1.5 text-[10px] tracking-[0.18em] label-mono transition"
             style={{
-              borderColor: k.key === kind ? "var(--accent)" : "var(--panel-bd)",
-              color: k.key === kind ? "var(--fg-strong)" : "var(--muted)",
-              boxShadow: k.key === kind ? "0 0 12px var(--glow)" : "none",
+              borderColor: tab === k.key ? "var(--accent)" : "var(--panel-bd)",
+              color: tab === k.key ? "var(--fg-strong)" : "var(--muted)",
+              boxShadow: tab === k.key ? "0 0 12px var(--glow)" : "none",
             }}
           >
             {k.label}
           </button>
         ))}
+        <button
+          type="button"
+          onClick={() => setTab("video")}
+          className="rounded-forge border px-3 py-1.5 text-[10px] tracking-[0.18em] label-mono transition"
+          style={{
+            borderColor: isVideo ? "var(--accent)" : "var(--panel-bd)",
+            color: isVideo ? "var(--fg-strong)" : "var(--muted)",
+            boxShadow: isVideo ? "0 0 12px var(--glow)" : "none",
+          }}
+        >
+          VIDEO
+        </button>
       </div>
 
-      {/* Prompt */}
-      <textarea
-        value={prompt}
-        onChange={(e) => setPrompt(e.target.value)}
-        rows={3}
-        placeholder={active.placeholder}
-        className="w-full resize-none rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2.5 text-sm text-fg-strong placeholder:text-muted focus:border-[var(--line)] focus:shadow-glow focus:outline-none"
-      />
-      <button
-        type="button"
-        onClick={run}
-        disabled={busy || !prompt.trim()}
-        className="rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] py-2.5 text-[11px] tracking-[0.2em] text-fg-strong shadow-glow transition hover:shadow-glow-strong disabled:opacity-40 label-mono"
-      >
-        {busy ? "GENERATING…" : `GENERATE ${active.label}`}
-      </button>
+      {isVideo ? (
+        <VideoPanel />
+      ) : (
+        <>
+          {/* Prompt */}
+          <textarea
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            rows={3}
+            placeholder={active.placeholder}
+            className="w-full resize-none rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2.5 text-sm text-fg-strong placeholder:text-muted focus:border-[var(--line)] focus:shadow-glow focus:outline-none"
+          />
+          <button
+            type="button"
+            onClick={run}
+            disabled={busy || !prompt.trim()}
+            className="rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] py-2.5 text-[11px] tracking-[0.2em] text-fg-strong shadow-glow transition hover:shadow-glow-strong disabled:opacity-40 label-mono"
+          >
+            {busy ? "GENERATING…" : `GENERATE ${active.label}`}
+          </button>
 
-      {/* Loading shimmer (keeps the wait branded, never a raw lag) */}
-      {busy && (
-        <motion.div
-          className="panel p-4 text-center text-[11px] tracking-[0.2em] text-muted label-mono"
-          animate={{ opacity: [0.4, 1, 0.4] }}
-          transition={{ duration: 1.4, repeat: Infinity }}
-        >
-          ◈ FORGING {active.label}…
-        </motion.div>
+          {/* Loading shimmer (keeps the wait branded, never a raw lag) */}
+          {busy && (
+            <motion.div
+              className="panel p-4 text-center text-[11px] tracking-[0.2em] text-muted label-mono"
+              animate={{ opacity: [0.4, 1, 0.4] }}
+              transition={{ duration: 1.4, repeat: Infinity }}
+            >
+              ◈ FORGING {active.label}…
+            </motion.div>
+          )}
+
+          {error && <div className="panel p-3 text-xs text-[#ff9b9b]">⚠️ {error}</div>}
+
+          {result && !busy && <ForgeResultView result={result} />}
+        </>
       )}
-
-      {error && (
-        <div className="panel p-3 text-xs text-[#ff9b9b]">⚠️ {error}</div>
-      )}
-
-      {result && !busy && <ForgeResultView result={result} />}
     </div>
   );
 }

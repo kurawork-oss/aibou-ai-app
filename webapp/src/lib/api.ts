@@ -339,3 +339,93 @@ export async function incomeSetStatus(id: string, action: "approve" | "reject"):
   const data = (await res.json().catch(() => ({ ok: false }))) as { ok?: boolean };
   return Boolean(data.ok);
 }
+
+/* ---------------- Document Vault (knowledge / RAG) ---------------- */
+export interface VaultNotebook {
+  id: string;
+  name: string;
+  doc_count?: number;
+}
+
+/** GET /vault/notebooks */
+export async function vaultList(): Promise<VaultNotebook[]> {
+  const res = await fetch(`${requireApiUrl()}/vault/notebooks`, {
+    method: "GET",
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`Vault list failed (${res.status})`);
+  const data = (await res.json().catch(() => ({ items: [] }))) as { items?: VaultNotebook[] };
+  return data.items ?? [];
+}
+
+/** POST /vault/create */
+export async function vaultCreate(name: string): Promise<VaultNotebook> {
+  const res = await fetch(`${requireApiUrl()}/vault/create`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ name }),
+  });
+  const data = (await res.json().catch(() => ({}))) as VaultNotebook & { error?: string };
+  if (!res.ok && !data.error) throw new Error(`Vault create failed (${res.status})`);
+  return data;
+}
+
+/** POST /vault/add */
+export async function vaultAddText(notebookId: string, title: string, content: string): Promise<{ ok: boolean }> {
+  const res = await fetch(`${requireApiUrl()}/vault/add`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ notebook_id: notebookId, title, content }),
+  });
+  const data = (await res.json().catch(() => ({ ok: false }))) as { ok?: boolean };
+  return { ok: Boolean(data.ok) };
+}
+
+/** POST /vault/query — RAG answer grounded in the notebook's docs. */
+export async function vaultQuery(notebookId: string, question: string): Promise<{ answer: string }> {
+  const res = await fetch(`${requireApiUrl()}/vault/query`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ notebook_id: notebookId, question }),
+  });
+  const data = (await res.json().catch(() => ({}))) as { answer?: string; error?: string };
+  if (!res.ok && !data.error) throw new Error(`Vault query failed (${res.status})`);
+  return { answer: data.answer ?? data.error ?? "" };
+}
+
+/* ---------------- Video ---------------- */
+export interface VideoResult {
+  video_base64?: string;
+  error?: string;
+}
+
+export interface VideoScene {
+  narration: string;
+  visual?: string;
+}
+
+/** POST /video — render an MP4 from image+narration scenes (ffmpeg backend). */
+export async function videoGenerate(scenes: VideoScene[], imagePrompt = ""): Promise<VideoResult> {
+  const res = await fetch(`${requireApiUrl()}/video`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ scenes, image_prompt: imagePrompt }),
+  });
+  const data = (await res.json().catch(() => ({}))) as VideoResult;
+  if (!res.ok && !data.error) return { error: `Video failed (${res.status})` };
+  return data;
+}
+
+/* ---------------- Proactive ---------------- */
+/** GET /briefing — today's proactive briefing text. */
+export async function getBriefing(): Promise<{ text: string }> {
+  const res = await fetch(`${requireApiUrl()}/briefing`, {
+    method: "GET",
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  const data = (await res.json().catch(() => ({}))) as { text?: string };
+  if (!res.ok) throw new Error(`Briefing failed (${res.status})`);
+  return { text: data.text ?? "" };
+}

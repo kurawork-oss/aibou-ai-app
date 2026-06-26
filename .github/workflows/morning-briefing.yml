@@ -1,0 +1,32 @@
+name: Morning Briefing
+
+# 毎朝、JARVISがこちらから話しかける「朝のブリーフィング」を生成して通知する。
+# 内容＝挨拶＋日付＋承認待ち件数＋直近の記憶ハイライト＋今日の一言。
+# Gemini / Supabase が未設定でも最低限の挨拶を返す（安全・crashしない）。
+
+on:
+  schedule:
+    - cron: "0 22 * * *"   # 毎日 22:00 UTC = 07:00 JST
+  workflow_dispatch:
+
+jobs:
+  briefing:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install google-generativeai supabase requests python-dotenv
+
+      - name: Generate & notify briefing
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        run: python scripts/morning_briefing.py

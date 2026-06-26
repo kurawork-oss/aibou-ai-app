@@ -30,6 +30,9 @@ from pydantic import BaseModel, Field
 import config
 import forge
 import income
+import proactive
+import tools
+import vault
 from memory_store import mem_add, mem_recall, mem_recent
 
 app = FastAPI(
@@ -118,6 +121,21 @@ class JobActionRequest(BaseModel):
     id: str
 
 
+class VaultCreateRequest(BaseModel):
+    name: str
+
+
+class VaultAddRequest(BaseModel):
+    notebook_id: str
+    title: str = ""
+    content: str = ""
+
+
+class VaultQueryRequest(BaseModel):
+    notebook_id: str
+    question: str
+
+
 # =====================================================================
 # プロンプト構築
 # =====================================================================
@@ -185,40 +203,102 @@ async def chat(req: ChatRequest, _auth: None = Depends(require_auth)):
     # 記憶を想起（Supabaseが無ければ空文字）
     memory_block = mem_recall(req.message, limit=8)
     system_prompt = build_system_prompt(req.name, req.persona, memory_block)
+    # ツール実行を許可（行動を頼まれた時だけマーカーを使う旨をルール付けする）
+    system_prompt += (
+        "\n\n" + tools.TOOLS_DOC + "\n"
+        "【ツールの使い方】行動（記憶・通知・副業投入・メモ保存など）を明確に頼まれた時だけ、"
+        "返答の冒頭で必ず " + tools.TOOL_CALL_MARKER + '{"tool":"名","params":{...}} を1行で出すこと。'
+        "通常の会話・質問では絶対に使わないこと。"
+    )
     prompt = build_conversation(system_prompt, req.history, req.message)
+    marker = tools.TOOL_CALL_MARKER
 
     async def event_stream():
         collected: List[str] = []
+        loop = asyncio.get_event_loop()
+
+        def _next(it):
+            try:
+                return next(it)
+            except StopIteration:
+                return None
+
         try:
-            # google-generativeai のストリーミングは同期イテレータなので、
-            # スレッドに逃がしてイベントループをブロックしないようにする。
-            loop = asyncio.get_event_loop()
             stream = await loop.run_in_executor(
                 None, lambda: model.generate_content(prompt, stream=True)
             )
-
-            def _next(it):
-                try:
-                    return next(it)
-                except StopIteration:
-                    return None
-
             it = iter(stream)
+            buf = ""
+            decided = None  # None=判定中 / "tool" / "normal"
+
             while True:
                 chunk = await loop.run_in_executor(None, _next, it)
                 if chunk is None:
                     break
-                text = getattr(chunk, "text", None)
-                if text:
+                text = getattr(chunk, "text", None) or ""
+                if not text:
+                    continue
+                if decided == "normal":
                     collected.append(text)
                     yield _sse({"token": text})
+                    continue
+                if decided == "tool":
+                    buf += text  # ツール呼び出し全体を黙って蓄積
+                    continue
+                # 判定中：先頭がツールマーカーか見極める
+                buf += text
+                stripped = buf.lstrip()
+                if not stripped:
+                    continue
+                if stripped.startswith(marker):
+                    decided = "tool"
+                elif marker.startswith(stripped):
+                    continue  # まだマーカーになる可能性 → さらにバッファ
+                else:
+                    decided = "normal"
+                    collected.append(buf)
+                    yield _sse({"token": buf})
+                    buf = ""
+
+            # 判定がつかないまま終了した短い応答は通常扱いで送出
+            if decided is None and buf:
+                collected.append(buf)
+                yield _sse({"token": buf})
+
+            # ツール呼び出しなら実行 → 結果を踏まえ最終回答をストリーム
+            if decided == "tool":
+                call, preface = tools.extract_tool_call(buf)
+                if call:
+                    result = await loop.run_in_executor(
+                        None, lambda: tools.execute_tool(call.get("tool", ""), call.get("params", {}) or {})
+                    )
+                    followup = (
+                        prompt
+                        + "\nアシスタント:（ツールを実行しました）"
+                        + "\n<<<TOOL_RESULT>>> " + result
+                        + "\nアシスタント（上の結果を踏まえ、ツール記法は使わず日本語で簡潔に報告）:"
+                    )
+                    stream2 = await loop.run_in_executor(
+                        None, lambda: model.generate_content(followup, stream=True)
+                    )
+                    it2 = iter(stream2)
+                    while True:
+                        c2 = await loop.run_in_executor(None, _next, it2)
+                        if c2 is None:
+                            break
+                        t2 = getattr(c2, "text", None)
+                        if t2:
+                            collected.append(t2)
+                            yield _sse({"token": t2})
+                else:
+                    collected.append(buf)
+                    yield _sse({"token": buf})
         except Exception as e:
             yield _sse({"error": f"generation failed: {e}"})
 
-        # 完了通知
         yield _sse({"done": True})
 
-        # 会話を記憶（best-effort・失敗してもクライアントには影響しない）
+        # 会話を記憶（best-effort）
         try:
             full = "".join(collected).strip()
             if req.message:
@@ -368,6 +448,39 @@ async def income_approve(req: JobActionRequest, _auth: None = Depends(require_au
 async def income_reject(req: JobActionRequest, _auth: None = Depends(require_auth)):
     ok = await asyncio.get_event_loop().run_in_executor(None, lambda: income.set_status(req.id, "rejected"))
     return {"ok": ok}
+
+
+# ── Document Vault（知識/RAG） ───────────────────────────────────
+@app.get("/vault/notebooks")
+async def vault_notebooks(_auth: None = Depends(require_auth)):
+    items = await asyncio.get_event_loop().run_in_executor(None, vault.list_notebooks)
+    return {"items": items}
+
+
+@app.post("/vault/create")
+async def vault_create(req: VaultCreateRequest, _auth: None = Depends(require_auth)):
+    return await asyncio.get_event_loop().run_in_executor(None, lambda: vault.create_notebook(req.name))
+
+
+@app.post("/vault/add")
+async def vault_add(req: VaultAddRequest, _auth: None = Depends(require_auth)):
+    return await asyncio.get_event_loop().run_in_executor(
+        None, lambda: vault.add_text(req.notebook_id, req.title, req.content)
+    )
+
+
+@app.post("/vault/query")
+async def vault_query(req: VaultQueryRequest, _auth: None = Depends(require_auth)):
+    return await asyncio.get_event_loop().run_in_executor(
+        None, lambda: vault.query(req.notebook_id, req.question)
+    )
+
+
+# ── プロアクティブ（今日のブリーフィング） ───────────────────────
+@app.get("/briefing")
+async def briefing(_auth: None = Depends(require_auth)):
+    text = await asyncio.get_event_loop().run_in_executor(None, proactive.build_briefing)
+    return {"text": text}
 
 
 @app.post("/video")

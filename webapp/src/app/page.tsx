@@ -13,13 +13,15 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useState } from "react";
 import BootScreen from "@/components/BootScreen";
+import Briefing from "@/components/Briefing";
 import Chat, { type ChatSettings } from "@/components/Chat";
 import CoreOrb, { type CoreState } from "@/components/CoreOrb";
 import Forge from "@/components/Forge";
 import Income from "@/components/Income";
+import Vault from "@/components/Vault";
 import { health } from "@/lib/api";
 
-type View = "chat" | "forge" | "income";
+type View = "chat" | "forge" | "vault" | "income";
 
 const LS_NAME = "forge_name";
 const LS_PERSONA = "forge_persona";
@@ -106,15 +108,18 @@ function Hud() {
             {online ? "LINK ACTIVE" : "OFFLINE"}
           </span>
         </div>
-        <button
-          type="button"
-          onClick={() => setSettingsOpen(true)}
-          className="grid h-8 w-8 place-items-center rounded-lg border border-panel text-muted transition hover:border-[var(--line)] hover:text-fg-strong"
-          aria-label="Settings"
-          title="Settings"
-        >
-          <GearIcon />
-        </button>
+        <div className="flex items-center gap-2">
+          <Briefing />
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(true)}
+            className="grid h-8 w-8 place-items-center rounded-lg border border-panel text-muted transition hover:border-[var(--line)] hover:text-fg-strong"
+            aria-label="Settings"
+            title="Settings"
+          >
+            <GearIcon />
+          </button>
+        </div>
       </div>
 
       {/* Core + wordmark */}
@@ -136,6 +141,7 @@ function Hud() {
           <Chat settings={settings} voiceReplies={voiceReplies} onStateChange={setCoreState} />
         )}
         {loaded && view === "forge" && <Forge />}
+        {loaded && view === "vault" && <Vault />}
         {loaded && view === "income" && <Income />}
       </section>
 
@@ -174,6 +180,7 @@ function NavBar({ view, onChange }: { view: View; onChange: (v: View) => void })
   const items: { key: View; label: string }[] = [
     { key: "chat", label: "CHAT" },
     { key: "forge", label: "FORGE" },
+    { key: "vault", label: "VAULT" },
     { key: "income", label: "INCOME" },
   ];
   return (
