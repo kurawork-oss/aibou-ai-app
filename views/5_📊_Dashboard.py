@@ -28,6 +28,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown("<h2 class='cyber-title'>🧠 SYSTEM DASHBOARD & MIRO</h2>", unsafe_allow_html=True)
+room_help("Dashboard")
 
 tab_miro, tab_system = st.tabs(["🧠 Miro Board (無限キャンバス)", "📊 System Monitor (監視)"])
 

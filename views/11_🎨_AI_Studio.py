@@ -7,6 +7,7 @@ import uuid
 
 st.markdown("<h2 class='cyber-title'>🎨 AI STUDIO</h2>", unsafe_allow_html=True)
 st.caption("/// 自分専用AIを作成し、複数AIを連鎖させて自動化する（Dify風） ///")
+db_warning()  # DB未接続だと作成したAI/ワークフローは保存されないため警告
 
 _vault = load_vault() or {}
 _ais = list(_vault.get("custom_ais", []) or [])

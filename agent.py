@@ -664,9 +664,21 @@ def _tools_doc():
 
 def _build_system_prompt():
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S (%a)")
+    # 設定可能なペルソナ（Settings → 🧠 コア設定 で変更／Vaultに保存）
+    try:
+        name = (st.session_state.get("assistant_name") or "AIbou").strip() or "AIbou"
+        persona = (st.session_state.get("persona_prompt") or "").strip()
+    except Exception:
+        name, persona = "AIbou", ""
+    intro = (f"あなたは{name}（ユーザーの相棒AI）です。ユーザーの秘書・参謀として、会話するだけでなく、"
+             "カレンダー登録・タスク管理・通知送信・情報収集など、実際の行動を実行できます。\n\n")
+    if persona:
+        intro += "【あなたの人格・話し方（最優先で厳守）】\n" + persona + "\n\n"
+    tone = ("- 絵文字は控えめに、冷静で端的なトーンを維持すること。"
+            if not persona else
+            "- 上記の人格・話し方を、すべての応答で一貫して維持すること。")
     return (
-        "あなたはAIbou（相棒AI）です。ユーザーの秘書・参謀として、会話するだけでなく、"
-        "カレンダー登録・タスク管理・通知送信・情報収集など、実際の行動を実行できます。\n\n"
+        intro +
         f"現在時刻: {now}\n\n"
         "【利用可能なツール】\n" + _tools_doc() + "\n\n"
         "【ツールの使い方（厳守）】\n"
@@ -677,7 +689,7 @@ def _build_system_prompt():
         "- 普段の雑談や質問では絶対にTOOL_CALLを出力しないこと。\n"
         "- ツールの実行結果は <<<TOOL_RESULT>>> として渡されるので、それを踏まえて簡潔な日本語で"
         "報告し、必要なら次のアクションを提案すること。\n"
-        "- 絵文字は控えめに、冷静で端的なトーンを維持すること。"
+        + tone
     )
 
 

@@ -15,6 +15,13 @@ if "ai_voice_base64" not in st.session_state: st.session_state.ai_voice_base64 =
 if "just_generated_audio" not in st.session_state: st.session_state.just_generated_audio = False
 if "pending_action" not in st.session_state: st.session_state.pending_action = None
 
+# チャット履歴をVault(Supabase)から復元（初回のみ。再起動でも会話ログが残る）
+if not st.session_state.get("_chat_hydrated"):
+    _saved_chat = vault_get("chat_history", [])
+    if _saved_chat and not st.session_state.global_chat_history:
+        st.session_state.global_chat_history = _saved_chat
+    st.session_state._chat_hydrated = True
+
 v_data = st.session_state.ai_voice_base64 if st.session_state.ai_voice_base64 else ""
 autoplay_attr = "autoplay" if st.session_state.just_generated_audio else ""
 st.session_state.just_generated_audio = False
@@ -50,6 +57,33 @@ if st.session_state.icon_b64:
 else:
     st.markdown("<h2 class='hub-title' style='text-align:center;'>⬡ THE FORGE OS</h2>", unsafe_allow_html=True)
 
+# --- ①.5 初回ガイド／未設定の誘導（新規ユーザー向け・分かりやすさ強化） ---
+# 初回（onboarded=False）はコアの使い方を3ステップで案内。理解したら保存して非表示。
+if not st.session_state.get("onboarded", False):
+    with st.container(border=True):
+        st.markdown("#### 🚀 はじめての方へ — AIbou OS の使い方")
+        st.markdown(
+            "**AIbou** は、中央の **コア（AI）に話しかけて何でも頼める司令塔** です。\n\n"
+            "1. 🔑 **Settings → 🔐 Secure Vault** で **Gemini APIキー** を設定（左上が🟢ONLINEに）\n"
+            "2. 💬 下の **コマンド欄** でコアに話しかける（`/help` でコマンド一覧）\n"
+            "3. ◀▶ で **モード** を切替え、各部屋を開く（ボタンにマウスを乗せると説明）"
+        )
+        _oc1, _oc2 = st.columns(2)
+        if _oc1.button("🔑 まずキーを設定", key="onb_key", use_container_width=True):
+            st.session_state.current_mode = "Settings"; st.rerun()
+        if _oc2.button("✓ 理解した（閉じる）", key="onb_done", use_container_width=True, type="primary"):
+            try:
+                _v = load_vault() or {}; _v["onboarded"] = True; save_vault(_v)
+            except Exception:
+                pass
+            st.session_state.onboarded = True; st.rerun()
+elif not _gem_on:
+    # ガイドは閉じたがキー未設定 → コアが動かないので簡潔に誘導
+    with st.container(border=True):
+        st.markdown("🔴 **OFFLINE** — コアを動かすには **Gemini APIキー** が必要です。")
+        if st.button("🔑 Settings でキーを設定", key="off_key", use_container_width=True):
+            st.session_state.current_mode = "Settings"; st.rerun()
+
 # --- ② 小さなカルーセル：◀ ❖ MODE ▶（ロゴ直下・中央寄せ） ---
 _n = len(MODES)
 _cs = st.columns([2, 1, 1.6, 1, 2])
@@ -71,8 +105,18 @@ if _cs[3].button("▶", key="mode_next", use_container_width=True):
     st.session_state.hub_mode_index = (st.session_state.hub_mode_index + 1) % _n
     st.rerun()
 
-# --- モードの簡単な説明 ---
+# --- モードの簡単な説明 ＋ いつでも開けるガイド ---
 st.markdown(f"<div class='mode-desc'>{_mode['desc']}</div>", unsafe_allow_html=True)
+_gc1, _gc2, _gc3 = st.columns([2, 1.6, 2])
+with _gc2:
+    with st.popover("❓ ガイド", use_container_width=True):
+        st.caption("◀▶ でモードを切替。各モードと部屋の役割：")
+        _rjp = globals().get("ROOM_JP", {})
+        for _m in MODES:
+            st.markdown(f"**{_m['icon']} {_m['name']}** — {_m['desc']}")
+            for _d, _s, _t in _m.get("rooms", []):
+                _hint = _rjp.get(_t, "")
+                st.markdown(f"　• **{_d}**{('：' + _hint) if _hint else ''}")
 
 
 # --- ③ コア（主役）を中央に、左右に入口ボタン（権限で出し分け） ---
@@ -93,8 +137,10 @@ _left, _right = _rooms[:_half], _rooms[_half:]
 
 def _room_buttons(rooms, side):
     st.markdown("<div style='height:70px'></div>", unsafe_allow_html=True)  # コアと縦位置を合わせる
+    _rjp = globals().get("ROOM_JP", {})
     for _disp, _target in rooms:
-        if st.button(_disp, key=f"room_{side}_{_target}", use_container_width=True):
+        if st.button(_disp, key=f"room_{side}_{_target}", use_container_width=True,
+                     help=_rjp.get(_target)):
             st.session_state.current_mode = _target
             st.rerun()
 
@@ -168,8 +214,25 @@ if not st.session_state.pending_action:
         st.session_state.global_chat_history.append({"role": "user", "avatar": "👤", "content": spoken_text})
         st.rerun()
 
+    # 📷 画像を添付（コアの「目」：Geminiで理解）
+    _img_file = None
+    with st.expander("📷 画像を添付して質問（コアが画像を見て答えます）", expanded=False):
+        _img_file = st.file_uploader(
+            "画像を選択（PNG/JPG/WebP）", type=["png", "jpg", "jpeg", "webp"],
+            key=f"hub_img_{st.session_state.get('img_uploader_key', 0)}",
+            label_visibility="collapsed",
+        )
+        if _img_file is not None:
+            st.image(_img_file, use_container_width=True)
+            st.caption("この状態で下のコマンド欄に質問を入力すると、画像を見て回答します。")
+
     if st.session_state.get("show_chat_input", True):
         if prompt := st.chat_input("/// コマンドを入力してください、ボス", key="console_input"):
+            if _img_file is not None:
+                st.session_state.pending_image = {"data": _img_file.getvalue(),
+                                                  "mime": _img_file.type or "image/png"}
+                st.session_state.img_uploader_key = st.session_state.get("img_uploader_key", 0) + 1
+                prompt = prompt + "　〔📷画像添付〕"
             st.session_state.global_chat_history.append({"role": "user", "avatar": "👤", "content": prompt})
             st.rerun()
 
@@ -188,11 +251,17 @@ if st.session_state.global_chat_history and st.session_state.global_chat_history
                 _cmds = None
             _is_cmd = bool(_cmds and _cmds.is_command(last_prompt))
             pending = None
-            if _is_cmd:
+            _pimg = st.session_state.get("pending_image")
+            if _pimg:
+                # 📷 画像つきの質問 → Geminiの『目』で理解して回答
+                ai_text = get_vision_response(_pimg.get("data"), last_prompt, _pimg.get("mime", "image/png"))
+                st.session_state.pop("pending_image", None)
+            elif _is_cmd:
                 # "/" 始まりはアプリ専用コマンドとして即実行（run_agent を介さない）
                 ai_text = _cmds.handle(last_prompt)
                 if ai_text == "__CLEAR__":
                     st.session_state.global_chat_history = []
+                    persist_vault_key("chat_history", [])  # クリアも永続化
                     st.rerun()
             else:
                 ai_text, _updated, pending = run_agent(last_prompt, prior_history)
@@ -201,18 +270,14 @@ if st.session_state.global_chat_history and st.session_state.global_chat_history
 
             st.markdown(ai_text)
 
-            # 読み上げ（コマンド応答は読み上げない）
+            # 読み上げ（コマンド応答は読み上げない）。edge-tts(自然な声)→gTTSフォールバック。
             if (not _is_cmd) and st.session_state.get("voice_enabled", True):
-                try:
-                    clean_text = ai_text.replace("*", "").replace("#", "").replace("`", "").replace("_", "")
-                    if clean_text.strip():
-                        tts = gTTS(text=clean_text[:200], lang='ja', slow=st.session_state.get("voice_slow", False))
-                        audio_fp = io.BytesIO()
-                        tts.write_to_fp(audio_fp)
-                        st.session_state.ai_voice_base64 = base64.b64encode(audio_fp.getvalue()).decode()
-                        st.session_state.just_generated_audio = True
-                except Exception:
-                    pass
+                clean_text = ai_text.replace("*", "").replace("#", "").replace("`", "").replace("_", "")
+                _b64 = synthesize_voice(clean_text)
+                if _b64:
+                    st.session_state.ai_voice_base64 = _b64
+                    st.session_state.just_generated_audio = True
 
             st.session_state.global_chat_history.append({"role": "assistant", "avatar": "◈", "content": ai_text})
+            persist_vault_key("chat_history", st.session_state.global_chat_history[-50:])  # 直近50件を永続化
             st.rerun()

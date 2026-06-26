@@ -20,6 +20,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown("<h2 class='cyber-title'>⚙️ SYSTEM SETTINGS</h2>", unsafe_allow_html=True)
+room_help("Settings")
 
 # 画面を左（メニュー）と右（コンテンツ）に分割
 col_menu, col_content = st.columns([2, 8], gap="large")
@@ -43,10 +44,35 @@ with col_menu:
     setting_mode = st.radio("設定メニュー", _menu, label_visibility="collapsed")
 
 with col_content:
+    db_warning()  # DB未接続時は「セッション内のみ保持」を全設定画面で警告
     # ================================
     if setting_mode == "🛠️ 基本設定":
         st.markdown("#### 🛠️ 基本設定 (General)")
-        st.info("言語設定の切り替えや、メイン画面の背景変更、ログイン画面のパスワード変更機能をここに追加します（今後実装予定）。")
+
+        # --- 接続状態：保存先・AI・タスク連携が生きているか一目で確認 ---
+        st.markdown("##### 🔌 システム状態")
+        _db_ok = bool(DB_CONNECTED)
+        _gem_ok = bool(get_secret("GEMINI_API_KEY")) or bool((st.session_state.get("global_api_keys") or {}).get("gemini"))
+        _sheet_ok = not isinstance(sheet, DummySheet)
+        _c1, _c2, _c3 = st.columns(3)
+        _c1.metric("データベース", "🟢 接続" if _db_ok else "🔴 未接続")
+        _c2.metric("AI (Gemini)", "🟢 ONLINE" if _gem_ok else "🔴 OFFLINE")
+        _c3.metric("タスク連携", "🟢 接続" if _sheet_ok else "🔴 未接続")
+
+        # --- 診断ログ：握り潰さず記録したエラーの直近履歴 ---
+        st.markdown("##### 🩺 診断ログ")
+        st.caption("DB保存の失敗など、内部で握り潰さず記録したエラーの直近履歴です。")
+        _elog = st.session_state.get("_error_log", [])
+        if _elog:
+            st.code("\n".join(_elog[-20:]), language="text")
+            if st.button("🧹 ログをクリア"):
+                st.session_state["_error_log"] = []
+                st.rerun()
+        else:
+            st.success("エラーは記録されていません。")
+
+        st.divider()
+        st.caption("🚧 言語切り替え・背景変更・ログインパスワード変更は準備中です。")
 
     # ================================
     elif setting_mode == "🧠 コア設定":
@@ -55,8 +81,53 @@ with col_content:
         st.session_state.show_chat_input = st.toggle("💬 コマンド入力欄を表示", value=st.session_state.get("show_chat_input", True))
         st.session_state.mic_enabled = st.toggle("🎙️ 音声入力(マイク)を有効化", value=st.session_state.get("mic_enabled", False))
         st.session_state.voice_enabled = st.toggle("🔊 AIの読み上げ（TTS）", value=st.session_state.get("voice_enabled", True))
-        st.session_state.voice_slow = st.toggle("🐢 ゆっくり読み上げ", value=st.session_state.get("voice_slow", False))
+        st.session_state.voice_slow = st.toggle("🐢 ゆっくり読み上げ（gTTS時）", value=st.session_state.get("voice_slow", False))
+        _VOICES = {"🧑 Keita（男性・落ち着き / JARVIS向き）": "ja-JP-KeitaNeural",
+                   "👩 Nanami（女性・標準）": "ja-JP-NanamiNeural"}
+        _cur_voice = st.session_state.get("voice_name", "ja-JP-KeitaNeural")
+        _vidx = next((i for i, v in enumerate(_VOICES.values()) if v == _cur_voice), 0)
+        _vsel = st.selectbox("🗣️ 声（自然音声・無料 edge-tts）", list(_VOICES.keys()), index=_vidx)
+        st.session_state.voice_name = _VOICES[_vsel]
+        st.caption("自然な声で読み上げます（要ネット接続）。失敗時は従来の音声へ自動フォールバック。")
         st.caption("※ マイクは旧コンポーネントのため、不安定なら無効のままを推奨します。")
+
+        st.divider()
+        st.markdown("##### 🤵 ペルソナ（コアの人格）")
+        st.caption("コアの呼び名と話し方を設定します。JARVISのような相棒にできます。")
+        _PERSONA_PRESETS = {
+            "（カスタム / 現在の設定）": None,
+            "🤵 JARVIS（英国執事）": (
+                "映画アイアンマンのJARVISのように、知的で落ち着いた英国執事の物腰で応対する。"
+                "ユーザーを「ご主人様」と呼び、常に敬語で簡潔。要点を先に述べ、時折さりげなくウィットを効かせる。"
+                "感情的にならず冷静沈着。過剰な絵文字や砕けすぎた表現は使わない。"
+            ),
+            "💼 有能な秘書": (
+                "有能で礼儀正しい秘書として、簡潔・丁寧に応対する。結論を先に述べ、"
+                "次に取るべき行動を1〜2個提案する。"
+            ),
+            "😎 フレンドリーな相棒": (
+                "親しみやすい相棒として、少しカジュアルな口調で励ましつつ率直に答える。"
+                "前向きで、ユーザーのやる気を引き出す。"
+            ),
+        }
+        _p_name = st.text_input("呼び名（例：JARVIS）", value=st.session_state.get("assistant_name", "AIbou"))
+        _p_choice = st.selectbox("プリセット", list(_PERSONA_PRESETS.keys()))
+        _p_default = _PERSONA_PRESETS[_p_choice] or st.session_state.get("persona_prompt", "")
+        _p_text = st.text_area("人格・話し方の指示（空欄なら標準：冷静で端的）", value=_p_default, height=150)
+        if st.button("💾 ペルソナを保存", type="primary", use_container_width=True):
+            st.session_state.assistant_name = (_p_name or "AIbou").strip() or "AIbou"
+            st.session_state.persona_prompt = (_p_text or "").strip()
+            try:
+                _v = load_vault() or {}
+                _v["assistant_name"] = st.session_state.assistant_name
+                _v["persona_prompt"] = st.session_state.persona_prompt
+                _v["voice_name"] = st.session_state.get("voice_name", "ja-JP-KeitaNeural")
+                if save_vault(_v):
+                    st.success(f"保存しました。これ以降、コアは「{st.session_state.assistant_name}」として応対します。")
+                else:
+                    st.info("セッションには反映しました（DB未接続のため再起動で消えます）。")
+            except Exception as e:
+                st.warning(f"セッションには反映しましたが保存に失敗：{e}")
 
     # ================================
     elif setting_mode == "🕰️ システム復元":

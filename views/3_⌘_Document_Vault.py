@@ -1,10 +1,15 @@
 if "vault_notebooks" not in st.session_state:
-    st.session_state.vault_notebooks = {} 
+    st.session_state.vault_notebooks = vault_get("notebooks", {}) or {}  # Vault(Supabase)から復元
 if "current_vault_nb" not in st.session_state:
     st.session_state.current_vault_nb = None
 
+def _save_notebooks():
+    """ノート（資料＋チャット）をVault(Supabase)に永続化する。再起動でも残す。"""
+    persist_vault_key("notebooks", st.session_state.vault_notebooks)
+
 if st.session_state.current_vault_nb is None:
     st.markdown("<h2 class='cyber-title'>⌘ DOCUMENT VAULT</h2>", unsafe_allow_html=True)
+    room_help("Document Vault")
     st.caption("資料保管庫（ノートブック）を選択、または新規作成してください。")
     
     items = ["__NEW__"] + list(st.session_state.vault_notebooks.keys())
@@ -22,6 +27,7 @@ if st.session_state.current_vault_nb is None:
                                 if new_nb_name and new_nb_name not in st.session_state.vault_notebooks:
                                     st.session_state.vault_notebooks[new_nb_name] = {"docs": {}, "chat": []}
                                     st.session_state.current_vault_nb = new_nb_name
+                                    _save_notebooks()
                                     st.rerun()
                     else:
                         with st.container(border=True):
@@ -37,6 +43,7 @@ if st.session_state.current_vault_nb is None:
                             with c2:
                                 if st.button("DEL", key=f"del_nb_{nb_name}", use_container_width=True):
                                     del st.session_state.vault_notebooks[nb_name]
+                                    _save_notebooks()
                                     st.rerun()
 
 else:
@@ -72,6 +79,7 @@ else:
                         # 🤖 マルチAI対応：get_ai_response 経由で呼び出す
                         response_text = get_ai_response(system_instruction + "\n質問: " + prompt, model='gemini-2.5-flash')
                     nb_data["chat"].append({"role": "assistant", "avatar": "🤖", "content": response_text})
+                    _save_notebooks()
                     st.rerun()
                 except Exception as e:
                     st.error(f"解析エラー: {e}")
@@ -91,6 +99,7 @@ else:
                                 nb_data["docs"][uf.name] = pdf_text
                             else:
                                 nb_data["docs"][uf.name] = io.StringIO(uf.getvalue().decode("utf-8")).read()
+                    _save_notebooks()
                     st.rerun()
 
         if nb_data["docs"]:
@@ -100,4 +109,5 @@ else:
                     st.code(nb_data["docs"][fname][:200] + "...", language="text")
                     if st.button(f"DELETE", key=f"del_{fname}", use_container_width=True):
                         del nb_data["docs"][fname]
+                        _save_notebooks()
                         st.rerun()

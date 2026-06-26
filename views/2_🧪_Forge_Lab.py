@@ -185,32 +185,38 @@ if st.session_state.current_forge_ws is None and st.session_state.selected_forge
     st.markdown('<div class="central-logo">⬡</div>', unsafe_allow_html=True)
     st.markdown("<h2 class='saas-title'>❖ FORGE STUDIO ❖</h2>", unsafe_allow_html=True)
     st.markdown("<p class='central-logo-sub'>SELECT SYSTEM ENGINE</p>", unsafe_allow_html=True)
+    room_help("Forge Lab")
     
     st.markdown('<div class="hologram-platform"></div>', unsafe_allow_html=True)
 
-    c1, c2, c3, c4 = st.columns(4, gap="large")
-    with c1:
-        if st.button("APP STUDIO", use_container_width=True): 
+    r1 = st.columns(3, gap="large")
+    with r1[0]:
+        if st.button("APP STUDIO", use_container_width=True):
             st.session_state.selected_forge_mode = "APP"; st.rerun()
-    with c2:
-        if st.button("IMAGE GENERATOR", use_container_width=True): 
+    with r1[1]:
+        if st.button("IMAGE GENERATOR", use_container_width=True):
             st.session_state.selected_forge_mode = "IMAGE"; st.rerun()
-    with c3:
-        if st.button("VIDEO PRODUCTION", use_container_width=True): 
+    with r1[2]:
+        if st.button("VIDEO PRODUCTION", use_container_width=True):
             st.session_state.selected_forge_mode = "VIDEO"; st.rerun()
-    with c4:
-        if st.button("SLIDE DECK", use_container_width=True): 
+    r2 = st.columns(3, gap="large")
+    with r2[0]:
+        if st.button("SLIDE DECK", use_container_width=True):
             st.session_state.selected_forge_mode = "SLIDE"; st.rerun()
+    with r2[1]:
+        if st.button("SHEET BUILDER", use_container_width=True):
+            st.session_state.selected_forge_mode = "SHEET"; st.rerun()
+    with r2[2]:
+        if st.button("DOC WRITER", use_container_width=True):
+            st.session_state.selected_forge_mode = "DOC"; st.rerun()
 
     st.markdown("""
         <div class="desc-display-area">
-            <div class="desc-text default-desc">HOVER OVER AN ENGINE TO VIEW SPECIFICATIONS</div>
-            <div class="desc-text app-desc">🤖 <b style="color:#c5c6c7;">[ APP STUDIO ]</b><br>ボスの指示から、美しくバグのないアプリケーションのUIとロジックを自律的に構築・プレビューします。</div>
-            <div class="desc-text img-desc">🎨 <b style="color:#c5c6c7;">[ IMAGE GENERATOR ]</b><br>画像生成AIのための完璧な英語プロンプトを構築し、照明や画角を計算した最高の1枚を引き出します。</div>
-            <div class="desc-text vid-desc">🎬 <b style="color:#c5c6c7;">[ VIDEO PRODUCTION ]</b><br>SoraやVeo等の最先端動画生成AIに向けた、プロ品質の絵コンテとカメラワーク指定を作成します。</div>
-            <div class="desc-text slide-desc">📊 <b style="color:#c5c6c7;">[ SLIDE DECK ]</b><br>論理的なプレゼン構成を考案し、説得力のあるスライド資料(.pptx)を即座に出力します。</div>
+            <div class="desc-text default-desc">SELECT AN ENGINE / エンジンを選択（アプリ・画像・動画・スライド・表計算・文書）</div>
         </div>
     """, unsafe_allow_html=True)
+    st.caption("🤖 APP=アプリ生成・実行／🎨 IMAGE=画像生成／🎬 VIDEO=絵コンテ＋MP4／"
+               "📊 SLIDE=.pptx／📈 SHEET=表データ(CSV/Excel)／📝 DOC=文書(Markdown/Word)")
 
 # ==========================================
 # 🚪 ステージ2：モード別プロジェクト管理画面
@@ -299,6 +305,8 @@ else:
             elif ws_type == "IMAGE": placeholder_text = "例：サイバーパンクな都市"
             elif ws_type == "VIDEO": placeholder_text = "例：コーヒーが弾ける動画"
             elif ws_type == "SLIDE": placeholder_text = "例：AIの未来について5枚"
+            elif ws_type == "SHEET": placeholder_text = "例：2024年の月別売上表（商品別）"
+            elif ws_type == "DOC": placeholder_text = "例：新サービスの企画書を作成"
             
             forge_prompt = st.text_area("PROMPT", placeholder=placeholder_text, height=150, label_visibility="collapsed")
             submitted = st.form_submit_button("EXECUTE", use_container_width=True, type="primary")
@@ -375,8 +383,47 @@ else:
                 
         elif ws_type == "VIDEO":
             if ws_data["code"]:
-                st.info("🔌 API Integration Pending: ここに動画生成APIを接続しMP4を表示します。")
-                st.success("✅ スクリプトとビデオプロンプトが準備完了しました。")
+                st.success("✅ 絵コンテ／動画プロンプトが完成。画像＋ナレーションでMP4を生成できます。")
+
+                if st.button("🎬 動画(MP4)を生成", use_container_width=True, type="primary"):
+                    import renderer
+                    _txt = ws_data["code"]
+                    # 英語の動画プロンプト（バッククォート内）を抽出
+                    _ep = ""
+                    _m = re.search(r'プロンプト[^\n]*\n+`+\s*([^`]+?)\s*`+', _txt, re.DOTALL)
+                    if not _m:
+                        _m = re.search(r'`([^`]{20,})`', _txt)
+                    if _m:
+                        _ep = _m.group(1).strip()
+                    # シーン（Scene N: 説明）を抽出。無ければコンセプト全体を1シーンに。
+                    _scenes = []
+                    for _line in _txt.split("\n"):
+                        _sm = re.search(r'Scene\s*\d+[^:：]*[:：]\s*(.+)', _line)
+                        if _sm:
+                            _narr = re.sub(r'[*`#>_]', '', _sm.group(1)).strip(" -")
+                            if _narr:
+                                _scenes.append({"narration": _narr, "visual": _ep})
+                    if not _scenes:
+                        _concept = re.sub(r'[*`#>_]', '', _txt)[:500].strip()
+                        _scenes = [{"narration": _concept or "AI generated video", "visual": _ep}]
+
+                    if not renderer.is_available():
+                        st.error("⚠️ 動画合成にはFFmpegが必要です。packages.txt に ffmpeg を追加済みのため、再デプロイ後に利用できます。")
+                    else:
+                        with st.spinner("🎬 画像とナレーションからMP4を合成中…（数十秒かかります）"):
+                            _vp = renderer.render_forge_video(_scenes, _ep)
+                        if _vp:
+                            ws_data["video_path"] = _vp
+                            st.rerun()
+                        else:
+                            st.error("動画の生成に失敗しました（画像取得・ネットワーク・FFmpegをご確認ください）。")
+
+                if ws_data.get("video_path") and os.path.exists(ws_data["video_path"]):
+                    st.video(ws_data["video_path"])
+                    with open(ws_data["video_path"], "rb") as _vf:
+                        st.download_button("[ DOWNLOAD .mp4 ]", data=_vf.read(),
+                                           file_name=f"{ws_name.replace(' ', '_')}.mp4",
+                                           mime="video/mp4", use_container_width=True)
                 
                 with st.expander("📝 STORYBOARD & PROMPT", expanded=True):
                     edited_code = st.text_area("Markdown Editor", value=ws_data["code"], height=300)
@@ -392,8 +439,29 @@ else:
                 st.success("✅ プレゼン構成が完了しました。下のボタンから PowerPoint をダウンロードできます！")
                 try:
                     prs = Presentation()
-                    slides_data = json.loads(ws_data["code"])
-                    
+                    # AIはMarkdown(--- 区切り)を生成する。まずJSONを試し、ダメならMarkdownを解析。
+                    try:
+                        slides_data = json.loads(ws_data["code"])
+                    except Exception:
+                        slides_data = None
+                    if not isinstance(slides_data, list):
+                        slides_data = []
+                        for _block in re.split(r'\n-{3,}\n', ws_data["code"]):
+                            _block = _block.strip()
+                            if not _block:
+                                continue
+                            _title, _bullets = "", []
+                            for _ln in _block.split("\n"):
+                                _s = _ln.strip()
+                                if not _s:
+                                    continue
+                                _h = re.match(r'^#{1,3}\s+(.*)', _s)
+                                if _h and not _title:
+                                    _title = _h.group(1).strip()
+                                else:
+                                    _bullets.append(re.sub(r'^[\-\*>#\s]+', '', _s))
+                            slides_data.append({"title": _title or "Slide", "bullets": _bullets})
+
                     for slide_info in slides_data:
                         slide_layout = prs.slide_layouts[1]
                         slide = prs.slides.add_slide(slide_layout)
@@ -423,9 +491,73 @@ else:
                     st.error(f"パワポの生成に失敗しました: {e}")
                     st.code(ws_data["code"])
                 
-                with st.expander("⚙️ SLIDE DATA (JSON)"):
-                    edited_code = st.text_area("JSON Editor", value=ws_data["code"], height=300)
+                with st.expander("⚙️ SLIDE DATA (Markdown / JSON)"):
+                    edited_code = st.text_area("Slide Editor", value=ws_data["code"], height=300)
                     if st.button("UPDATE SLIDES"):
+                        ws_data["code"] = edited_code
+                        st.rerun()
+            else:
+                st.info("Canvas is empty.")
+
+        elif ws_type == "SHEET":
+            if ws_data["code"]:
+                st.success("✅ 表データが完成しました。CSV / Excel でダウンロードできます。")
+                _safe = ws_name.replace(' ', '_')
+                try:
+                    import pandas as _pd
+                    _df = _pd.read_csv(io.StringIO(ws_data["code"]))
+                    st.dataframe(_df, use_container_width=True)
+                    st.download_button("[ DOWNLOAD .csv ]", data=ws_data["code"].encode("utf-8-sig"),
+                                       file_name=f"{_safe}.csv", mime="text/csv", use_container_width=True)
+                    try:
+                        _xio = io.BytesIO()
+                        with _pd.ExcelWriter(_xio, engine="openpyxl") as _w:
+                            _df.to_excel(_w, index=False, sheet_name="Sheet1")
+                        st.download_button("[ DOWNLOAD .xlsx ]", data=_xio.getvalue(),
+                                           file_name=f"{_safe}.xlsx",
+                                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                           type="primary", use_container_width=True)
+                    except Exception:
+                        st.caption("（Excel(.xlsx)出力は openpyxl 未導入のため利用不可。CSVをご利用ください）")
+                except Exception as e:
+                    st.error(f"表の表示に失敗しました（CSV形式を確認してください）: {e}")
+                    st.code(ws_data["code"], language="text")
+                with st.expander("⚙️ CSV を編集"):
+                    edited_code = st.text_area("CSV Editor", value=ws_data["code"], height=250)
+                    if st.button("UPDATE SHEET"):
+                        ws_data["code"] = edited_code
+                        st.rerun()
+            else:
+                st.info("Canvas is empty.")
+
+        elif ws_type == "DOC":
+            if ws_data["code"]:
+                st.success("✅ 文書が完成しました。Markdown / Word でダウンロードできます。")
+                _safe = ws_name.replace(' ', '_')
+                with st.container(border=True):
+                    st.markdown(ws_data["code"])
+                st.download_button("[ DOWNLOAD .md ]", data=ws_data["code"].encode("utf-8"),
+                                   file_name=f"{_safe}.md", mime="text/markdown", use_container_width=True)
+                try:
+                    from docx import Document as _Docx
+                    _doc = _Docx()
+                    for _line in ws_data["code"].split("\n"):
+                        _s = _line.rstrip()
+                        if _s.startswith("### "): _doc.add_heading(_s[4:], level=3)
+                        elif _s.startswith("## "): _doc.add_heading(_s[3:], level=2)
+                        elif _s.startswith("# "): _doc.add_heading(_s[2:], level=1)
+                        elif _s.startswith(("- ", "* ")): _doc.add_paragraph(_s[2:], style="List Bullet")
+                        elif _s.strip(): _doc.add_paragraph(_s)
+                    _dio = io.BytesIO(); _doc.save(_dio)
+                    st.download_button("[ DOWNLOAD .docx ]", data=_dio.getvalue(),
+                                       file_name=f"{_safe}.docx",
+                                       mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                       type="primary", use_container_width=True)
+                except Exception:
+                    st.caption("（Word(.docx)出力は python-docx 未導入のため利用不可。Markdownをご利用ください）")
+                with st.expander("⚙️ 本文(Markdown)を編集"):
+                    edited_code = st.text_area("Markdown Editor", value=ws_data["code"], height=300)
+                    if st.button("UPDATE DOC"):
                         ws_data["code"] = edited_code
                         st.rerun()
             else:
@@ -552,7 +684,39 @@ else:
                     ...
                     
                     スライドを出力した後に、「このプレゼンを話す際のアドバイス（トークスクリプトのヒント）」を日本語で添えること。
-                    
+
+                    {history_text}
+                    """
+
+                elif "SHEET" in ws_type:
+                    system_instruction = f"""
+                    あなたは一流のデータアナリスト兼スプレッドシート設計者です。
+                    ユーザーの要望から、実用的な表データ（スプレッドシート）を設計して出力します。
+
+                    【出力ルール】
+                    1. 表データは必ずCSV形式とし、先頭行をヘッダーにして、次のコードフェンス内にのみ記述すること：
+                    ```csv
+                    列1,列2,列3
+                    値,値,値
+                    ```
+                    2. 数値は単位や桁区切りを入れず、計算可能な生の数値で出力すること。
+                    3. 行数は要望に応じて十分な実用量（目安5〜30行）を用意すること。
+
+                    CSVの後に、日本語で「この表の使い方」と「追加すると便利な列」を簡潔に添えること。
+
+                    {history_text}
+                    """
+
+                elif "DOC" in ws_type:
+                    system_instruction = f"""
+                    あなたはプロのビジネスライター兼編集者です。
+                    ユーザーの要望から、構造化された読みやすい文書をMarkdownで作成します。
+
+                    【出力ルール】
+                    1. 見出し(#, ##, ###)、箇条書き(-)、太字(**)、表、引用(>)を適切に使い、論理的な構成にすること。
+                    2. そのまま提出できる完成度で、省略（…中略…）をしないこと。
+                    3. 文書本体のみを出力し、余計な前置きは書かないこと。
+
                     {history_text}
                     """
 
@@ -574,8 +738,21 @@ else:
                         ws_data["media"] = prompt_match.group(1).strip()
                         reply_text = ai_text.replace(prompt_match.group(0), "").strip()
                 
+                elif "SHEET" in ws_type:
+                    csv_match = re.search(r'```csv\n(.*?)\n```', ai_text, re.DOTALL)
+                    if csv_match:
+                        ws_data["code"] = csv_match.group(1).strip()
+                        reply_text = ai_text.replace(csv_match.group(0), "").strip() or "表データを作成しました。"
+                    else:
+                        ws_data["code"] = ai_text  # フェンスが無い場合もそのまま保持
+                        reply_text = "表データを作成しました。"
+
+                elif "DOC" in ws_type:
+                    ws_data["code"] = ai_text
+                    reply_text = "文書を作成しました。右のプレビューを確認してください。"
+
                 elif "VIDEO" in ws_type or "SLIDE" in ws_type:
-                    ws_data["code"] = ai_text 
+                    ws_data["code"] = ai_text
                     reply_text = "資料の作成が完了しました。右のプレビュー画面を確認してください。"
 
                 # 音声の生成と保存
@@ -608,6 +785,9 @@ if st.session_state.current_forge_ws and "APP" in ws_data.get("type", ""):
                 try:
                     with open(os.path.join("forge_apps", safe_name), "w", encoding="utf-8") as f:
                         f.write(app_code_input)
+                    _apps = vault_get("forge_apps", {}) or {}
+                    _apps[safe_name] = app_code_input
+                    persist_vault_key("forge_apps", _apps)  # 再起動でも残るようVaultにも保存
                     st.success(f"✅ インストール完了！ `{safe_name}` をAPP ARCHIVEに保存しました。")
                     st.balloons()
                 except Exception as e:

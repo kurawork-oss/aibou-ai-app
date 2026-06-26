@@ -21,6 +21,30 @@ if not os.path.exists(sample_app_path):
     with open(sample_app_path, "w", encoding="utf-8") as f:
         f.write("""import streamlit as st\nimport time\nst.subheader("🍅 Pomodoro Timer")\nminutes = st.slider("集中する時間 (分)", 1, 60, 25)\nif st.button("Start Timer", type="primary"): \n    with st.empty():\n        for i in range(minutes * 60, -1, -1):\n            mins, secs = divmod(i, 60)\n            st.markdown(f"<h1 style='text-align:center; color:#e53e3e; font-size: 80px;'>{mins:02d}:{secs:02d}</h1>", unsafe_allow_html=True)\n            time.sleep(1)\n        st.success("🎉 時間です！お疲れ様でした！")\n""")
 
+# 永続化：Vault(Supabase)とディスクを双方向同期
+# （Streamlit Community Cloud は再起動でディスクが消えるため、Vaultを正本にする）
+_vault_apps = vault_get("forge_apps", {}) or {}
+_sync_changed = False
+# 1) Vault → ディスク：保存済みアプリを復元
+for _fn, _code in _vault_apps.items():
+    _p = os.path.join(APPS_DIR, _fn)
+    if not os.path.exists(_p):
+        try:
+            with open(_p, "w", encoding="utf-8") as _f: _f.write(_code)
+        except Exception as _e:
+            log_error("archive.restore", _e)
+# 2) ディスク → Vault：未登録のアプリ（コア/Forge が生成）を取り込んで永続化
+for _fn in os.listdir(APPS_DIR):
+    if _fn.endswith(".py") and _fn not in _vault_apps:
+        try:
+            with open(os.path.join(APPS_DIR, _fn), "r", encoding="utf-8") as _f:
+                _vault_apps[_fn] = _f.read()
+            _sync_changed = True
+        except Exception as _e:
+            log_error("archive.capture", _e)
+if _sync_changed:
+    persist_vault_key("forge_apps", _vault_apps)
+
 # フォルダ内のPythonファイル（アプリ）を取得
 app_files = [f for f in os.listdir(APPS_DIR) if f.endswith(".py")]
 

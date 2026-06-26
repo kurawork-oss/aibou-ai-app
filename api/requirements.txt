@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+google-generativeai
+supabase
+edge-tts
+requests
+python-dotenv
+pydantic
+# /video エンドポイントで root の renderer.py を再利用する際に必要（gTTS でナレーション生成）
+gTTS

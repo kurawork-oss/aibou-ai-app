@@ -52,6 +52,62 @@ def get_secret(key, default=""):
         pass
     return os.environ.get(key, default)
 
+def _resolve_gemini_key():
+    """Geminiキーを Vault(セッション) → Secrets の順で解決する。"""
+    key = ""
+    try:
+        key = (st.session_state.get("global_api_keys", {}) or {}).get("gemini", "")
+    except Exception:
+        key = ""
+    return key or get_secret("GEMINI_API_KEY")
+
+def get_vision_response(image_bytes, prompt, mime="image/png", model="gemini-2.5-flash"):
+    """画像＋指示をGeminiに渡して理解・回答させる（マルチモーダル＝コアの『目』）。"""
+    key = _resolve_gemini_key()
+    if not key:
+        return "⚠️ Geminiのキーが未設定です。Settings → 🔐 Secure Vault で設定してください。"
+    try:
+        genai.configure(api_key=key)
+        m = genai.GenerativeModel(model)
+        resp = m.generate_content([
+            prompt or "この画像の内容を日本語で詳しく説明してください。",
+            {"mime_type": mime or "image/png", "data": image_bytes},
+        ])
+        return (resp.text or "").strip() or "（画像から有効な応答が得られませんでした）"
+    except Exception as e:
+        return f"⚠️ 画像解析エラー: {e}"
+
+def synthesize_voice(text, voice=None):
+    """テキストを音声(base64 mp3)に変換する。
+    edge-tts（無料・APIキー不要の高品質ニューラル音声）を優先し、失敗時は gTTS にフォールバック。"""
+    text = (text or "").strip()
+    if not text:
+        return None
+    voice = voice or (st.session_state.get("voice_name") or "ja-JP-KeitaNeural")
+    # 1) edge-tts（無料・自然な声）
+    try:
+        import edge_tts, asyncio
+        async def _gen():
+            buf = bytearray()
+            async for chunk in edge_tts.Communicate(text[:600], voice).stream():
+                if chunk.get("type") == "audio":
+                    buf.extend(chunk["data"])
+            return bytes(buf)
+        data = asyncio.run(_gen())
+        if data:
+            return base64.b64encode(data).decode()
+    except Exception as e:
+        log_error("tts.edge", e)
+    # 2) フォールバック：gTTS
+    try:
+        from gtts import gTTS as _gTTS
+        _buf = io.BytesIO()
+        _gTTS(text=text[:200], lang="ja", slow=bool(st.session_state.get("voice_slow", False))).write_to_fp(_buf)
+        return base64.b64encode(_buf.getvalue()).decode()
+    except Exception as e:
+        log_error("tts.gtts", e)
+        return None
+
 # === 🤖 Agent Engine（マルチAI ＆ ツール実行）を読み込む =====================
 # 失敗してもアプリ全体が落ちないよう、フォールバック実装を必ず用意する。
 try:
@@ -186,6 +242,27 @@ def _vault_uid():
         pass
     return None
 
+def log_error(context, err):
+    """例外を握り潰さず、共有の診断ログ（st.session_state._error_log）とstderrに記録する。
+    Settings → 基本設定 の「🩺 診断ログ」で直近の記録を確認できる。"""
+    import sys
+    msg = f"{datetime.datetime.now():%H:%M:%S} [{context}] {type(err).__name__}: {err}"
+    try:
+        if "_error_log" not in st.session_state:
+            st.session_state["_error_log"] = []
+        log = st.session_state["_error_log"]
+        log.append(msg)
+        del log[:-50]  # 直近50件だけ保持
+    except Exception:
+        pass
+    print("AIBOU-ERR", msg, file=sys.stderr)
+
+def db_warning():
+    """DB未接続時に「保存はこのセッション内のみ」と警告する共通バナー。"""
+    if not DB_CONNECTED:
+        st.warning("⚠️ データベース未接続：変更はこのセッション内のみ保持され、再読み込みで失われます。"
+                   "永続化するには Settings → 🔐 Secure Vault で Supabase の設定をご確認ください。")
+
 def load_vault():
     if not DB_CONNECTED: return {}
     uid = _vault_uid()
@@ -200,6 +277,7 @@ def load_vault():
             decrypted = cipher_suite.decrypt(enc_data.encode('utf-8'))
             return json.loads(decrypted.decode('utf-8'))
     except Exception as e:
+        log_error("vault.load", e)
         st.error(f"🚨 【DB読み込みエラー】: {e}")
     return {}
 
@@ -214,7 +292,32 @@ def save_vault(data):
             supabase.table("vault_data").upsert({"id": 1, "encrypted_keys": encrypted}).execute()
         return True
     except Exception as e:
+        log_error("vault.save", e)
         st.error(f"🚨 【DB書き込みエラー】: {e}")
+        return False
+
+def vault_get(key, default=None):
+    """暗号化Vault(Supabase)から1キーを取得する。DB未接続なら default。
+    App Archive のアプリ、Document Vault のノート、チャット履歴の永続化に使う。"""
+    if not DB_CONNECTED:
+        return default
+    try:
+        return (load_vault() or {}).get(key, default)
+    except Exception as e:
+        log_error(f"vault_get.{key}", e)
+        return default
+
+def persist_vault_key(key, value):
+    """暗号化Vault(Supabase)の1キーだけ更新して保存する（他キーは保持）。
+    DB未接続時は何もしない（=このセッション内のみ。再起動で消える）。成否を返す。"""
+    if not DB_CONNECTED:
+        return False
+    try:
+        v = load_vault() or {}
+        v[key] = value
+        return save_vault(v)
+    except Exception as e:
+        log_error(f"persist.{key}", e)
         return False
 
 # === 金庫の鍵をセッションへ読み込む（Auth有効時はログイン後に per-user で実行） ===
@@ -225,6 +328,10 @@ def hydrate_vault_into_session(force=False):
         st.session_state.key_slots = vd.get("key_slots", {})
         st.session_state.user_rules = vd.get("rules", "")  # AIへの常時ルール（CLAUDE rules的）
         st.session_state.custom_ais = vd.get("custom_ais", [])  # STUDIOの自分専用AI（コアから委譲可能に）
+        st.session_state.onboarded = vd.get("onboarded", False)  # 初回ガイド表示済みフラグ
+        st.session_state.assistant_name = vd.get("assistant_name", "AIbou")  # コアの呼び名（JARVIS等）
+        st.session_state.persona_prompt = vd.get("persona_prompt", "")  # コアの人格・話し方
+        st.session_state.voice_name = vd.get("voice_name", "ja-JP-KeitaNeural")  # 読み上げの声
     if "key_slots" not in st.session_state:
         st.session_state.key_slots = {}
 
@@ -467,6 +574,40 @@ FORGE_MODES = [
      "rooms": [("Evolution", "EVOLUTION", "Core Upgrade"), ("Settings", "SETTINGS", "Settings")]},
 ]
 
+# 各部屋の日本語ひとこと説明（ガイド／ツールチップ用）
+ROOM_JP = {
+    "Forge Lab": "アプリ/画像/動画/スライドをAIで生成",
+    "App Archive": "生成したミニアプリの保管・起動",
+    "Active Tasks": "実行中タスクの管理・確認待ち対応",
+    "Task History": "完了タスクのアーカイブ",
+    "Auto Income": "副業の自動化（テーマ→生成→承認）",
+    "Document Vault": "資料・メモの保管と検索",
+    "Dashboard": "アイデアボード(Miro)＆システム監視",
+    "AI Studio": "自分専用AIの作成＋ワークフロー自動化",
+    "Core Upgrade": "自己進化（オーナー専用）",
+    "Settings": "APIキー・ルール・ユーザー管理",
+}
+
+# 部屋に入った直後にヘッダー下へ出す日本語の説明（新規ユーザーが迷わないように）
+ROOM_GUIDE = {
+    "Forge Lab": "AIにアプリ・画像・動画・スライドを作らせる制作室。種類を選び、作りたい内容を書いて生成します。",
+    "App Archive": "生成したミニアプリの保管庫。カードから起動・再編集・削除ができます。",
+    "Active Tasks": "実行中タスクの管理室。確認待ち（要承認）のタスクをここで承認／却下します。",
+    "Task History": "完了したタスクの履歴。過去の実行結果を振り返れます。",
+    "Auto Income": "副業の自動化ライン。テーマを入れると「生成→下書き→あなたの承認」の順で進みます。",
+    "Document Vault": "資料・メモの保管庫。保存した内容をあとからAIが参照・検索します。",
+    "Dashboard": "アイデアボード（Miro）とシステム監視。思考の整理と全体状態の確認に。",
+    "AI Studio": "自分専用AIを作る工房。人格・口調・ルール・APIを設定し、コアから呼び出せます。",
+    "Core Upgrade": "コア自身を進化させるオーナー専用室。操作は慎重に行ってください。",
+    "Settings": "APIキー・常時ルール・ユーザー管理などの全体設定。まずはGeminiキーの登録を。",
+}
+
+def room_help(target):
+    """部屋のヘッダー直下に出す日本語の簡単な説明（新規ユーザー向け）。"""
+    _t = ROOM_GUIDE.get(target)
+    if _t:
+        st.caption(f"ℹ️ {_t}")
+
 if st.session_state.current_mode == "HUB":
     st.markdown("""
         <style>
@@ -499,7 +640,8 @@ else:
             for _disp, _sub, _target in _rooms:
                 _lock = (_target == "Auto Income" and not _income_ok)
                 _icon = ("● " if _target == _cur else ("🔒 " if _lock else "📄 "))
-                if st.button(_icon + _disp, key=f"side_{_target}", use_container_width=True):
+                if st.button(_icon + _disp, key=f"side_{_target}", use_container_width=True,
+                             help=ROOM_JP.get(_target)):
                     st.session_state.current_mode = _target
                     st.rerun()
 

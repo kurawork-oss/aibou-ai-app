@@ -112,8 +112,10 @@ div[role="radiogroup"] > label p { color: var(--fg) !important; }
 [data-testid="stProgress"] > div > div > div { background-color: var(--accent) !important; }
 
 /* ---- ページ余白 ---- */
+/* 上部はStreamlitの固定ヘッダー（約3.5rem）の下に本文が隠れないよう余白を確保。
+   1.3remだと各部屋のタイトルがヘッダーに食い込んで見えなくなるため。 */
 [data-testid="stMainBlockContainer"], .block-container, [data-testid="stAppViewBlockContainer"] {
-    padding-top: 1.3rem !important; padding-bottom: 1.0rem !important;
+    padding-top: 3.75rem !important; padding-bottom: 1.0rem !important;
 }
 
 /* =====================================================================
