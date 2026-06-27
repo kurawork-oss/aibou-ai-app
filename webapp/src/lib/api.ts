@@ -396,6 +396,32 @@ export async function vaultQuery(notebookId: string, question: string): Promise<
   return { answer: data.answer ?? data.error ?? "" };
 }
 
+/** POST /vault/generate — author a Markdown document grounded in the notebook. */
+export async function vaultGenerateDoc(notebookId: string, instruction: string): Promise<{ markdown: string }> {
+  const res = await fetch(`${requireApiUrl()}/vault/generate`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ notebook_id: notebookId, instruction }),
+  });
+  const data = (await res.json().catch(() => ({}))) as { markdown?: string; error?: string };
+  if (!res.ok && !data.error) throw new Error(`Doc generation failed (${res.status})`);
+  if (data.error) throw new Error(data.error);
+  return { markdown: data.markdown ?? "" };
+}
+
+/** POST /vault/diagram — generate a Mermaid diagram (logic tree/flow/mindmap). */
+export async function vaultGenerateDiagram(notebookId: string, kind = "tree"): Promise<{ mermaid: string; kind: string }> {
+  const res = await fetch(`${requireApiUrl()}/vault/diagram`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ notebook_id: notebookId, kind }),
+  });
+  const data = (await res.json().catch(() => ({}))) as { mermaid?: string; kind?: string; error?: string };
+  if (!res.ok && !data.error) throw new Error(`Diagram generation failed (${res.status})`);
+  if (data.error) throw new Error(data.error);
+  return { mermaid: data.mermaid ?? "", kind: data.kind ?? kind };
+}
+
 /* ---------------- Tasks (Active Tasks) ---------------- */
 export interface Task {
   id: string;
@@ -560,6 +586,79 @@ export async function videoGenerate(scenes: VideoScene[], imagePrompt = ""): Pro
   const data = (await res.json().catch(() => ({}))) as VideoResult;
   if (!res.ok && !data.error) return { error: `Video failed (${res.status})` };
   return data;
+}
+
+/* ---------------- Autopilot (goal-based autonomous missions) ---------------- */
+export interface MissionStep {
+  n: number;
+  title: string;
+  status: "pending" | "done" | "failed";
+  result?: string;
+}
+
+export interface Mission {
+  id: string;
+  goal: string;
+  status: "active" | "completed" | "failed" | "paused";
+  steps: MissionStep[];
+  current: number;
+  log?: string[];
+  notify?: boolean;
+  created_at?: string;
+}
+
+export interface StepResult {
+  mission?: Mission;
+  done?: boolean;
+  step?: MissionStep;
+  error?: string;
+  message?: string;
+}
+
+export async function autopilotList(): Promise<Mission[]> {
+  const res = await fetch(`${requireApiUrl()}/autopilot/missions`, { headers: authHeaders(), cache: "no-store" });
+  if (!res.ok) throw new Error(`Missions failed (${res.status})`);
+  const data = (await res.json().catch(() => ({ items: [] }))) as { items?: Mission[] };
+  return data.items ?? [];
+}
+
+export async function autopilotCreate(goal: string, notify = true): Promise<Mission> {
+  const res = await fetch(`${requireApiUrl()}/autopilot/missions`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ goal, notify }),
+  });
+  const data = (await res.json().catch(() => ({}))) as Mission & { error?: string };
+  if (!res.ok) throw new Error(data.error ?? `Create mission failed (${res.status})`);
+  return data;
+}
+
+export async function autopilotStep(id: string): Promise<StepResult> {
+  const res = await fetch(`${requireApiUrl()}/autopilot/missions/${encodeURIComponent(id)}/step`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+  });
+  const data = (await res.json().catch(() => ({}))) as StepResult;
+  if (!res.ok && !data.mission) throw new Error(data.error ?? `Step failed (${res.status})`);
+  return data;
+}
+
+export async function autopilotDelete(id: string): Promise<boolean> {
+  const res = await fetch(`${requireApiUrl()}/autopilot/missions/${encodeURIComponent(id)}`, { method: "DELETE", headers: authHeaders() });
+  const data = (await res.json().catch(() => ({ ok: false }))) as { ok?: boolean };
+  return Boolean(data.ok);
+}
+
+/** POST /notify — send a test/manual notification to configured channels. */
+export async function sendNotify(message: string): Promise<{ ok: boolean; sent?: string[]; skipped?: boolean }> {
+  const res = await fetch(`${requireApiUrl()}/notify`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ message }),
+  });
+  const data = (await res.json().catch(() => ({ ok: false }))) as { ok?: boolean; sent?: string[]; skipped?: boolean };
+  if (!res.ok) throw new Error(`Notify failed (${res.status})`);
+  return { ok: Boolean(data.ok), sent: data.sent, skipped: data.skipped };
 }
 
 /* ---------------- Keychain (API key vault) ---------------- */

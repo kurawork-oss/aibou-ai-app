@@ -438,3 +438,74 @@ def test_tts_invalid_rate_does_not_crash():
     r = client.post("/tts", json={"text": "テスト", "rate": "bogus"})
     assert r.status_code == 200
     assert "audio_base64" in r.json()
+
+
+# ── /vault/generate, /vault/diagram（NotebookLM風） ─────────────────
+def test_vault_generate_without_supabase():
+    r = client.post("/vault/generate", json={"notebook_id": "fake", "instruction": "要約して"})
+    assert r.status_code in (200, 503)
+    assert "error" in r.json() or "markdown" in r.json()
+
+
+def test_vault_diagram_without_supabase():
+    r = client.post("/vault/diagram", json={"notebook_id": "fake", "kind": "tree"})
+    assert r.status_code in (200, 503)
+    assert "error" in r.json() or "mermaid" in r.json()
+
+
+# ── /autopilot（ゴール自動実行） ────────────────────────────────────
+def test_autopilot_list():
+    r = client.get("/autopilot/missions")
+    assert r.status_code == 200
+    assert "items" in r.json()
+    assert isinstance(r.json()["items"], list)
+
+
+def test_autopilot_create_and_steps():
+    r = client.post("/autopilot/missions", json={"goal": "テストのゴール", "notify": False})
+    assert r.status_code == 200
+    m = r.json()
+    assert "id" in m
+    assert m["goal"] == "テストのゴール"
+    assert m["status"] == "active"
+    assert isinstance(m["steps"], list) and len(m["steps"]) >= 1
+
+    # ステップ実行（Gemini無し → failed になるが crash しない）
+    r2 = client.post(f"/autopilot/missions/{m['id']}/step")
+    assert r2.status_code == 200
+    data = r2.json()
+    assert "mission" in data or "error" in data
+
+    # 一覧に出る
+    r3 = client.get("/autopilot/missions")
+    ids = [x["id"] for x in r3.json()["items"]]
+    assert m["id"] in ids
+
+
+def test_autopilot_create_empty_goal():
+    r = client.post("/autopilot/missions", json={"goal": "", "notify": False})
+    assert r.status_code in (400, 422)
+
+
+def test_autopilot_step_not_found():
+    r = client.post("/autopilot/missions/nonexistent/step")
+    assert r.status_code == 404
+    assert "error" in r.json()
+
+
+def test_autopilot_delete():
+    r = client.post("/autopilot/missions", json={"goal": "削除用ゴール", "notify": False})
+    mid = r.json()["id"]
+    r2 = client.delete(f"/autopilot/missions/{mid}")
+    assert r2.status_code == 200
+    assert r2.json()["ok"] is True
+
+
+# ── /notify（外部通知） ─────────────────────────────────────────────
+def test_notify_without_tokens_skips_safely():
+    """トークン未設定なら何も送らず skipped を返す（ネットワークアクセスもしない）。"""
+    r = client.post("/notify", json={"message": "テスト通知"})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["ok"] is False
+    assert data["skipped"] is True

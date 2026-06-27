@@ -13,6 +13,8 @@ import {
   vaultCreate,
   vaultAddText,
   vaultQuery,
+  vaultGenerateDoc,
+  vaultGenerateDiagram,
   type VaultNotebook,
 } from "@/lib/api";
 
@@ -37,6 +39,13 @@ export default function Vault() {
   const [question, setQuestion] = useState("");
   const [asking, setAsking] = useState(false);
   const [answer, setAnswer] = useState<string | null>(null);
+
+  // create doc / diagram from the notebook
+  const [genInstruction, setGenInstruction] = useState("");
+  const [genBusy, setGenBusy] = useState(false);
+  const [genDoc, setGenDoc] = useState<string | null>(null);
+  const [diagBusy, setDiagBusy] = useState(false);
+  const [diagCode, setDiagCode] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -126,6 +135,46 @@ export default function Vault() {
     } finally {
       setAsking(false);
     }
+  };
+
+  const generateDoc = async () => {
+    if (!selectedId || genBusy) return;
+    setGenBusy(true);
+    setError(null);
+    setGenDoc(null);
+    try {
+      const r = await vaultGenerateDoc(selectedId, genInstruction.trim());
+      setGenDoc(r.markdown);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "資料の作成に失敗しました");
+    } finally {
+      setGenBusy(false);
+    }
+  };
+
+  const generateDiagram = async (kind: string) => {
+    if (!selectedId || diagBusy) return;
+    setDiagBusy(true);
+    setError(null);
+    setDiagCode(null);
+    try {
+      const r = await vaultGenerateDiagram(selectedId, kind);
+      setDiagCode(r.mermaid);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "図解の生成に失敗しました");
+    } finally {
+      setDiagBusy(false);
+    }
+  };
+
+  const downloadText = (filename: string, text: string) => {
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -303,6 +352,88 @@ export default function Vault() {
               <div className="mt-3">
                 <div className="divider mb-3" />
                 <p className="whitespace-pre-wrap text-sm leading-relaxed text-fg">{answer}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Create document / diagram from the notebook */}
+          <div className="panel p-3">
+            <label className="mb-2 block text-[10px] tracking-[0.2em] text-muted label-mono">
+              CREATE — 資料作成・図解
+            </label>
+            <input
+              value={genInstruction}
+              onChange={(e) => setGenInstruction(e.target.value)}
+              placeholder="作成指示（例：要点を3章にまとめた企画書）"
+              className="mb-2 w-full rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2 text-sm text-fg-strong placeholder:text-muted focus:border-[var(--line)] focus:outline-none"
+            />
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={generateDoc}
+                disabled={genBusy}
+                className="flex-1 rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] py-2 text-[10px] tracking-[0.16em] text-fg-strong shadow-glow transition hover:shadow-glow-strong disabled:opacity-40 label-mono"
+              >
+                {genBusy ? "CREATING…" : "📄 資料を作成"}
+              </button>
+              <button
+                type="button"
+                onClick={() => generateDiagram("tree")}
+                disabled={diagBusy}
+                className="flex-1 rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] py-2 text-[10px] tracking-[0.16em] text-fg-strong shadow-glow transition hover:shadow-glow-strong disabled:opacity-40 label-mono"
+              >
+                {diagBusy ? "DRAWING…" : "🌳 ロジックツリー"}
+              </button>
+              <button
+                type="button"
+                onClick={() => generateDiagram("flow")}
+                disabled={diagBusy}
+                className="flex-1 rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] py-2 text-[10px] tracking-[0.16em] text-fg-strong shadow-glow transition hover:shadow-glow-strong disabled:opacity-40 label-mono"
+              >
+                {diagBusy ? "DRAWING…" : "🔀 フロー図"}
+              </button>
+            </div>
+
+            {genDoc && (
+              <div className="mt-3">
+                <div className="divider mb-2" />
+                <p className="whitespace-pre-wrap text-sm leading-relaxed text-fg">{genDoc}</p>
+                <button
+                  type="button"
+                  onClick={() => downloadText(`${selected.name}.md`, genDoc)}
+                  className="mt-2 rounded-forge border border-panel px-3 py-1 text-[10px] tracking-[0.14em] text-muted hover:text-fg-strong label-mono"
+                >
+                  ↓ .md でダウンロード
+                </button>
+              </div>
+            )}
+
+            {diagCode && (
+              <div className="mt-3">
+                <div className="divider mb-2" />
+                <p className="mb-1 text-[9px] tracking-[0.16em] text-muted label-mono">
+                  MERMAID（mermaid.live 等に貼り付けで図表示）
+                </p>
+                <pre className="max-h-56 overflow-auto rounded-forge border border-panel bg-black/30 p-2 text-[11px] leading-relaxed text-fg">
+                  {diagCode}
+                </pre>
+                <div className="mt-2 flex gap-2">
+                  <a
+                    href={`https://mermaid.live/edit#base64:${typeof window !== "undefined" ? btoa(unescape(encodeURIComponent(JSON.stringify({ code: diagCode, mermaid: { theme: "dark" } })))) : ""}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="rounded-forge border border-[var(--line)] px-3 py-1 text-[10px] tracking-[0.14em] text-[var(--accent)] label-mono"
+                  >
+                    ↗ Mermaid Live で開く
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => downloadText(`${selected.name}.mmd`, diagCode)}
+                    className="rounded-forge border border-panel px-3 py-1 text-[10px] tracking-[0.14em] text-muted hover:text-fg-strong label-mono"
+                  >
+                    ↓ .mmd でダウンロード
+                  </button>
+                </div>
               </div>
             )}
           </div>

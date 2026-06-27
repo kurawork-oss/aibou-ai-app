@@ -54,7 +54,7 @@ test("HUD renders after entering offline mode", async ({ page }) => {
   await expect(page.getByRole("heading", { name: /THE FORGE OS/i }).first()).toBeVisible();
 });
 
-test("NavBar shows all 7 navigation items", async ({ page }) => {
+test("NavBar shows all 8 navigation items", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
   const nav = page.locator("nav");
@@ -64,6 +64,7 @@ test("NavBar shows all 7 navigation items", async ({ page }) => {
   await expect(nav.getByText("INCOME")).toBeVisible();
   await expect(nav.getByText("TASKS")).toBeVisible();
   await expect(nav.getByText("STUDIO")).toBeVisible();
+  await expect(nav.getByText("AUTO", { exact: true })).toBeVisible();
   await expect(nav.getByText("ARCHIVE")).toBeVisible();
 });
 
@@ -192,6 +193,15 @@ test("ARCHIVE tab renders archive UI", async ({ page }) => {
   await expect(page.getByText(/ARCHIVE|NO APPS/i).first()).toBeVisible({ timeout: 5_000 });
 });
 
+test("AUTO tab renders autopilot UI", async ({ page }) => {
+  await page.goto("/");
+  await enterApp(page);
+  await page.locator("nav").getByText("AUTO", { exact: true }).click();
+  // Mission creation form is always present (works offline)
+  await expect(page.getByText(/NEW MISSION/i)).toBeVisible({ timeout: 5_000 });
+  await expect(page.getByText("SET GOAL & DECOMPOSE")).toBeVisible();
+});
+
 /* ── TASKS feature ────────────────────────────────────────────────── */
 test("Tasks: can create a task (no backend — shows error or offline)", async ({ page }) => {
   await page.goto("/");
@@ -281,8 +291,8 @@ test("No JavaScript errors on page load", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
   // Navigate through all views to ensure no crash
-  for (const nav of ["FORGE", "VAULT", "TASKS", "INCOME", "STUDIO", "ARCHIVE", "CHAT"]) {
-    await page.click(`text=${nav}`);
+  for (const nav of ["FORGE", "VAULT", "TASKS", "INCOME", "STUDIO", "AUTO", "ARCHIVE", "CHAT"]) {
+    await page.locator("nav").getByText(nav, { exact: true }).click();
     await page.waitForTimeout(300);
   }
   // Filter out known non-critical errors

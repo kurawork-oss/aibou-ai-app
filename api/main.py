@@ -27,10 +27,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
+import autopilot
 import config
 import forge
 import income
 import keychain
+import notify
 import proactive
 import studio
 import tasks as tasks_module
@@ -99,6 +101,25 @@ class TTSRequest(BaseModel):
 class KeySetRequest(BaseModel):
     name: str
     value: str = ""
+
+
+class VaultGenerateRequest(BaseModel):
+    notebook_id: str
+    instruction: str = ""
+
+
+class VaultDiagramRequest(BaseModel):
+    notebook_id: str
+    kind: str = "tree"
+
+
+class MissionCreateRequest(BaseModel):
+    goal: str
+    notify: bool = True
+
+
+class NotifyRequest(BaseModel):
+    message: str
 
 
 class MemoryAddRequest(BaseModel):
@@ -518,6 +539,28 @@ async def vault_query(req: VaultQueryRequest, _auth: None = Depends(require_auth
     )
 
 
+@app.post("/vault/generate")
+async def vault_generate(req: VaultGenerateRequest, _auth: None = Depends(require_auth)):
+    """ノートブックの資料を根拠に文書(Markdown)を作成する。"""
+    result = await asyncio.get_event_loop().run_in_executor(
+        None, lambda: vault.generate_doc(req.notebook_id, req.instruction)
+    )
+    if isinstance(result, dict) and result.get("error"):
+        return JSONResponse(status_code=503, content=result)
+    return result
+
+
+@app.post("/vault/diagram")
+async def vault_diagram(req: VaultDiagramRequest, _auth: None = Depends(require_auth)):
+    """資料から Mermaid 図（ロジックツリー等）を生成する。"""
+    result = await asyncio.get_event_loop().run_in_executor(
+        None, lambda: vault.generate_diagram(req.notebook_id, req.kind)
+    )
+    if isinstance(result, dict) and result.get("error"):
+        return JSONResponse(status_code=503, content=result)
+    return result
+
+
 # ── プロアクティブ（今日のブリーフィング） ───────────────────────
 @app.get("/briefing")
 async def briefing(_auth: None = Depends(require_auth)):
@@ -689,6 +732,46 @@ async def studio_run_workflow(wf_id: str, req: WorkflowRunRequest,
     if isinstance(result, dict) and result.get("error"):
         return JSONResponse(status_code=503, content=result)
     return result
+
+
+# ── Autopilot（ゴール自動実行） ───────────────────────────────────
+
+@app.get("/autopilot/missions")
+async def autopilot_list(_auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    return {"items": await loop.run_in_executor(None, autopilot.list_missions)}
+
+
+@app.post("/autopilot/missions")
+async def autopilot_create(req: MissionCreateRequest, _auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    m = await loop.run_in_executor(None, lambda: autopilot.create_mission(req.goal, req.notify))
+    if isinstance(m, dict) and m.get("error"):
+        return JSONResponse(status_code=400, content=m)
+    return m
+
+
+@app.post("/autopilot/missions/{mission_id}/step")
+async def autopilot_step(mission_id: str, _auth: None = Depends(require_auth)):
+    """次の未完了ステップを1つ実行する（フロント or cron が繰り返し呼ぶ）。"""
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(None, lambda: autopilot.run_step(mission_id))
+    if isinstance(result, dict) and result.get("error") and not result.get("mission"):
+        return JSONResponse(status_code=404, content=result)
+    return result
+
+
+@app.delete("/autopilot/missions/{mission_id}")
+async def autopilot_delete(mission_id: str, _auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, lambda: autopilot.delete_mission(mission_id))
+
+
+@app.post("/notify")
+async def notify_send(req: NotifyRequest, _auth: None = Depends(require_auth)):
+    """設定済みチャンネル（LINE/Discord/Slack）へ通知を送る。未設定なら skipped。"""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, lambda: notify.notify_all(req.message))
 
 
 # ── Keychain（APIキー保管庫） ────────────────────────────────────
