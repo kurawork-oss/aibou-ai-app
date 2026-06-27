@@ -347,40 +347,20 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
   const canSend = (input.trim().length > 0 || !!pendingImage) && !streaming;
 
   return (
-    <div className="grid h-full min-h-0 w-full grid-cols-1 gap-4 lg:grid-cols-[1fr_minmax(0,42rem)_1fr]">
-      {/* History rail (Gemini-style) — far-left margin on lg, drawer on mobile.
-          Lives in the left 1fr column so the conversation stays screen-centred. */}
+    <div className="relative flex h-full min-h-0 w-full justify-center">
+      {/* Full-height left history panel + bottom-left toggle (chat only). */}
       <ChatHistory
         convos={convos}
         currentId={currentId}
         open={historyOpen}
-        onClose={() => setHistoryOpen(false)}
+        onOpenChange={setHistoryOpen}
         onNew={newChat}
         onPick={loadConvo}
         onDelete={deleteConvo}
       />
 
-      {/* Conversation column — centre cell (screen-centred) */}
-      <div className="flex h-full min-h-0 w-full flex-col">
-        {/* Mobile history toggle */}
-        <div className="mb-1 flex items-center gap-2 lg:hidden">
-          <button
-            type="button"
-            onClick={() => setHistoryOpen(true)}
-            className="flex items-center gap-1.5 rounded-forge border border-panel px-2.5 py-1 text-[10px] tracking-[0.14em] text-muted transition hover:text-fg-strong label-mono"
-            aria-label="Chat history"
-          >
-            ☰ 履歴
-          </button>
-          <button
-            type="button"
-            onClick={newChat}
-            className="rounded-forge border border-panel px-2.5 py-1 text-[10px] tracking-[0.14em] text-muted transition hover:text-fg-strong label-mono"
-          >
-            ＋ 新規
-          </button>
-        </div>
-
+      {/* Conversation column — screen-centred */}
+      <div className="flex h-full min-h-0 w-full max-w-2xl flex-col">
       {/* Message list */}
       <div
         ref={scrollRef}
@@ -520,21 +500,18 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
         </div>
       </div>
       </div>
-
-      {/* Right spacer cell (keeps the conversation screen-centred on lg) */}
-      <div aria-hidden className="hidden lg:block" />
     </div>
   );
 }
 
-/* ── Chat history sidebar (Gemini-style) ─────────────────────────── */
+/* ── Chat history — full-height left panel + bottom-left toggle ────── */
 function ChatHistory({
-  convos, currentId, open, onClose, onNew, onPick, onDelete,
+  convos, currentId, open, onOpenChange, onNew, onPick, onDelete,
 }: {
   convos: Convo[];
   currentId: string;
   open: boolean;
-  onClose: () => void;
+  onOpenChange: (v: boolean) => void;
   onNew: () => void;
   onPick: (id: string) => void;
   onDelete: (id: string) => void;
@@ -589,12 +566,20 @@ function ChatHistory({
 
   return (
     <>
-      {/* Desktop: persistent sidebar in the far-left margin */}
-      <aside className="hidden w-56 lg:block lg:justify-self-start">
-        <div className="glass-silver h-full p-2">{list}</div>
-      </aside>
+      {/* Bottom-left toggle handle — opens the full-height history panel.
+          Hidden while the panel is open. */}
+      {!open && (
+        <button
+          type="button"
+          onClick={() => onOpenChange(true)}
+          aria-label="Chat history"
+          className="fixed bottom-24 left-3 z-40 flex items-center gap-1.5 rounded-full border border-[var(--panel-bd)] bg-[rgba(18,22,30,0.72)] px-3 py-2 text-[10px] tracking-[0.16em] text-fg-strong shadow-glow backdrop-blur transition hover:shadow-glow-strong label-mono"
+        >
+          <HistoryIcon /> 履歴
+        </button>
+      )}
 
-      {/* Mobile: slide-in drawer */}
+      {/* Full-height left panel (spans top→bottom, past the core). */}
       <AnimatePresence>
         {open && (
           <>
@@ -602,25 +587,46 @@ function ChatHistory({
               type="button"
               aria-hidden
               tabIndex={-1}
-              onClick={onClose}
-              className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+              onClick={() => onOpenChange(false)}
+              className="fixed inset-0 z-40 bg-black/50"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
             />
             <motion.aside
-              className="fixed left-0 top-0 z-50 h-full w-64 p-2 lg:hidden"
+              className="fixed left-0 top-0 z-50 h-full w-72 max-w-[82vw] p-2"
               initial={{ x: "-100%" }}
               animate={{ x: 0 }}
               exit={{ x: "-100%" }}
               transition={{ type: "spring", stiffness: 320, damping: 32 }}
             >
-              <div className="glass-silver h-full p-2">{list}</div>
+              <div className="glass-silver flex h-full flex-col p-2">
+                <div className="mb-1 flex items-center justify-between px-1">
+                  <span className="text-[9px] tracking-[0.22em] text-muted label-mono">HISTORY</span>
+                  <button
+                    type="button"
+                    onClick={() => onOpenChange(false)}
+                    aria-label="Close history"
+                    className="text-muted transition hover:text-fg-strong"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="min-h-0 flex-1">{list}</div>
+              </div>
             </motion.aside>
           </>
         )}
       </AnimatePresence>
     </>
+  );
+}
+
+function HistoryIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 4v4h4" /><path d="M12 8v4l3 2" />
+    </svg>
   );
 }
 
