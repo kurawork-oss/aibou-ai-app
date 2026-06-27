@@ -87,6 +87,16 @@ test("CoreOrb is visible", async ({ page }) => {
   await expect(orb).toBeVisible();
 });
 
+test("Chat: history controls are available", async ({ page }) => {
+  await page.goto("/");
+  await enterApp(page);
+  // Mobile viewport → history toggle is shown; open the drawer.
+  // (The desktop sidebar is also in the DOM but hidden via CSS, so target the
+  //  drawer instance with .last().)
+  await page.getByLabel("Chat history").click();
+  await expect(page.getByText("＋ 新しいチャット").last()).toBeVisible({ timeout: 5_000 });
+});
+
 /* ── Settings ───────────────────────────────────────────────────── */
 test("Settings gear icon is clickable and opens panel", async ({ page }) => {
   await page.goto("/");

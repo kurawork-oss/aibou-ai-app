@@ -59,9 +59,35 @@ export interface ChatProps {
 }
 
 const HISTORY_LIMIT = 12;
+const LS_CONVOS = "forge_chat_convos";
+const CONVO_LIMIT = 40;
+
+interface Convo {
+  id: string;
+  title: string;
+  messages: Message[];
+  updatedAt: number;
+}
 
 function uid(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function loadConvos(): Convo[] {
+  try {
+    const raw = localStorage.getItem(LS_CONVOS);
+    return raw ? (JSON.parse(raw) as Convo[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveConvos(convos: Convo[]): void {
+  try {
+    localStorage.setItem(LS_CONVOS, JSON.stringify(convos.slice(0, CONVO_LIMIT)));
+  } catch {
+    /* ignore quota */
+  }
 }
 
 export default function Chat({ settings, onStateChange, voiceReplies = true }: ChatProps) {
@@ -70,6 +96,62 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
   const [streaming, setStreaming] = useState(false);
   const [pendingImage, setPendingImage] = useState<{ dataUrl: string; base64: string; mime: string } | null>(null);
   const [speaking, setSpeaking] = useState(false);
+
+  // Conversation history (Gemini-style left sidebar).
+  const [convos, setConvos] = useState<Convo[]>([]);
+  const [currentId, setCurrentId] = useState<string>(() => uid());
+  const [historyOpen, setHistoryOpen] = useState(false);
+
+  useEffect(() => { setConvos(loadConvos()); }, []);
+
+  // Persist the current conversation once it has settled (not mid-stream).
+  useEffect(() => {
+    if (streaming) return;
+    const meaningful = messages.filter((m) => !m.pending && m.content.trim());
+    if (meaningful.length === 0) return;
+    setConvos((prev) => {
+      const title = (meaningful.find((m) => m.role === "user")?.content || "新しいチャット").slice(0, 30);
+      const entry: Convo = { id: currentId, title, messages, updatedAt: Date.now() };
+      const next = prev.some((c) => c.id === currentId)
+        ? prev.map((c) => (c.id === currentId ? entry : c))
+        : [entry, ...prev];
+      next.sort((a, b) => b.updatedAt - a.updatedAt);
+      saveConvos(next);
+      return next;
+    });
+  }, [messages, streaming, currentId]);
+
+  const newChat = useCallback(() => {
+    cancelRef.current?.();
+    stopSpeaking();
+    setMessages([]);
+    setInput("");
+    setPendingImage(null);
+    setCurrentId(uid());
+    setHistoryOpen(false);
+  }, []);
+
+  const loadConvo = useCallback((id: string) => {
+    const c = loadConvos().find((x) => x.id === id);
+    if (!c) return;
+    cancelRef.current?.();
+    stopSpeaking();
+    setMessages(c.messages.map((m) => ({ ...m, pending: false })));
+    setCurrentId(c.id);
+    setHistoryOpen(false);
+  }, []);
+
+  const deleteConvo = useCallback((id: string) => {
+    setConvos((prev) => {
+      const next = prev.filter((c) => c.id !== id);
+      saveConvos(next);
+      return next;
+    });
+    if (id === currentId) {
+      setMessages([]);
+      setCurrentId(uid());
+    }
+  }, [currentId]);
 
   const cancelRef = useRef<(() => void) | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -265,7 +347,39 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
   const canSend = (input.trim().length > 0 || !!pendingImage) && !streaming;
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="mx-auto flex h-full min-h-0 w-full max-w-4xl gap-3">
+      {/* History sidebar (Gemini-style) — persistent on lg, drawer on mobile */}
+      <ChatHistory
+        convos={convos}
+        currentId={currentId}
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        onNew={newChat}
+        onPick={loadConvo}
+        onDelete={deleteConvo}
+      />
+
+      {/* Conversation column */}
+      <div className="flex h-full min-h-0 flex-1 flex-col">
+        {/* Mobile history toggle */}
+        <div className="mb-1 flex items-center gap-2 lg:hidden">
+          <button
+            type="button"
+            onClick={() => setHistoryOpen(true)}
+            className="flex items-center gap-1.5 rounded-forge border border-panel px-2.5 py-1 text-[10px] tracking-[0.14em] text-muted transition hover:text-fg-strong label-mono"
+            aria-label="Chat history"
+          >
+            ☰ 履歴
+          </button>
+          <button
+            type="button"
+            onClick={newChat}
+            className="rounded-forge border border-panel px-2.5 py-1 text-[10px] tracking-[0.14em] text-muted transition hover:text-fg-strong label-mono"
+          >
+            ＋ 新規
+          </button>
+        </div>
+
       {/* Message list */}
       <div
         ref={scrollRef}
@@ -404,7 +518,105 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
           )}
         </div>
       </div>
+      </div>
     </div>
+  );
+}
+
+/* ── Chat history sidebar (Gemini-style) ─────────────────────────── */
+function ChatHistory({
+  convos, currentId, open, onClose, onNew, onPick, onDelete,
+}: {
+  convos: Convo[];
+  currentId: string;
+  open: boolean;
+  onClose: () => void;
+  onNew: () => void;
+  onPick: (id: string) => void;
+  onDelete: (id: string) => void;
+}) {
+  const list = (
+    <div className="flex h-full flex-col gap-2">
+      <button
+        type="button"
+        onClick={onNew}
+        className="shrink-0 rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] py-2 text-[10px] tracking-[0.16em] text-fg-strong shadow-glow transition hover:shadow-glow-strong label-mono"
+      >
+        ＋ 新しいチャット
+      </button>
+      <div className="min-h-0 flex-1 space-y-1 overflow-y-auto pr-0.5">
+        {convos.length === 0 ? (
+          <p className="px-1 py-2 text-[10px] leading-relaxed text-muted/70">履歴はまだありません。</p>
+        ) : (
+          convos.map((c) => {
+            const active = c.id === currentId;
+            return (
+              <div
+                key={c.id}
+                className="group flex items-center gap-1 rounded-forge border px-2 py-1.5 transition"
+                style={{
+                  borderColor: active ? "var(--accent)" : "transparent",
+                  background: active ? "var(--btn-bg)" : "transparent",
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => onPick(c.id)}
+                  className="min-w-0 flex-1 truncate text-left text-[11px] text-fg"
+                  title={c.title}
+                >
+                  {c.title || "（無題）"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onDelete(c.id)}
+                  className="shrink-0 text-[10px] text-muted opacity-0 transition group-hover:opacity-100 hover:text-[#ff8888]"
+                  aria-label="Delete conversation"
+                >
+                  ✕
+                </button>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+      {/* Desktop: persistent sidebar */}
+      <aside className="hidden w-56 shrink-0 lg:block">
+        <div className="glass-silver h-full p-2">{list}</div>
+      </aside>
+
+      {/* Mobile: slide-in drawer */}
+      <AnimatePresence>
+        {open && (
+          <>
+            <motion.button
+              type="button"
+              aria-hidden
+              tabIndex={-1}
+              onClick={onClose}
+              className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            />
+            <motion.aside
+              className="fixed left-0 top-0 z-50 h-full w-64 p-2 lg:hidden"
+              initial={{ x: "-100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "-100%" }}
+              transition={{ type: "spring", stiffness: 320, damping: 32 }}
+            >
+              <div className="glass-silver h-full p-2">{list}</div>
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
+    </>
   );
 }
 
