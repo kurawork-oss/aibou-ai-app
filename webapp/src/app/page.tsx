@@ -127,10 +127,11 @@ function Hud() {
   );
 
   // Every mode uses the full width; each view manages its own internal
-  // centering (chat centres its conversation with the history on the far left).
+  // centering. Chat goes extra-wide so the history rail sits in the far-left
+  // margin while the conversation stays centred.
   return (
     <main
-      className="relative mx-auto flex h-[100dvh] w-full max-w-6xl flex-col px-4 pb-3 pt-[max(env(safe-area-inset-top),0.75rem)]"
+      className={`relative mx-auto flex h-[100dvh] w-full flex-col px-4 pb-3 pt-[max(env(safe-area-inset-top),0.75rem)] transition-[max-width] duration-300 ${view === "chat" ? "max-w-[1700px]" : "max-w-6xl"}`}
     >
       {/* Occasional drifting light-silver ambient bloom (behind everything). */}
       <div className="forge-ambient" aria-hidden />

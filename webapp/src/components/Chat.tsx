@@ -347,8 +347,9 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
   const canSend = (input.trim().length > 0 || !!pendingImage) && !streaming;
 
   return (
-    <div className="flex h-full min-h-0 w-full gap-4">
-      {/* History rail (Gemini-style) — far left on lg, drawer on mobile */}
+    <div className="grid h-full min-h-0 w-full grid-cols-1 gap-4 lg:grid-cols-[1fr_minmax(0,42rem)_1fr]">
+      {/* History rail (Gemini-style) — far-left margin on lg, drawer on mobile.
+          Lives in the left 1fr column so the conversation stays screen-centred. */}
       <ChatHistory
         convos={convos}
         currentId={currentId}
@@ -359,8 +360,8 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
         onDelete={deleteConvo}
       />
 
-      {/* Conversation column — centred in the remaining space */}
-      <div className="mx-auto flex h-full min-h-0 w-full max-w-2xl flex-1 flex-col">
+      {/* Conversation column — centre cell (screen-centred) */}
+      <div className="flex h-full min-h-0 w-full flex-col">
         {/* Mobile history toggle */}
         <div className="mb-1 flex items-center gap-2 lg:hidden">
           <button
@@ -519,6 +520,9 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
         </div>
       </div>
       </div>
+
+      {/* Right spacer cell (keeps the conversation screen-centred on lg) */}
+      <div aria-hidden className="hidden lg:block" />
     </div>
   );
 }
@@ -585,8 +589,8 @@ function ChatHistory({
 
   return (
     <>
-      {/* Desktop: persistent sidebar */}
-      <aside className="hidden w-56 shrink-0 lg:block">
+      {/* Desktop: persistent sidebar in the far-left margin */}
+      <aside className="hidden w-56 lg:block lg:justify-self-start">
         <div className="glass-silver h-full p-2">{list}</div>
       </aside>
 
