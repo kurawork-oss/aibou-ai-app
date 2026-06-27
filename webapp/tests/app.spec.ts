@@ -226,13 +226,16 @@ test("AUTO renders autopilot UI", async ({ page }) => {
   await expect(page.getByText("SET GOAL & DECOMPOSE")).toBeVisible();
 });
 
-test("BOARD renders automation dashboard", async ({ page }) => {
+test("BOARD renders Miro/Zapier-style automation canvas", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
   await goMode(page, "BOARD");
-  await expect(page.getByText("+ NEW AUTOMATION")).toBeVisible({ timeout: 5_000 });
-  await page.getByText("+ NEW AUTOMATION").click();
-  await expect(page.getByText("AUTOMATION NAME")).toBeVisible();
+  // Zapier-copilot hero + template chips
+  await expect(page.getByText("AUTOMATION COPILOT")).toBeVisible({ timeout: 5_000 });
+  await expect(page.getByText("何を自動化しますか？")).toBeVisible();
+  // Manual builder still reachable
+  await page.getByText(/手動ビルダー/).click();
+  await expect(page.getByText("AUTOMATION NAME")).toBeVisible({ timeout: 3_000 });
   await expect(page.getByText("+ ADD STEP")).toBeVisible();
 });
 
