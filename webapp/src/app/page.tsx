@@ -27,6 +27,7 @@ import Tasks from "@/components/Tasks";
 import Vault from "@/components/Vault";
 import { health } from "@/lib/api";
 import { supabase, supabaseEnabled } from "@/lib/supabase";
+import { APP_VERSION } from "@/lib/version";
 
 type View = "chat" | "forge" | "vault" | "income" | "tasks" | "studio" | "autopilot" | "board" | "archive" | "home";
 
@@ -558,6 +559,7 @@ function SettingsPanel({
 
           {tab === "diagnostics" && (
             <div className="flex flex-col gap-3">
+              <DiagRow label="BUILD" value={APP_VERSION} ok={true} />
               <DiagRow label="LINK STATUS" value={online ? "ACTIVE" : "OFFLINE"} ok={online} />
               <DiagRow label="FRONTEND" value="NEXT.JS 14 · VERCEL" ok={true} />
               <DiagRow label="BACKEND" value={process.env.NEXT_PUBLIC_API_URL ? "CONFIGURED" : "NOT SET"} ok={!!process.env.NEXT_PUBLIC_API_URL} />
