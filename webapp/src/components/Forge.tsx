@@ -189,10 +189,25 @@ async function downloadZip(files: Record<string, string>, zipName: string) {
 
 function ForgeResultView({ result, prompt }: { result: ForgeResult; prompt: string }) {
   if (result.kind === "image" && result.image_url) {
+    const saveImage = async () => {
+      try {
+        const res = await fetch(result.image_url!);
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "forge_image.png";
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch {
+        window.open(result.image_url!, "_blank");
+      }
+    };
     return (
       <div className="panel overflow-hidden p-3">
+        <Toolbar onDownload={saveImage} label="画像を保存" />
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={result.image_url} alt={result.image_prompt || "generated"} className="w-full rounded-forge" />
+        <img src={result.image_url} alt={result.image_prompt || "generated"} className="mt-2 w-full rounded-forge" />
         {result.image_prompt && (
           <p className="mt-2 text-[11px] text-muted">{result.image_prompt}</p>
         )}
