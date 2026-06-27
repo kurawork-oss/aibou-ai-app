@@ -6,24 +6,29 @@
  * transitions, and component renders are verified without external dependencies.
  */
 
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 
 /* ── helpers ────────────────────────────────────────────────────── */
-async function enterApp(page: import("@playwright/test").Page) {
+async function enterApp(page: Page) {
   // EntryGate: click ENTER
   await page.waitForSelector("text=ENTER", { timeout: 10_000 });
   await page.click("text=ENTER");
-  // BootScreen: no API_URL → goes to offline state quickly
-  // Click "ENTER OFFLINE" if shown, or wait for HUD
+  // BootScreen: no API_URL → offline state quickly. Click "ENTER OFFLINE" if
+  // shown, otherwise wait for the HUD wordmark.
   const offlineBtn = page.getByText("ENTER OFFLINE");
   const hudH1 = page.getByText("THE FORGE OS").first();
-  // Whichever appears first
   await Promise.race([
     offlineBtn.waitFor({ timeout: 8_000 }).then(() => offlineBtn.click()),
     hudH1.waitFor({ timeout: 10_000 }),
   ]);
-  // Wait for HUD nav to appear
-  await page.waitForSelector("nav", { timeout: 10_000 });
+  // HUD is ready once the Modes launcher button is present.
+  await page.getByLabel("Modes").waitFor({ timeout: 10_000 });
+}
+
+/** Open the Google-apps-style mode launcher and pick a mode by label. */
+async function goMode(page: Page, label: string) {
+  await page.getByLabel("Modes").click();
+  await page.locator("nav").getByText(label, { exact: true }).click();
 }
 
 /* ── EntryGate ──────────────────────────────────────────────────── */
@@ -40,7 +45,6 @@ test("EntryGate has ENTER button", async ({ page }) => {
 test("EntryGate ENTER transitions to BootScreen or HUD", async ({ page }) => {
   await page.goto("/");
   await page.click("text=ENTER");
-  // Should show either BootScreen content or HUD
   await expect(
     page.getByText(/BOOTING|LINK ACTIVE|OFFLINE|ENTER OFFLINE|WAKING|CORE UNREACHABLE/i).first()
   ).toBeVisible({ timeout: 10_000 });
@@ -50,24 +54,18 @@ test("EntryGate ENTER transitions to BootScreen or HUD", async ({ page }) => {
 test("HUD renders after entering offline mode", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
-  // HUD header should have THE FORGE OS
   await expect(page.getByRole("heading", { name: /THE FORGE OS/i }).first()).toBeVisible();
 });
 
-test("NavBar shows all 10 navigation items", async ({ page }) => {
+test("Mode launcher shows all 10 modes", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
+  await page.getByLabel("Modes").click();
   const nav = page.locator("nav");
-  await expect(nav.getByText("HOME")).toBeVisible();
-  await expect(nav.getByText("CHAT")).toBeVisible();
-  await expect(nav.getByText("FORGE")).toBeVisible();
-  await expect(nav.getByText("VAULT")).toBeVisible();
-  await expect(nav.getByText("INCOME")).toBeVisible();
-  await expect(nav.getByText("TASKS")).toBeVisible();
-  await expect(nav.getByText("STUDIO")).toBeVisible();
+  for (const label of ["HOME", "CHAT", "FORGE", "VAULT", "INCOME", "TASKS", "STUDIO", "BOARD", "ARCHIVE"]) {
+    await expect(nav.getByText(label, { exact: true })).toBeVisible();
+  }
   await expect(nav.getByText("AUTO", { exact: true })).toBeVisible();
-  await expect(nav.getByText("BOARD")).toBeVisible();
-  await expect(nav.getByText("ARCHIVE")).toBeVisible();
 });
 
 test("CHAT is the default view; HOME shows the cockpit", async ({ page }) => {
@@ -76,7 +74,7 @@ test("CHAT is the default view; HOME shows the cockpit", async ({ page }) => {
   // Default landing is CHAT — its message placeholder is unique to that view
   await expect(page.getByPlaceholder("THE FORGE OS にメッセージ…")).toBeVisible({ timeout: 5_000 });
   // Navigating to HOME renders the cockpit
-  await page.locator("nav").getByText("HOME").click();
+  await goMode(page, "HOME");
   await expect(page.getByText("PERSONAL COCKPIT")).toBeVisible({ timeout: 5_000 });
   await expect(page.getByText(/QUICK ASSISTANT/i)).toBeVisible();
   await expect(page.getByText("予定 — AGENDA")).toBeVisible();
@@ -85,11 +83,11 @@ test("CHAT is the default view; HOME shows the cockpit", async ({ page }) => {
 test("CoreOrb is visible", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
-  // The orb has role=img (may appear in EntryGate and Hud simultaneously)
   const orb = page.getByRole("img", { name: /THE FORGE OS core/i }).first();
   await expect(orb).toBeVisible();
 });
 
+/* ── Settings ───────────────────────────────────────────────────── */
 test("Settings gear icon is clickable and opens panel", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
@@ -101,7 +99,6 @@ test("Settings panel has 4 tabs", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
   await page.getByLabel("Settings").click();
-  // Use exact: true to avoid matching "CORE SETTINGS" heading for "CORE"
   await expect(page.getByText("CORE", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("PERSONA", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("KEYCHAIN", { exact: true })).toBeVisible();
@@ -122,7 +119,6 @@ test("Settings KEYCHAIN tab shows API key vault", async ({ page }) => {
   await enterApp(page);
   await page.getByLabel("Settings").click();
   await page.getByText("KEYCHAIN", { exact: true }).click();
-  // Access-code section is always present; offline mode shows a backend notice
   await expect(page.getByText("ACCESS CODE")).toBeVisible({ timeout: 5_000 });
 });
 
@@ -131,7 +127,6 @@ test("Settings PERSONA tab shows presets", async ({ page }) => {
   await enterApp(page);
   await page.getByLabel("Settings").click();
   await page.getByText("PERSONA", { exact: true }).first().click();
-  // Use button role to avoid matching header "JARVIS · ONLINE" text for JARVIS
   await expect(page.getByRole("button", { name: "JARVIS" })).toBeVisible();
   await expect(page.getByText("FRIENDLY")).toBeVisible();
   await expect(page.getByText("SECRETARY")).toBeVisible();
@@ -156,72 +151,65 @@ test("Settings close button works", async ({ page }) => {
   await expect(page.getByText("CORE SETTINGS")).not.toBeVisible({ timeout: 3_000 });
 });
 
-/* ── Navigation ─────────────────────────────────────────────────── */
-test("FORGE tab renders forge UI", async ({ page }) => {
+/* ── Navigation (via mode launcher) ─────────────────────────────── */
+test("FORGE renders forge UI (split view)", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
-  // Scope to nav to avoid matching "THE FORGE OS" heading which contains "FORGE"
-  await page.locator("nav").getByText("FORGE").click();
-  // Forge has APP/IMAGE/SLIDES/SHEET/DOC tabs — use button filter for exact match
+  await goMode(page, "FORGE");
   await expect(page.locator("button").filter({ hasText: /^APP$/ }).first()).toBeVisible({ timeout: 5_000 });
   await expect(page.locator("button").filter({ hasText: /^IMAGE$/ }).first()).toBeVisible({ timeout: 3_000 });
 });
 
-test("VAULT tab renders vault UI", async ({ page }) => {
+test("VAULT renders vault UI", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
-  await page.click("text=VAULT");
+  await goMode(page, "VAULT");
   await expect(page.getByText("NOTEBOOKS").first()).toBeVisible({ timeout: 5_000 });
 });
 
-test("TASKS tab renders tasks UI", async ({ page }) => {
+test("TASKS renders tasks UI", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
-  await page.click("text=TASKS");
+  await goMode(page, "TASKS");
   await expect(page.getByText("NEW TASK")).toBeVisible({ timeout: 5_000 });
-  // KPI row shows pending/active/awaiting/done
   await expect(page.getByText("PENDING").first()).toBeVisible();
 });
 
-test("INCOME tab renders income UI", async ({ page }) => {
+test("INCOME renders income UI", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
-  await page.click("text=INCOME");
-  // Income has a theme input / enqueue button
+  await goMode(page, "INCOME");
   await expect(page.getByText(/INCOME|MISSION|AUTO/i).first()).toBeVisible({ timeout: 5_000 });
 });
 
-test("STUDIO tab renders studio UI", async ({ page }) => {
+test("STUDIO renders studio UI", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
-  await page.click("text=STUDIO");
-  // "CUSTOM AI" and "WORKFLOWS" substring-match empty-state text; use button role for exact match
+  await goMode(page, "STUDIO");
   await expect(page.getByRole("button", { name: "CUSTOM AI", exact: true })).toBeVisible({ timeout: 5_000 });
   await expect(page.getByRole("button", { name: "WORKFLOWS", exact: true })).toBeVisible();
 });
 
-test("ARCHIVE tab renders archive UI", async ({ page }) => {
+test("ARCHIVE renders archive UI", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
-  await page.click("text=ARCHIVE");
+  await goMode(page, "ARCHIVE");
   await expect(page.getByText(/ARCHIVE|NO APPS/i).first()).toBeVisible({ timeout: 5_000 });
 });
 
-test("AUTO tab renders autopilot UI", async ({ page }) => {
+test("AUTO renders autopilot UI", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
-  await page.locator("nav").getByText("AUTO", { exact: true }).click();
-  // Mission creation form is always present (works offline)
+  await goMode(page, "AUTO");
   await expect(page.getByText(/NEW MISSION/i)).toBeVisible({ timeout: 5_000 });
   await expect(page.getByText("SET GOAL & DECOMPOSE")).toBeVisible();
 });
 
-test("BOARD tab renders automation dashboard", async ({ page }) => {
+test("BOARD renders automation dashboard", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
-  await page.locator("nav").getByText("BOARD").click();
+  await goMode(page, "BOARD");
   await expect(page.getByText("+ NEW AUTOMATION")).toBeVisible({ timeout: 5_000 });
-  // Open the no-code builder
   await page.getByText("+ NEW AUTOMATION").click();
   await expect(page.getByText("AUTOMATION NAME")).toBeVisible();
   await expect(page.getByText("+ ADD STEP")).toBeVisible();
@@ -231,11 +219,9 @@ test("BOARD tab renders automation dashboard", async ({ page }) => {
 test("Tasks: can create a task (no backend — shows error or offline)", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
-  await page.click("text=TASKS");
-  // Fill title
+  await goMode(page, "TASKS");
   await page.fill("input[placeholder='タスクのタイトル…']", "テストタスク");
   await page.click("text=ADD TASK");
-  // Either task appears or shows API error (offline mode)
   await page.waitForTimeout(1000);
   const taskRow = page.getByText("テストタスク");
   const errorPanel = page.getByText("⚠️");
@@ -245,9 +231,8 @@ test("Tasks: can create a task (no backend — shows error or offline)", async (
 test("Tasks: filter tabs are visible", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
-  await page.click("text=TASKS");
+  await goMode(page, "TASKS");
   await expect(page.getByText("ALL").first()).toBeVisible();
-  // "DONE" also appears in the KPI grid div; use button role to target the filter tab
   await expect(page.getByRole("button", { name: "DONE" })).toBeVisible();
 });
 
@@ -255,7 +240,7 @@ test("Tasks: filter tabs are visible", async ({ page }) => {
 test("Studio: create AI form expands", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
-  await page.click("text=STUDIO");
+  await goMode(page, "STUDIO");
   await page.click("text=+ NEW CUSTOM AI");
   await expect(page.getByText("AI NAME")).toBeVisible({ timeout: 3_000 });
   await expect(page.getByText("PERSONA")).toBeVisible();
@@ -264,7 +249,7 @@ test("Studio: create AI form expands", async ({ page }) => {
 test("Studio: workflow tab shows workflow form", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
-  await page.click("text=STUDIO");
+  await goMode(page, "STUDIO");
   await page.click("text=WORKFLOWS");
   await page.click("text=+ NEW WORKFLOW");
   await expect(page.getByText("WORKFLOW NAME")).toBeVisible({ timeout: 3_000 });
@@ -274,7 +259,7 @@ test("Studio: workflow tab shows workflow form", async ({ page }) => {
 test("Studio: EVOLVE tab shows self-evolution mode", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
-  await page.click("text=STUDIO");
+  await goMode(page, "STUDIO");
   await page.getByRole("button", { name: "EVOLVE", exact: true }).click();
   await expect(page.getByText(/SELF-EVOLVE/i)).toBeVisible({ timeout: 3_000 });
   await expect(page.getByText("PROPOSE EVOLUTION")).toBeVisible();
@@ -284,18 +269,23 @@ test("Studio: EVOLVE tab shows self-evolution mode", async ({ page }) => {
 test("Forge: prompt textarea is present", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
-  await page.locator("nav").getByText("FORGE").click();
+  await goMode(page, "FORGE");
   const kindBtn = page.locator("button").filter({ hasText: /^APP$/ }).first();
   await expect(kindBtn).toBeVisible({ timeout: 5_000 });
-  const textarea = page.locator("textarea").first();
-  await expect(textarea).toBeVisible();
+  await expect(page.locator("textarea").first()).toBeVisible();
+});
+
+test("Forge: shows the artifact placeholder before generating", async ({ page }) => {
+  await page.goto("/");
+  await enterApp(page);
+  await goMode(page, "FORGE");
+  await expect(page.getByText("ここに生成結果が表示されます")).toBeVisible({ timeout: 5_000 });
 });
 
 test("Forge: VIDEO tab switches to VideoPanel", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
-  await page.locator("nav").getByText("FORGE").click();
-  // Wait for Forge to fully render before clicking VIDEO
+  await goMode(page, "FORGE");
   await expect(page.locator("button").filter({ hasText: /^APP$/ }).first()).toBeVisible({ timeout: 5_000 });
   await page.locator("button").filter({ hasText: /^VIDEO$/ }).click();
   await expect(page.getByText(/VIDEO|SCENE|NARRATION/i).first()).toBeVisible({ timeout: 5_000 });
@@ -305,9 +295,7 @@ test("Forge: VIDEO tab switches to VideoPanel", async ({ page }) => {
 test("Vault: file drop zone is visible", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
-  await page.click("text=VAULT");
-  // Create a notebook first so we can see the upload zone
-  // For this test, just check the notebook creation UI exists
+  await goMode(page, "VAULT");
   await expect(page.getByPlaceholder("新しいノートブック名")).toBeVisible({ timeout: 5_000 });
 });
 
@@ -319,17 +307,15 @@ test("Briefing button is visible in top bar", async ({ page }) => {
 });
 
 /* ── Accessibility / no crash checks ─────────────────────────────── */
-test("No JavaScript errors on page load", async ({ page }) => {
+test("No JavaScript errors navigating all modes", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (err) => errors.push(err.message));
   await page.goto("/");
   await enterApp(page);
-  // Navigate through all views to ensure no crash
-  for (const nav of ["FORGE", "VAULT", "TASKS", "INCOME", "STUDIO", "AUTO", "BOARD", "ARCHIVE", "CHAT", "HOME"]) {
-    await page.locator("nav").getByText(nav, { exact: true }).click();
+  for (const mode of ["FORGE", "VAULT", "TASKS", "INCOME", "STUDIO", "AUTO", "BOARD", "ARCHIVE", "HOME", "CHAT"]) {
+    await goMode(page, mode);
     await page.waitForTimeout(300);
   }
-  // Filter out known non-critical errors
   const critical = errors.filter(
     (e) => !e.includes("favicon") && !e.includes("net::ERR") && !e.includes("Failed to fetch"),
   );

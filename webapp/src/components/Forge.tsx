@@ -76,7 +76,7 @@ export default function Forge() {
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto pb-2">
+    <div className="flex h-full min-h-0 flex-col gap-3 pb-2">
       {/* Kind selector (＋ VIDEO) */}
       <div className="flex flex-wrap gap-2">
         {KINDS.map((k) => (
@@ -109,65 +109,80 @@ export default function Forge() {
       </div>
 
       {isVideo ? (
-        <VideoPanel />
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <VideoPanel />
+        </div>
       ) : (
-        <>
-          {/* Prompt */}
-          <textarea
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            rows={3}
-            placeholder={active.placeholder}
-            className="w-full resize-none rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2.5 text-sm text-fg-strong placeholder:text-muted focus:border-[var(--line)] focus:shadow-glow focus:outline-none"
-          />
-          <button
-            type="button"
-            onClick={run}
-            disabled={busy || !prompt.trim()}
-            className="rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] py-2.5 text-[11px] tracking-[0.2em] text-fg-strong shadow-glow transition hover:shadow-glow-strong disabled:opacity-40 label-mono"
-          >
-            {busy ? "GENERATING…" : `GENERATE ${active.label}`}
-          </button>
-
-          {/* Loading shimmer (keeps the wait branded, never a raw lag) */}
-          {busy && (
-            <motion.div
-              className="panel p-4 text-center text-[11px] tracking-[0.2em] text-muted label-mono"
-              animate={{ opacity: [0.4, 1, 0.4] }}
-              transition={{ duration: 1.4, repeat: Infinity }}
+        /* Split view (Claude-style): left = controls/chat, right = artifact */
+        <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-2">
+          {/* LEFT — prompt, generate, edit */}
+          <div className="flex min-h-0 flex-col gap-3 overflow-y-auto">
+            <textarea
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              rows={4}
+              placeholder={active.placeholder}
+              className="w-full resize-none rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2.5 text-sm text-fg-strong placeholder:text-muted focus:border-[var(--line)] focus:shadow-glow focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={run}
+              disabled={busy || !prompt.trim()}
+              className="rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] py-2.5 text-[11px] tracking-[0.2em] text-fg-strong shadow-glow transition hover:shadow-glow-strong disabled:opacity-40 label-mono"
             >
-              ◈ FORGING {active.label}…
-            </motion.div>
-          )}
+              {busy ? "GENERATING…" : `GENERATE ${active.label}`}
+            </button>
 
-          {error && <div className="panel p-3 text-xs text-[#ff9b9b]">⚠️ {error}</div>}
-
-          {result && !busy && <ForgeResultView result={result} prompt={prompt} />}
-
-          {/* Edit / regenerate (修正) */}
-          {result && !busy && (
-            <div className="panel p-3">
-              <label className="mb-1.5 block text-[10px] tracking-[0.2em] text-muted label-mono">EDIT — 修正して再生成</label>
-              <div className="flex gap-2">
-                <input
-                  value={editInstruction}
-                  onChange={(e) => setEditInstruction(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && regenerate()}
-                  placeholder="例：グラフを追加して / 色を青系に / 章を1つ増やして"
-                  className="min-w-0 flex-1 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2 text-sm text-fg-strong placeholder:text-muted focus:border-[var(--line)] focus:outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={regenerate}
-                  disabled={!editInstruction.trim()}
-                  className="shrink-0 rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] px-4 text-[10px] tracking-[0.14em] text-fg-strong disabled:opacity-40 label-mono"
-                >
-                  修正
-                </button>
+            {/* Edit / regenerate (修正) — available once there's a result */}
+            {result && !busy && (
+              <div className="panel p-3">
+                <label className="mb-1.5 block text-[10px] tracking-[0.2em] text-muted label-mono">EDIT — 修正して再生成</label>
+                <div className="flex gap-2">
+                  <input
+                    value={editInstruction}
+                    onChange={(e) => setEditInstruction(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && regenerate()}
+                    placeholder="例：グラフを追加して / 色を青系に / 章を1つ増やして"
+                    className="min-w-0 flex-1 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2 text-sm text-fg-strong placeholder:text-muted focus:border-[var(--line)] focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={regenerate}
+                    disabled={!editInstruction.trim()}
+                    className="shrink-0 rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] px-4 text-[10px] tracking-[0.14em] text-fg-strong disabled:opacity-40 label-mono"
+                  >
+                    修正
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
-        </>
+            )}
+          </div>
+
+          {/* RIGHT — artifact (preview / code / slides) */}
+          <div className="flex min-h-0 flex-col overflow-y-auto rounded-forge border border-panel bg-black/20 p-1">
+            {busy ? (
+              <motion.div
+                className="m-auto p-6 text-center text-[11px] tracking-[0.2em] text-muted label-mono"
+                animate={{ opacity: [0.4, 1, 0.4] }}
+                transition={{ duration: 1.4, repeat: Infinity }}
+              >
+                ◈ FORGING {active.label}…
+              </motion.div>
+            ) : error ? (
+              <div className="m-2 panel p-3 text-xs text-[#ff9b9b]">⚠️ {error}</div>
+            ) : result ? (
+              <div className="p-1">
+                <ForgeResultView result={result} prompt={prompt} />
+              </div>
+            ) : (
+              <div className="m-auto px-6 py-10 text-center text-[11px] leading-relaxed tracking-[0.14em] text-muted/60 label-mono">
+                ここに生成結果が表示されます
+                <br />
+                <span className="text-[10px]">PREVIEW · CODE · SLIDES</span>
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

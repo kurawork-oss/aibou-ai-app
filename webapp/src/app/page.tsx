@@ -125,7 +125,8 @@ function Hud() {
     [persist],
   );
 
-  const wide = view === "home";
+  // Chat keeps the focused narrow column; every other mode uses the full width.
+  const wide = view !== "chat";
 
   return (
     <main
@@ -146,6 +147,7 @@ function Hud() {
           </div>
           <div className="flex items-center gap-2">
             <Briefing />
+            <ModeLauncher view={view} onChange={setView} />
             <button
               type="button"
               onClick={() => setSettingsOpen(true)}
@@ -175,24 +177,22 @@ function Hud() {
         <div className="divider my-2" />
       </div>
 
-      {/* Active view fills remaining space */}
+      {/* Active view fills remaining space. Home & Forge own the full width
+          (custom layouts); the rest are centred so they don't look stretched. */}
       <section className="min-h-0 flex-1">
         {loaded && view === "home" && <Home settings={settings} onNavigate={setView} />}
         {loaded && view === "chat" && (
           <Chat settings={settings} voiceReplies={voiceReplies} onStateChange={setCoreState} />
         )}
         {loaded && view === "forge" && <Forge />}
-        {loaded && view === "vault" && <Vault />}
-        {loaded && view === "income" && <Income />}
-        {loaded && view === "tasks" && <Tasks />}
-        {loaded && view === "studio" && <Studio />}
-        {loaded && view === "autopilot" && <Autopilot />}
-        {loaded && view === "board" && <Dashboard />}
-        {loaded && view === "archive" && <AppArchive />}
+        {loaded && view === "vault" && <Centered><Vault /></Centered>}
+        {loaded && view === "income" && <Centered><Income /></Centered>}
+        {loaded && view === "tasks" && <Centered><Tasks /></Centered>}
+        {loaded && view === "studio" && <Centered><Studio /></Centered>}
+        {loaded && view === "autopilot" && <Centered><Autopilot /></Centered>}
+        {loaded && view === "board" && <Centered><Dashboard /></Centered>}
+        {loaded && view === "archive" && <Centered><AppArchive /></Centered>}
       </section>
-
-      {/* Bottom navigation — horizontal scroll for 7 views */}
-      <NavBar view={view} onChange={setView} />
 
       {/* Settings drawer */}
       <AnimatePresence>
@@ -266,32 +266,83 @@ function NavIcon({ name }: { name: View }) {
   }
 }
 
-function NavBar({ view, onChange }: { view: View; onChange: (v: View) => void }) {
-  // 5-column grid (two even rows for 10 modes) — fills the width with no
-  // horizontal overflow, centred within a sensible max width on wide pages.
+/** Centres non-fullbleed views so they don't stretch on the wide page. */
+function Centered({ children }: { children: React.ReactNode }) {
+  return <div className="mx-auto h-full w-full max-w-3xl">{children}</div>;
+}
+
+function WaffleIcon() {
   return (
-    <nav className="mx-auto mt-2 grid w-full max-w-2xl grid-cols-5 gap-1.5 pt-1 pb-0.5">
-      {NAV_ITEMS.map((it) => {
-        const active = it.key === view;
-        return (
-          <button
-            key={it.key}
-            type="button"
-            onClick={() => onChange(it.key)}
-            className="flex h-[3.4rem] flex-col items-center justify-center rounded-forge border text-[9px] tracking-[0.06em] label-mono transition"
-            style={{
-              borderColor: active ? "var(--accent)" : "var(--panel-bd)",
-              color: active ? "var(--fg-strong)" : "var(--muted)",
-              boxShadow: active ? "0 0 12px var(--glow)" : "none",
-              background: active ? "var(--btn-bg)" : "transparent",
-            }}
-          >
-            <span className="mb-1 grid place-items-center"><NavIcon name={it.key} /></span>
-            <span>{it.label}</span>
-          </button>
-        );
-      })}
-    </nav>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      {[4, 10, 16].flatMap((y) => [4, 10, 16].map((x) => (
+        <circle key={`${x}-${y}`} cx={x + 1} cy={y + 1} r="1.6" />
+      )))}
+    </svg>
+  );
+}
+
+/** Google-apps-style mode launcher: a waffle button → popover grid of modes. */
+function ModeLauncher({ view, onChange }: { view: View; onChange: (v: View) => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="grid h-8 w-8 place-items-center rounded-lg border border-panel text-muted transition hover:border-[var(--line)] hover:text-fg-strong"
+        aria-label="Modes"
+        title="Modes"
+        aria-expanded={open}
+      >
+        <WaffleIcon />
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <>
+            {/* click-away backdrop */}
+            <button
+              type="button"
+              aria-hidden
+              tabIndex={-1}
+              onClick={() => setOpen(false)}
+              className="fixed inset-0 z-40 cursor-default"
+            />
+            <motion.nav
+              initial={{ opacity: 0, y: -8, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -8, scale: 0.97 }}
+              transition={{ type: "spring", stiffness: 360, damping: 28 }}
+              className="glass-silver absolute right-0 top-10 z-50 w-[17rem] p-3"
+            >
+              <div className="mb-2 px-1 text-[9px] tracking-[0.22em] text-muted label-mono">MODES</div>
+              <div className="grid grid-cols-3 gap-1.5">
+                {NAV_ITEMS.map((it) => {
+                  const active = it.key === view;
+                  return (
+                    <button
+                      key={it.key}
+                      type="button"
+                      onClick={() => { onChange(it.key); setOpen(false); }}
+                      className="flex h-[4.25rem] flex-col items-center justify-center gap-1.5 rounded-forge border text-[9px] tracking-[0.06em] label-mono transition"
+                      style={{
+                        borderColor: active ? "var(--accent)" : "var(--panel-bd)",
+                        color: active ? "var(--fg-strong)" : "var(--muted)",
+                        boxShadow: active ? "0 0 12px var(--glow)" : "none",
+                        background: active ? "var(--btn-bg)" : "rgba(255,255,255,0.02)",
+                      }}
+                    >
+                      <NavIcon name={it.key} />
+                      <span>{it.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </motion.nav>
+          </>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 
