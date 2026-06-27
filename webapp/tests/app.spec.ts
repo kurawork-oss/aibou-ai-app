@@ -68,6 +68,19 @@ test("Mode launcher shows all 10 modes", async ({ page }) => {
   await expect(nav.getByText("AUTO", { exact: true })).toBeVisible();
 });
 
+test("Mode panel opens downward, not upward", async ({ page }) => {
+  await page.goto("/");
+  await enterApp(page);
+  const btn = page.getByLabel("Modes");
+  const bb = await btn.boundingBox();
+  await btn.click();
+  const panel = page.locator("nav").filter({ hasText: "MODES" });
+  await expect(panel).toBeVisible({ timeout: 5_000 });
+  const pb = await panel.boundingBox();
+  // The panel's top must sit below the button's top (it opens downward).
+  expect(pb!.y).toBeGreaterThanOrEqual(bb!.y);
+});
+
 test("CHAT is the default view; HOME shows the cockpit", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
@@ -314,6 +327,32 @@ test("Briefing button is visible in top bar", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
   await expect(page.getByText("BRIEF")).toBeVisible();
+});
+
+/* ── Desktop layout (wide viewport) ─────────────────────────────── */
+test.describe("desktop layout", () => {
+  test.use({ viewport: { width: 1280, height: 800 } });
+
+  test("Chat history rail sits to the left of the conversation", async ({ page }) => {
+    await page.goto("/");
+    await enterApp(page);
+    // Persistent sidebar is visible on desktop
+    const newChat = page.getByText("＋ 新しいチャット").first();
+    await expect(newChat).toBeVisible({ timeout: 5_000 });
+    const railBox = await newChat.boundingBox();
+    const inputBox = await page.getByPlaceholder("THE FORGE OS にメッセージ…").boundingBox();
+    // History rail is left of the conversation composer
+    expect(railBox!.x).toBeLessThan(inputBox!.x);
+  });
+
+  test("Tasks uses a two-column layout on desktop", async ({ page }) => {
+    await page.goto("/");
+    await enterApp(page);
+    await goMode(page, "TASKS");
+    // NEW TASK (left column) and the list area both render
+    await expect(page.getByText("NEW TASK")).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByRole("button", { name: "DONE" })).toBeVisible();
+  });
 });
 
 /* ── Accessibility / no crash checks ─────────────────────────────── */

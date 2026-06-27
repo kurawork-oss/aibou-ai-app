@@ -126,12 +126,11 @@ function Hud() {
     [persist],
   );
 
-  // Chat keeps the focused narrow column; every other mode uses the full width.
-  const wide = view !== "chat";
-
+  // Every mode uses the full width; each view manages its own internal
+  // centering (chat centres its conversation with the history on the far left).
   return (
     <main
-      className={`relative mx-auto flex h-[100dvh] w-full flex-col px-4 pb-3 pt-[max(env(safe-area-inset-top),0.75rem)] transition-[max-width] duration-300 ${wide ? "max-w-6xl" : "max-w-2xl"}`}
+      className="relative mx-auto flex h-[100dvh] w-full max-w-6xl flex-col px-4 pb-3 pt-[max(env(safe-area-inset-top),0.75rem)]"
     >
       {/* Occasional drifting light-silver ambient bloom (behind everything). */}
       <div className="forge-ambient" aria-hidden />
@@ -269,7 +268,7 @@ function NavIcon({ name }: { name: View }) {
 
 /** Centres non-fullbleed views so they don't stretch on the wide page. */
 function Centered({ children }: { children: React.ReactNode }) {
-  return <div className="mx-auto h-full w-full max-w-3xl">{children}</div>;
+  return <div className="mx-auto h-full w-full max-w-5xl">{children}</div>;
 }
 
 function WaffleIcon() {
@@ -309,35 +308,40 @@ function ModeLauncher({ view, onChange }: { view: View; onChange: (v: View) => v
               onClick={() => setOpen(false)}
               className="fixed inset-0 z-40 cursor-default"
             />
+            {/* Outer owns positioning (absolute); inner owns the glass look.
+                (Keeping glass-silver — which is position:relative — off the
+                positioned element avoids it overriding `absolute`.) */}
             <motion.nav
               initial={{ opacity: 0, y: -8, scale: 0.97 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -8, scale: 0.97 }}
               transition={{ type: "spring", stiffness: 360, damping: 28 }}
-              className="glass-silver absolute right-0 top-10 z-50 w-[17rem] p-3"
+              className="absolute right-0 top-11 z-50 w-[17rem] origin-top-right"
             >
-              <div className="mb-2 px-1 text-[9px] tracking-[0.22em] text-muted label-mono">MODES</div>
-              <div className="grid grid-cols-3 gap-1.5">
-                {NAV_ITEMS.map((it) => {
-                  const active = it.key === view;
-                  return (
-                    <button
-                      key={it.key}
-                      type="button"
-                      onClick={() => { onChange(it.key); setOpen(false); }}
-                      className="flex h-[4.25rem] flex-col items-center justify-center gap-1.5 rounded-forge border text-[9px] tracking-[0.06em] label-mono transition"
-                      style={{
-                        borderColor: active ? "var(--accent)" : "var(--panel-bd)",
-                        color: active ? "var(--fg-strong)" : "var(--muted)",
-                        boxShadow: active ? "0 0 12px var(--glow)" : "none",
-                        background: active ? "var(--btn-bg)" : "rgba(255,255,255,0.02)",
-                      }}
-                    >
-                      <NavIcon name={it.key} />
-                      <span>{it.label}</span>
-                    </button>
-                  );
-                })}
+              <div className="glass-silver p-3">
+                <div className="mb-2 px-1 text-[9px] tracking-[0.22em] text-muted label-mono">MODES</div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {NAV_ITEMS.map((it) => {
+                    const active = it.key === view;
+                    return (
+                      <button
+                        key={it.key}
+                        type="button"
+                        onClick={() => { onChange(it.key); setOpen(false); }}
+                        className="flex h-[4.25rem] flex-col items-center justify-center gap-1.5 rounded-forge border text-[9px] tracking-[0.06em] label-mono transition"
+                        style={{
+                          borderColor: active ? "var(--accent)" : "var(--panel-bd)",
+                          color: active ? "var(--fg-strong)" : "var(--muted)",
+                          boxShadow: active ? "0 0 12px var(--glow)" : "none",
+                          background: active ? "var(--btn-bg)" : "rgba(255,255,255,0.02)",
+                        }}
+                      >
+                        <NavIcon name={it.key} />
+                        <span>{it.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </motion.nav>
           </>

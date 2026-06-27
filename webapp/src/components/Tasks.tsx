@@ -122,7 +122,9 @@ export default function Tasks() {
   );
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto pb-2">
+    <div className="grid h-full min-h-0 gap-3 overflow-y-auto pb-2 lg:grid-cols-[22rem_1fr] lg:content-start">
+      {/* ── Left column: KPI + new task + filters ── */}
+      <div className="flex flex-col gap-3">
       {/* KPI row */}
       <div className="grid grid-cols-4 gap-2">
         {[
@@ -192,7 +194,10 @@ export default function Tasks() {
       </div>
 
       {error && <div className="panel p-3 text-xs text-[#ff9b9b]">⚠️ {error}</div>}
+      </div>
 
+      {/* ── Right column: task list ── */}
+      <div className="flex min-h-0 flex-col gap-2">
       {loading ? (
         <motion.div
           className="panel p-4 text-center text-[11px] tracking-[0.2em] text-muted label-mono"
@@ -314,6 +319,7 @@ export default function Tasks() {
           </AnimatePresence>
         </div>
       )}
+      </div>
     </div>
   );
 }

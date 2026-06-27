@@ -101,8 +101,9 @@ export default function Autopilot() {
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto pb-2">
-      {/* Create mission */}
+    <div className="grid h-full min-h-0 gap-3 overflow-y-auto pb-2 lg:grid-cols-[24rem_1fr] lg:content-start">
+      {/* ── Left: create mission ── */}
+      <div className="flex flex-col gap-3">
       <div className="panel p-3">
         <div className="mb-1.5 text-[10px] tracking-[0.2em] text-muted label-mono">NEW MISSION — ゴールを設定</div>
         <textarea
@@ -127,7 +128,10 @@ export default function Autopilot() {
       </div>
 
       {error && <div className="panel p-3 text-xs text-[#ff9b9b]">⚠️ {error}</div>}
+      </div>
 
+      {/* ── Right: missions list ── */}
+      <div className="flex min-h-0 flex-col gap-2">
       {loading ? (
         <motion.div className="panel p-4 text-center text-[11px] tracking-[0.2em] text-muted label-mono" animate={{ opacity: [0.4, 1, 0.4] }} transition={{ duration: 1.4, repeat: Infinity }}>
           ◈ LOADING MISSIONS…
@@ -199,6 +203,7 @@ export default function Autopilot() {
           })}
         </div>
       )}
+      </div>
     </div>
   );
 }

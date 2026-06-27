@@ -347,8 +347,8 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
   const canSend = (input.trim().length > 0 || !!pendingImage) && !streaming;
 
   return (
-    <div className="mx-auto flex h-full min-h-0 w-full max-w-4xl gap-3">
-      {/* History sidebar (Gemini-style) — persistent on lg, drawer on mobile */}
+    <div className="flex h-full min-h-0 w-full gap-4">
+      {/* History rail (Gemini-style) — far left on lg, drawer on mobile */}
       <ChatHistory
         convos={convos}
         currentId={currentId}
@@ -359,8 +359,8 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
         onDelete={deleteConvo}
       />
 
-      {/* Conversation column */}
-      <div className="flex h-full min-h-0 flex-1 flex-col">
+      {/* Conversation column — centred in the remaining space */}
+      <div className="mx-auto flex h-full min-h-0 w-full max-w-2xl flex-1 flex-col">
         {/* Mobile history toggle */}
         <div className="mb-1 flex items-center gap-2 lg:hidden">
           <button
