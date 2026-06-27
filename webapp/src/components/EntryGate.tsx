@@ -17,6 +17,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useState } from "react";
 import CoreOrb from "./CoreOrb";
 import { supabase, supabaseEnabled } from "@/lib/supabase";
+import { APP_VERSION } from "@/lib/version";
 
 const SS_KEY = "forge_entered";
 const GATE_PIN = process.env.NEXT_PUBLIC_GATE_PIN || "";
@@ -220,6 +221,9 @@ export default function EntryGate({ children }: { children: React.ReactNode }) {
               >
                 AUTHORIZED ACCESS ONLY
               </motion.p>
+              <p className="mt-1 text-[8px] tracking-[0.24em] text-muted/40 label-mono">
+                BUILD {APP_VERSION}
+              </p>
             </motion.div>
           </motion.div>
         )}
