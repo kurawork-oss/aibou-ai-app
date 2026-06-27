@@ -258,6 +258,15 @@ test("Studio: workflow tab shows workflow form", async ({ page }) => {
   await expect(page.getByText("STEPS")).toBeVisible();
 });
 
+test("Studio: EVOLVE tab shows self-evolution mode", async ({ page }) => {
+  await page.goto("/");
+  await enterApp(page);
+  await page.click("text=STUDIO");
+  await page.getByRole("button", { name: "EVOLVE", exact: true }).click();
+  await expect(page.getByText(/SELF-EVOLVE/i)).toBeVisible({ timeout: 3_000 });
+  await expect(page.getByText("PROPOSE EVOLUTION")).toBeVisible();
+});
+
 /* ── FORGE feature ────────────────────────────────────────────────── */
 test("Forge: prompt textarea is present", async ({ page }) => {
   await page.goto("/");

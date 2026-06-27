@@ -579,3 +579,19 @@ def test_automations_delete():
     r2 = client.delete(f"/automations/{fid}")
     assert r2.status_code == 200
     assert r2.json()["ok"] is True
+
+
+# ── /evolve（セルフ進化） ───────────────────────────────────────────
+def test_evolve_without_gemini():
+    r = client.post("/evolve/propose", json={"instruction": "在庫管理アプリが欲しい"})
+    # Gemini 無し → 503 error（crash しない）
+    assert r.status_code in (200, 503)
+    data = r.json()
+    assert "error" in data or "type" in data
+
+
+def test_evolve_empty_instruction():
+    r = client.post("/evolve/propose", json={"instruction": ""})
+    assert r.status_code in (400, 422, 503)
+    data = r.json()
+    assert "error" in data or "detail" in data

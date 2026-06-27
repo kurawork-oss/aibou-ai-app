@@ -724,6 +724,28 @@ export async function automationsRun(id: string, input = ""): Promise<Automation
   return data;
 }
 
+/* ---------------- Evolve (self-evolution: instruction → proposal) ---------------- */
+export type EvolveType = "app" | "custom_ai" | "automation" | "answer";
+
+export interface EvolveProposal {
+  type: EvolveType;
+  summary: string;
+  params: Record<string, unknown>;
+  raw?: string;
+}
+
+/** POST /evolve/propose — turn a natural-language wish into a buildable proposal. */
+export async function evolvePropose(instruction: string): Promise<EvolveProposal> {
+  const res = await fetch(`${requireApiUrl()}/evolve/propose`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ instruction }),
+  });
+  const data = (await res.json().catch(() => ({}))) as EvolveProposal & { error?: string };
+  if (!res.ok || data.error) throw new Error(data.error ?? `Evolve failed (${res.status})`);
+  return data;
+}
+
 /* ---------------- Keychain (API key vault) ---------------- */
 export interface ApiKeyInfo {
   name: string;

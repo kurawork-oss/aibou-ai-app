@@ -10,6 +10,7 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useState } from "react";
+import { addToArchive } from "@/components/AppArchive";
 import {
   studioListAIs,
   studioCreateAI,
@@ -18,13 +19,24 @@ import {
   studioCreateWorkflow,
   studioDeleteWorkflow,
   studioRunWorkflow,
+  evolvePropose,
+  forgeGenerate,
+  automationsCreate,
   type StudioAI,
   type StudioWorkflow,
   type WorkflowStep,
   type WorkflowResult,
+  type EvolveProposal,
+  type AutomationStep,
 } from "@/lib/api";
 
-type StudioTab = "ais" | "workflows";
+type StudioTab = "ais" | "workflows" | "evolve";
+
+const TAB_LABEL: Record<StudioTab, string> = {
+  ais: "CUSTOM AI",
+  workflows: "WORKFLOWS",
+  evolve: "EVOLVE",
+};
 
 const MODELS = [
   { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
@@ -39,7 +51,7 @@ export default function Studio() {
     <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto pb-2">
       {/* Tab selector */}
       <div className="flex gap-2">
-        {(["ais", "workflows"] as StudioTab[]).map((t) => (
+        {(["ais", "workflows", "evolve"] as StudioTab[]).map((t) => (
           <button
             key={t}
             type="button"
@@ -51,12 +63,14 @@ export default function Studio() {
               boxShadow: tab === t ? "0 0 12px var(--glow)" : "none",
             }}
           >
-            {t === "ais" ? "CUSTOM AI" : "WORKFLOWS"}
+            {TAB_LABEL[t]}
           </button>
         ))}
       </div>
 
-      {tab === "ais" ? <AIsPanel /> : <WorkflowsPanel />}
+      {tab === "ais" && <AIsPanel />}
+      {tab === "workflows" && <WorkflowsPanel />}
+      {tab === "evolve" && <EvolvePanel />}
     </div>
   );
 }
@@ -428,6 +442,132 @@ function WorkflowsPanel() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+/* ─── Evolve Panel (self-evolution: chat → no-code build) ───────────── */
+
+const EVOLVE_TYPE_LABEL: Record<string, string> = {
+  app: "アプリ生成",
+  custom_ai: "カスタムAI",
+  automation: "自動化フロー",
+  answer: "回答",
+};
+
+function EvolvePanel() {
+  const [instruction, setInstruction] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [proposal, setProposal] = useState<EvolveProposal | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [applying, setApplying] = useState(false);
+  const [applied, setApplied] = useState<string | null>(null);
+
+  const propose = async () => {
+    if (!instruction.trim() || busy) return;
+    setBusy(true);
+    setError(null);
+    setProposal(null);
+    setApplied(null);
+    try {
+      setProposal(await evolvePropose(instruction.trim()));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "提案の生成に失敗しました");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const apply = async () => {
+    if (!proposal || applying) return;
+    setApplying(true);
+    setError(null);
+    try {
+      const p = proposal.params as Record<string, unknown>;
+      if (proposal.type === "app") {
+        const r = await forgeGenerate("app", String(p.prompt ?? instruction));
+        if (r.error) throw new Error(r.error);
+        if (r.code) addToArchive(String(p.prompt ?? "Evolved App").slice(0, 40), String(p.prompt ?? ""), r.code, r.note);
+        setApplied("アプリを生成し、ARCHIVE に保存しました。");
+      } else if (proposal.type === "custom_ai") {
+        await studioCreateAI({
+          name: String(p.name ?? "Evolved AI"),
+          persona: String(p.persona ?? ""),
+          model: String(p.model ?? "gemini-2.5-flash"),
+          rules: String(p.rules ?? ""),
+        });
+        setApplied("カスタムAIを作成しました。CUSTOM AI タブで確認できます。");
+      } else if (proposal.type === "automation") {
+        const steps = Array.isArray(p.steps) ? (p.steps as AutomationStep[]) : [];
+        await automationsCreate(String(p.name ?? "Evolved Automation"), steps);
+        setApplied("自動化フローを作成しました。BOARD タブで確認できます。");
+      } else {
+        setApplied("この要望は新規作成不要です（上の回答をご確認ください）。");
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "適用に失敗しました");
+    } finally {
+      setApplying(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="panel p-3">
+        <div className="mb-1.5 text-[10px] tracking-[0.2em] text-muted label-mono">
+          SELF-EVOLVE — チャットで指示 → ノーコードで自己拡張
+        </div>
+        <textarea
+          value={instruction}
+          onChange={(e) => setInstruction(e.target.value)}
+          rows={3}
+          placeholder="例：毎朝トレンドを要約してLINEに送る仕組みが欲しい / 経理担当の専用AIを作って / 在庫管理アプリが欲しい"
+          className="mb-2 w-full resize-none rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2 text-sm text-fg-strong placeholder:text-muted focus:border-[var(--line)] focus:outline-none"
+        />
+        <button
+          type="button"
+          onClick={() => void propose()}
+          disabled={busy || !instruction.trim()}
+          className="w-full rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] py-2.5 text-[11px] tracking-[0.2em] text-fg-strong shadow-glow transition hover:shadow-glow-strong disabled:opacity-40 label-mono"
+        >
+          {busy ? "THINKING…" : "✦ PROPOSE EVOLUTION"}
+        </button>
+      </div>
+
+      {error && <div className="panel p-3 text-xs text-[#ff9b9b]">⚠️ {error}</div>}
+
+      {proposal && (
+        <div className="panel p-3">
+          <div className="mb-2 flex items-center gap-2">
+            <span className="rounded px-2 py-0.5 text-[9px] tracking-[0.14em] label-mono" style={{ background: "rgba(0,243,255,0.12)", color: "var(--accent)" }}>
+              {EVOLVE_TYPE_LABEL[proposal.type] ?? proposal.type}
+            </span>
+          </div>
+          <p className="text-sm leading-relaxed text-fg">{proposal.summary}</p>
+
+          {proposal.type === "answer" ? (
+            <p className="mt-2 whitespace-pre-wrap text-[12px] leading-relaxed text-muted">
+              {String((proposal.params as Record<string, unknown>).text ?? "")}
+            </p>
+          ) : (
+            <>
+              <pre className="mt-2 max-h-48 overflow-auto rounded-forge bg-black/30 p-2 text-[10px] leading-relaxed text-muted">
+                {JSON.stringify(proposal.params, null, 2)}
+              </pre>
+              <button
+                type="button"
+                onClick={() => void apply()}
+                disabled={applying}
+                className="mt-2 w-full rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] py-2 text-[11px] tracking-[0.2em] text-fg-strong shadow-glow transition hover:shadow-glow-strong disabled:opacity-40 label-mono"
+              >
+                {applying ? "APPLYING…" : "⚡ APPLY — 適用して実体化"}
+              </button>
+            </>
+          )}
+
+          {applied && <p className="mt-2 text-[11px] text-[var(--accent)] label-mono">◈ {applied}</p>}
         </div>
       )}
     </>

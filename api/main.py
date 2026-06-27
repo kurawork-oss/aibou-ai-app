@@ -30,6 +30,7 @@ from pydantic import BaseModel, Field
 import autopilot
 import automations
 import config
+import evolve
 import forge
 import income
 import keychain
@@ -131,6 +132,10 @@ class AutomationCreateRequest(BaseModel):
 
 class AutomationRunRequest(BaseModel):
     input: str = ""
+
+
+class EvolveRequest(BaseModel):
+    instruction: str
 
 
 class MemoryAddRequest(BaseModel):
@@ -817,6 +822,18 @@ async def automations_run(flow_id: str, req: AutomationRunRequest,
     result = await loop.run_in_executor(None, lambda: automations.run_flow(flow_id, req.input))
     if isinstance(result, dict) and result.get("error"):
         return JSONResponse(status_code=404, content=result)
+    return result
+
+
+# ── Evolve（セルフ進化：指示→提案） ──────────────────────────────
+
+@app.post("/evolve/propose")
+async def evolve_propose(req: EvolveRequest, _auth: None = Depends(require_auth)):
+    """自然言語の指示から、app/custom_ai/automation/answer の提案を返す。"""
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(None, lambda: evolve.propose(req.instruction))
+    if isinstance(result, dict) and result.get("error"):
+        return JSONResponse(status_code=503, content=result)
     return result
 
 
