@@ -38,6 +38,8 @@ export interface VisionParams {
 export interface TTSParams {
   text: string;
   voice?: string;
+  /** edge-tts rate string, e.g. "+0%", "-20%", "+30%". */
+  rate?: string;
 }
 
 export interface IncomeSummary {
@@ -247,7 +249,7 @@ export async function tts(params: TTSParams): Promise<string> {
   const res = await fetch(`${requireApiUrl()}/tts`, {
     method: "POST",
     headers: authHeaders({ "Content-Type": "application/json" }),
-    body: JSON.stringify({ text: params.text, voice: params.voice }),
+    body: JSON.stringify({ text: params.text, voice: params.voice, rate: params.rate }),
   });
   const data = (await res.json().catch(() => ({}))) as { audio_base64?: string; error?: string };
   if (!res.ok) throw new Error(data.error || `TTS failed (${res.status})`);
@@ -558,6 +560,42 @@ export async function videoGenerate(scenes: VideoScene[], imagePrompt = ""): Pro
   const data = (await res.json().catch(() => ({}))) as VideoResult;
   if (!res.ok && !data.error) return { error: `Video failed (${res.status})` };
   return data;
+}
+
+/* ---------------- Keychain (API key vault) ---------------- */
+export interface ApiKeyInfo {
+  name: string;
+  label?: string;
+  hint?: string;
+  masked: string;
+  set: boolean;
+}
+
+/** GET /keys — masked list of known + stored API keys (full values never returned). */
+export async function listKeys(): Promise<ApiKeyInfo[]> {
+  const res = await fetch(`${requireApiUrl()}/keys`, { headers: authHeaders(), cache: "no-store" });
+  if (!res.ok) throw new Error(`Keys failed (${res.status})`);
+  const data = (await res.json().catch(() => ({ items: [] }))) as { items?: ApiKeyInfo[] };
+  return data.items ?? [];
+}
+
+/** POST /keys — store/update a key. */
+export async function setKey(name: string, value: string): Promise<{ ok: boolean; masked?: string }> {
+  const res = await fetch(`${requireApiUrl()}/keys`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ name, value }),
+  });
+  const data = (await res.json().catch(() => ({}))) as { ok?: boolean; masked?: string; error?: string };
+  if (!res.ok) throw new Error(data.error ?? `Set key failed (${res.status})`);
+  return { ok: Boolean(data.ok), masked: data.masked };
+}
+
+/** DELETE /keys/{name} — remove a stored key. */
+export async function deleteKey(name: string): Promise<boolean> {
+  const res = await fetch(`${requireApiUrl()}/keys/${encodeURIComponent(name)}`, { method: "DELETE", headers: authHeaders() });
+  const data = (await res.json().catch(() => ({ ok: false }))) as { ok?: boolean };
+  return Boolean(data.ok);
 }
 
 /* ---------------- Proactive ---------------- */

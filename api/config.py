@@ -27,6 +27,8 @@ GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash").strip() or "ge
 
 # 既定の音声（edge-tts）
 DEFAULT_TTS_VOICE = os.environ.get("DEFAULT_TTS_VOICE", "ja-JP-KeitaNeural").strip() or "ja-JP-KeitaNeural"
+# 既定の話速（edge-tts rate, 例 "+0%" / "-20%" / "+30%"）
+DEFAULT_TTS_RATE = os.environ.get("DEFAULT_TTS_RATE", "+0%").strip() or "+0%"
 
 
 # ── Gemini 設定（遅延・1度だけ） ─────────────────────────────────
@@ -34,19 +36,30 @@ _gemini_ready = False
 
 
 def gemini_configured() -> bool:
-    """GEMINI_API_KEY があり configure 済みなら True。"""
-    global _gemini_ready
+    """GEMINI_API_KEY があり configure 済みなら True。
+    Keychain 経由で os.environ に後から入ったキーも拾えるよう、毎回 env を確認する。"""
+    global _gemini_ready, GEMINI_API_KEY
     if _gemini_ready:
         return True
-    if not GEMINI_API_KEY:
+    key = GEMINI_API_KEY or os.environ.get("GEMINI_API_KEY", "").strip()
+    if not key:
         return False
     try:
         import google.generativeai as genai
-        genai.configure(api_key=GEMINI_API_KEY)
+        genai.configure(api_key=key)
+        GEMINI_API_KEY = key
         _gemini_ready = True
         return True
     except Exception:
         return False
+
+
+def reconfigure_gemini(api_key: str) -> bool:
+    """Keychain でキーが更新された時に呼ぶ。次回の get_gemini_model から新キーを使う。"""
+    global _gemini_ready, GEMINI_API_KEY
+    GEMINI_API_KEY = (api_key or "").strip()
+    _gemini_ready = False
+    return gemini_configured()
 
 
 def get_gemini_model(model_name: str | None = None):

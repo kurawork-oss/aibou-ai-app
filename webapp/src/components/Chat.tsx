@@ -33,6 +33,11 @@ import {
 export interface ChatSettings {
   name: string;
   persona: string;
+  /** edge-tts voice name for the API fallback (e.g. "ja-JP-NanamiNeural"). */
+  voice?: string;
+  /** Speech rate multiplier (1.0 = normal). Browser TTS uses it directly;
+      the API fallback converts it to a "+NN%" rate string. */
+  rate?: number;
 }
 
 interface Message {
@@ -118,13 +123,16 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
     async (text: string) => {
       if (!voiceReplies || !text.trim()) return;
       setSpeaking(true);
+      const rate = settings.rate ?? 1.0;
       if (ttsSupported) {
-        speak(text, { lang: "ja-JP", onEnd: () => setSpeaking(false) });
+        speak(text, { lang: "ja-JP", rate, onEnd: () => setSpeaking(false) });
         return;
       }
-      // Fallback: ask the backend to synthesize, then play the mp3.
+      // Fallback: ask the backend to synthesize (with chosen voice + rate).
       try {
-        const audio = await tts({ text });
+        const pct = Math.round((rate - 1) * 100);
+        const rateStr = `${pct >= 0 ? "+" : ""}${pct}%`;
+        const audio = await tts({ text, voice: settings.voice, rate: rateStr });
         await playBase64Audio(audio);
       } catch {
         /* silent fallback */
@@ -132,7 +140,7 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
         setSpeaking(false);
       }
     },
-    [voiceReplies, ttsSupported],
+    [voiceReplies, ttsSupported, settings.voice, settings.rate],
   );
 
   /** Send a text turn (optionally with an attached image → /vision). */
@@ -304,7 +312,10 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
             aria-label="Attach image"
             title="Attach image"
           >
-            📷
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 8.5A2.5 2.5 0 0 1 5.5 6h1.2l1-1.6A1.5 1.5 0 0 1 9 3.7h6a1.5 1.5 0 0 1 1.3.7l1 1.6h1.2A2.5 2.5 0 0 1 21 8.5v8A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z" />
+              <circle cx="12" cy="12" r="3.2" />
+            </svg>
           </button>
           <input
             ref={fileInputRef}
@@ -343,10 +354,10 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
                   animate={{ scale: [1, 1.18, 1] }}
                   transition={{ duration: 1, repeat: Infinity, ease: "easeInOut" }}
                 >
-                  🎤
+                  <MicIcon />
                 </motion.span>
               ) : (
-                "🎤"
+                <MicIcon />
               )}
             </button>
           )}
@@ -388,7 +399,7 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
             <span className="text-[10px] tracking-[0.2em] text-[var(--accent)] label-mono">LISTENING…</span>
           ) : (
             <span className="text-[10px] tracking-[0.18em] text-muted/50 label-mono">
-              {micSupported ? "ENTER TO SEND · 🎤 HANDS-FREE" : "ENTER TO SEND"}
+              {micSupported ? "ENTER TO SEND · HANDS-FREE" : "ENTER TO SEND"}
             </span>
           )}
         </div>
@@ -398,6 +409,15 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
 }
 
 /* ------------------------------------------------------------------ */
+
+function MicIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="9" y="3" width="6" height="11" rx="3" />
+      <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+    </svg>
+  );
+}
 
 function MessageBubble({ message }: { message: Message }) {
   const isUser = message.role === "user";

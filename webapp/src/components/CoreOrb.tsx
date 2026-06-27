@@ -44,10 +44,11 @@ const STATE_STYLES: Record<CoreState, StateStyle> = {
 // Base spin (seconds) for each tilted ring; scaled by state.orbit.
 const ORBIT_BASE = [7, 12, 17] as const;
 // Ring diameter as a fraction of the container, with rim colour.
+// Rings extend BEYOND the core (scale > core's 0.66) for the wide-orbit look.
 const ORBIT_RINGS = [
-  { scale: 0.98, color: "rgba(200,222,255,0.65)" },
-  { scale: 0.86, color: "rgba(190,215,255,0.4)" },
-  { scale: 0.86, color: "rgba(185,210,255,0.26)" },
+  { scale: 1.22, color: "rgba(205,226,255,0.6)" },
+  { scale: 1.06, color: "rgba(196,219,255,0.4)" },
+  { scale: 1.06, color: "rgba(188,212,255,0.26)" },
 ] as const;
 
 export default function CoreOrb({ size = 140, state = "idle", className = "" }: CoreOrbProps) {
@@ -64,7 +65,10 @@ export default function CoreOrb({ size = 140, state = "idle", className = "" }: 
       `0 0 ${size * 0.5}px ${core(s.glow * 0.7)}`,
       `0 0 ${size * 0.95}px ${core(s.glow * 0.45)}`,
       s.cyan > 0 ? `0 0 ${size * 0.32}px ${cyan(s.cyan)}` : "",
-      `inset 0 0 ${size * 0.22}px rgba(255,255,255,0.28)`,
+      // Soft inner highlight (top-left) + a dark inset rim so the sphere
+      // reads as a lit ball against a deep, near-black edge.
+      `inset 0 0 ${size * 0.16}px rgba(210,232,255,0.2)`,
+      `inset 0 0 ${size * 0.14}px ${size * 0.05}px rgba(6,12,30,0.55)`,
     ]
       .filter(Boolean)
       .join(", ");
@@ -137,20 +141,21 @@ export default function CoreOrb({ size = 140, state = "idle", className = "" }: 
         aria-hidden
         className="absolute rounded-full"
         style={{
-          width: size * 0.82,
-          height: size * 0.82,
-          border: "1px solid rgba(197,198,199,0.35)",
+          width: size * 0.74,
+          height: size * 0.74,
+          border: "1px solid rgba(197,198,199,0.3)",
         }}
       />
 
-      {/* The core orb. */}
+      {/* The core orb — pale-blue centre fading to a deep navy/black rim
+          (the original FORGE OS "dark sphere" gradient). */}
       <motion.div
         className="relative rounded-full"
         style={{
-          width: size * 0.72,
-          height: size * 0.72,
+          width: size * 0.66,
+          height: size * 0.66,
           background:
-            "radial-gradient(circle at 38% 32%, rgba(255,255,255,0.95) 0%, rgba(180,215,255,0.85) 18%, rgba(120,175,255,0.55) 46%, rgba(60,110,190,0.35) 72%, rgba(20,40,80,0.25) 100%)",
+            "radial-gradient(circle at 42% 36%, rgba(255,255,255,0.98) 0%, rgba(214,234,255,0.95) 20%, rgba(158,198,245,0.7) 44%, rgba(70,118,190,0.55) 68%, rgba(22,44,86,0.7) 86%, rgba(6,12,30,0.92) 100%)",
           boxShadow,
         }}
         animate={reduceMotion ? undefined : { scale: s.pulseScale }}

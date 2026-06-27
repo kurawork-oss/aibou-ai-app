@@ -18,6 +18,7 @@ import CoreOrb, { type CoreState } from "@/components/CoreOrb";
 import EntryGate from "@/components/EntryGate";
 import Forge from "@/components/Forge";
 import Income from "@/components/Income";
+import Keychain from "@/components/Keychain";
 import Studio from "@/components/Studio";
 import Tasks from "@/components/Tasks";
 import Vault from "@/components/Vault";
@@ -28,7 +29,21 @@ type View = "chat" | "forge" | "vault" | "income" | "tasks" | "studio" | "archiv
 const LS_NAME = "forge_name";
 const LS_PERSONA = "forge_persona";
 const LS_VOICE = "forge_voice_replies";
+const LS_TTS_VOICE = "forge_tts_voice";
+const LS_TTS_RATE = "forge_tts_rate";
 const DEFAULT_NAME = "JARVIS";
+const DEFAULT_TTS_VOICE = "ja-JP-NanamiNeural";
+const DEFAULT_TTS_RATE = 1.0;
+
+// edge-tts ja-JP voices (used by the API fallback; browser TTS auto-picks ja-JP).
+const VOICE_PRESETS = [
+  { label: "NANAMI (女性)", value: "ja-JP-NanamiNeural" },
+  { label: "KEITA (男性)", value: "ja-JP-KeitaNeural" },
+  { label: "AOI (女性)", value: "ja-JP-AoiNeural" },
+  { label: "DAICHI (男性)", value: "ja-JP-DaichiNeural" },
+  { label: "MAYU (女性)", value: "ja-JP-MayuNeural" },
+  { label: "NAOKI (男性)", value: "ja-JP-NaokiNeural" },
+];
 
 const PERSONA_PRESETS = [
   { label: "JARVIS", value: "冷静で知的、先を読んで行動し、ユーザーを名前で呼ぶ。常に敬語で簡潔に。" },
@@ -61,7 +76,10 @@ function Hud() {
       const name = localStorage.getItem(LS_NAME) || DEFAULT_NAME;
       const persona = localStorage.getItem(LS_PERSONA) || "";
       const voice = localStorage.getItem(LS_VOICE);
-      setSettings({ name, persona });
+      const ttsVoice = localStorage.getItem(LS_TTS_VOICE) || DEFAULT_TTS_VOICE;
+      const rateRaw = localStorage.getItem(LS_TTS_RATE);
+      const rate = rateRaw ? Number(rateRaw) || DEFAULT_TTS_RATE : DEFAULT_TTS_RATE;
+      setSettings({ name, persona, voice: ttsVoice, rate });
       if (voice !== null) setVoiceReplies(voice === "1");
     } catch { /* ignore */ }
     setLoaded(true);
@@ -83,6 +101,8 @@ function Hud() {
       localStorage.setItem(LS_NAME, next.name);
       localStorage.setItem(LS_PERSONA, next.persona);
       localStorage.setItem(LS_VOICE, voice ? "1" : "0");
+      localStorage.setItem(LS_TTS_VOICE, next.voice || DEFAULT_TTS_VOICE);
+      localStorage.setItem(LS_TTS_RATE, String(next.rate ?? DEFAULT_TTS_RATE));
     } catch { /* ignore */ }
   }, []);
 
@@ -91,6 +111,8 @@ function Hud() {
       const cleaned: ChatSettings = {
         name: next.name.trim() || DEFAULT_NAME,
         persona: next.persona.trim(),
+        voice: next.voice || DEFAULT_TTS_VOICE,
+        rate: next.rate ?? DEFAULT_TTS_RATE,
       };
       setSettings(cleaned);
       setVoiceReplies(voice);
@@ -181,15 +203,43 @@ function stateLabel(state: CoreState): string {
   }
 }
 
-const NAV_ITEMS: { key: View; label: string; icon: string }[] = [
-  { key: "chat", label: "CHAT", icon: "◈" },
-  { key: "forge", label: "FORGE", icon: "⚙" },
-  { key: "vault", label: "VAULT", icon: "⌘" },
-  { key: "tasks", label: "TASKS", icon: "⚡" },
-  { key: "income", label: "INCOME", icon: "💰" },
-  { key: "studio", label: "STUDIO", icon: "✦" },
-  { key: "archive", label: "ARCHIVE", icon: "📦" },
+const NAV_ITEMS: { key: View; label: string }[] = [
+  { key: "chat", label: "CHAT" },
+  { key: "forge", label: "FORGE" },
+  { key: "vault", label: "VAULT" },
+  { key: "tasks", label: "TASKS" },
+  { key: "income", label: "INCOME" },
+  { key: "studio", label: "STUDIO" },
+  { key: "archive", label: "ARCHIVE" },
 ];
+
+/* Silver line-art nav icons (stroke = currentColor → inherits the muted /
+   bright text colour). No coloured emoji — keeps the futuristic monochrome. */
+function NavIcon({ name }: { name: View }) {
+  const p = {
+    width: 17, height: 17, viewBox: "0 0 24 24", fill: "none",
+    stroke: "currentColor", strokeWidth: 1.6,
+    strokeLinecap: "round" as const, strokeLinejoin: "round" as const,
+  };
+  switch (name) {
+    case "chat":
+      return (<svg {...p}><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.7A8.5 8.5 0 1 1 21 11.5z" /></svg>);
+    case "forge":
+      return (<svg {...p}><path d="M12 3l7.5 4.5v9L12 21l-7.5-4.5v-9L12 3z" /><circle cx="12" cy="12" r="3" /></svg>);
+    case "vault":
+      return (<svg {...p}><rect x="4" y="10" width="16" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg>);
+    case "tasks":
+      return (<svg {...p}><path d="M10 6h10M10 12h10M10 18h10" /><path d="M3.5 6l1.2 1.2L7 5M3.5 12l1.2 1.2L7 11M3.5 18l1.2 1.2L7 17" /></svg>);
+    case "income":
+      return (<svg {...p}><path d="M3 17l5-5 4 4 7-7" /><path d="M16 9h5v5" /></svg>);
+    case "studio":
+      return (<svg {...p}><path d="M12 3l1.9 5.4L19 10l-5.1 1.6L12 17l-1.9-5.4L5 10l5.1-1.6L12 3z" /></svg>);
+    case "archive":
+      return (<svg {...p}><path d="M3 7l9-4 9 4-9 4-9-4z" /><path d="M3 12l9 4 9-4M3 17l9 4 9-4" /></svg>);
+    default:
+      return null;
+  }
+}
 
 function NavBar({ view, onChange }: { view: View; onChange: (v: View) => void }) {
   return (
@@ -213,7 +263,7 @@ function NavBar({ view, onChange }: { view: View; onChange: (v: View) => void })
               minWidth: "3.5rem",
             }}
           >
-            <span className="block text-[12px]">{it.icon}</span>
+            <span className="mx-auto mb-0.5 grid place-items-center"><NavIcon name={it.key} /></span>
             <span>{it.label}</span>
           </button>
         );
@@ -255,7 +305,7 @@ function GearIcon() {
 
 /* ─── Settings Panel (enhanced) ──────────────────────────────────── */
 
-type SettingsTab = "core" | "persona" | "diagnostics";
+type SettingsTab = "core" | "persona" | "keychain" | "diagnostics";
 
 function SettingsPanel({
   initial,
@@ -274,6 +324,8 @@ function SettingsPanel({
   const [name, setName] = useState(initial.name);
   const [persona, setPersona] = useState(initial.persona);
   const [voice, setVoice] = useState(initialVoice);
+  const [ttsVoice, setTtsVoice] = useState(initial.voice || DEFAULT_TTS_VOICE);
+  const [rate, setRate] = useState(initial.rate ?? DEFAULT_TTS_RATE);
 
   return (
     <motion.div
@@ -304,12 +356,12 @@ function SettingsPanel({
 
         {/* Tab bar */}
         <div className="flex border-b border-panel">
-          {(["core", "persona", "diagnostics"] as SettingsTab[]).map((t) => (
+          {(["core", "persona", "keychain", "diagnostics"] as SettingsTab[]).map((t) => (
             <button
               key={t}
               type="button"
               onClick={() => setTab(t)}
-              className="flex-1 py-2.5 text-[10px] tracking-[0.16em] transition label-mono"
+              className="flex-1 py-2.5 text-[9px] tracking-[0.12em] transition label-mono"
               style={{
                 color: tab === t ? "var(--fg-strong)" : "var(--muted)",
                 borderBottom: tab === t ? "2px solid var(--accent)" : "2px solid transparent",
@@ -336,9 +388,39 @@ function SettingsPanel({
                 <ToggleSwitch checked={voice} onChange={setVoice} />
               </label>
 
+              {/* Voice selection */}
+              <label className="mb-1 block text-[10px] tracking-[0.2em] text-muted label-mono">CORE VOICE</label>
+              <select
+                value={ttsVoice}
+                onChange={(e) => setTtsVoice(e.target.value)}
+                className="mb-4 w-full rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2.5 text-sm text-fg-strong focus:border-[var(--line)] focus:outline-none"
+              >
+                {VOICE_PRESETS.map((v) => (
+                  <option key={v.value} value={v.value} className="bg-[#0a0e16]">{v.label}</option>
+                ))}
+              </select>
+
+              {/* Talk speed */}
+              <div className="mb-4">
+                <div className="mb-1 flex items-center justify-between">
+                  <span className="text-[10px] tracking-[0.2em] text-muted label-mono">TALK SPEED</span>
+                  <span className="text-[10px] text-fg-strong label-mono">{rate.toFixed(2)}×</span>
+                </div>
+                <input
+                  type="range"
+                  min={0.5}
+                  max={2}
+                  step={0.05}
+                  value={rate}
+                  onChange={(e) => setRate(Number(e.target.value))}
+                  className="w-full accent-[var(--accent)]"
+                  aria-label="Talk speed"
+                />
+              </div>
+
               <button
                 type="button"
-                onClick={() => onSave({ name, persona }, voice)}
+                onClick={() => onSave({ name, persona, voice: ttsVoice, rate }, voice)}
                 className="w-full rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] py-2.5 text-[11px] tracking-[0.2em] text-fg-strong shadow-glow transition hover:shadow-glow-strong label-mono"
               >
                 SAVE & SYNC
@@ -377,11 +459,20 @@ function SettingsPanel({
 
               <button
                 type="button"
-                onClick={() => onSave({ name, persona }, voice)}
+                onClick={() => onSave({ name, persona, voice: ttsVoice, rate }, voice)}
                 className="w-full rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] py-2.5 text-[11px] tracking-[0.2em] text-fg-strong shadow-glow transition hover:shadow-glow-strong label-mono"
               >
                 SAVE & SYNC
               </button>
+            </>
+          )}
+
+          {tab === "keychain" && (
+            <>
+              <div className="mb-3 text-[10px] leading-relaxed text-muted">
+                各APIキーをここで設定します。値はマスク表示され、フルの値は画面に出ません。
+              </div>
+              <Keychain />
             </>
           )}
 

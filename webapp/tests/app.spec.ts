@@ -82,14 +82,33 @@ test("Settings gear icon is clickable and opens panel", async ({ page }) => {
   await expect(page.getByText("CORE SETTINGS")).toBeVisible({ timeout: 5_000 });
 });
 
-test("Settings panel has 3 tabs", async ({ page }) => {
+test("Settings panel has 4 tabs", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
   await page.getByLabel("Settings").click();
   // Use exact: true to avoid matching "CORE SETTINGS" heading for "CORE"
   await expect(page.getByText("CORE", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("PERSONA", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("KEYCHAIN", { exact: true })).toBeVisible();
   await expect(page.getByText("DIAGNOSTICS", { exact: true })).toBeVisible();
+});
+
+test("Settings CORE tab shows voice + talk speed controls", async ({ page }) => {
+  await page.goto("/");
+  await enterApp(page);
+  await page.getByLabel("Settings").click();
+  await expect(page.getByText("CORE VOICE")).toBeVisible();
+  await expect(page.getByText("TALK SPEED")).toBeVisible();
+  await expect(page.getByLabel("Talk speed")).toBeVisible();
+});
+
+test("Settings KEYCHAIN tab shows API key vault", async ({ page }) => {
+  await page.goto("/");
+  await enterApp(page);
+  await page.getByLabel("Settings").click();
+  await page.getByText("KEYCHAIN", { exact: true }).click();
+  // Access-code section is always present; offline mode shows a backend notice
+  await expect(page.getByText("ACCESS CODE")).toBeVisible({ timeout: 5_000 });
 });
 
 test("Settings PERSONA tab shows presets", async ({ page }) => {

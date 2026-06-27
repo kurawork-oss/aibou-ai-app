@@ -30,6 +30,7 @@ from pydantic import BaseModel, Field
 import config
 import forge
 import income
+import keychain
 import proactive
 import studio
 import tasks as tasks_module
@@ -92,6 +93,12 @@ class VisionRequest(BaseModel):
 class TTSRequest(BaseModel):
     text: str
     voice: Optional[str] = None  # 既定は config.DEFAULT_TTS_VOICE
+    rate: Optional[str] = None   # 話速 例 "+0%" / "-20%" / "+30%"。既定 config.DEFAULT_TTS_RATE
+
+
+class KeySetRequest(BaseModel):
+    name: str
+    value: str = ""
 
 
 class MemoryAddRequest(BaseModel):
@@ -375,9 +382,10 @@ async def tts(req: TTSRequest, _auth: None = Depends(require_auth)):
     if not text:
         return {"audio_base64": "", "error": "text is empty"}
     voice = (req.voice or config.DEFAULT_TTS_VOICE).strip() or config.DEFAULT_TTS_VOICE
+    rate = (req.rate or config.DEFAULT_TTS_RATE).strip() or config.DEFAULT_TTS_RATE
 
     try:
-        audio_bytes = await _synthesize_tts(text, voice)
+        audio_bytes = await _synthesize_tts(text, voice, rate)
         if not audio_bytes:
             return {"audio_base64": "", "error": "tts produced no audio"}
         return {"audio_base64": base64.b64encode(audio_bytes).decode("ascii")}
@@ -386,10 +394,14 @@ async def tts(req: TTSRequest, _auth: None = Depends(require_auth)):
         return {"audio_base64": "", "error": f"tts failed: {e}"}
 
 
-async def _synthesize_tts(text: str, voice: str) -> bytes:
-    """edge-tts で MP3 バイト列を生成する（asyncで実行）。"""
+async def _synthesize_tts(text: str, voice: str, rate: str = "+0%") -> bytes:
+    """edge-tts で MP3 バイト列を生成する（asyncで実行）。rate は "+0%" 等の文字列。"""
     import edge_tts
-    communicate = edge_tts.Communicate(text, voice)
+    # rate が不正フォーマットなら edge-tts が例外を出すので軽くサニタイズ
+    r = (rate or "+0%").strip()
+    if not (r.endswith("%") and (r[0] in "+-")):
+        r = "+0%"
+    communicate = edge_tts.Communicate(text, voice, rate=r)
     buf = bytearray()
     async for chunk in communicate.stream():
         if chunk.get("type") == "audio" and chunk.get("data"):
@@ -677,6 +689,32 @@ async def studio_run_workflow(wf_id: str, req: WorkflowRunRequest,
     if isinstance(result, dict) and result.get("error"):
         return JSONResponse(status_code=503, content=result)
     return result
+
+
+# ── Keychain（APIキー保管庫） ────────────────────────────────────
+
+@app.get("/keys")
+async def list_keys(_auth: None = Depends(require_auth)):
+    """保存済みキーを「マスク値 + 設定有無」で返す（フル値は決して返さない）。"""
+    loop = asyncio.get_event_loop()
+    return {"items": await loop.run_in_executor(None, keychain.list_keys)}
+
+
+@app.post("/keys")
+async def set_key(req: KeySetRequest, _auth: None = Depends(require_auth)):
+    """キーを保存/更新する。"""
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(None, lambda: keychain.set_key(req.name, req.value))
+    if isinstance(result, dict) and result.get("error"):
+        return JSONResponse(status_code=400, content=result)
+    return result
+
+
+@app.delete("/keys/{name}")
+async def delete_key(name: str, _auth: None = Depends(require_auth)):
+    """キーを削除する。"""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, lambda: keychain.delete_key(name))
 
 
 # ローカル実行用エントリ（uvicorn main:app --reload と同等）

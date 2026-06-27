@@ -371,3 +371,70 @@ def test_studio_run_workflow_without_gemini():
     assert r2.status_code in (200, 503)
     data = r2.json()
     assert "error" in data or "final_output" in data
+
+
+# ── /keys（APIキー保管庫） ──────────────────────────────────────────
+def test_keys_list_returns_known_keys():
+    r = client.get("/keys")
+    assert r.status_code == 200
+    data = r.json()
+    assert "items" in data
+    names = [k["name"] for k in data["items"]]
+    assert "GEMINI_API_KEY" in names
+    assert "LINE_NOTIFY_TOKEN" in names
+    # フル値は決して返らない（masked / set のみ）
+    for k in data["items"]:
+        assert "masked" in k and "set" in k
+        assert "value" not in k
+
+
+def test_keys_set_and_masked():
+    r = client.post("/keys", json={"name": "TEST_KEY", "value": "abcdef123456"})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["ok"] is True
+    assert data["set"] is True
+    assert data["masked"] != "abcdef123456"
+    assert data["masked"].startswith("ab")
+    assert data["masked"].endswith("56")
+
+    r2 = client.get("/keys")
+    item = next(k for k in r2.json()["items"] if k["name"] == "TEST_KEY")
+    assert item["set"] is True
+
+
+def test_keys_set_empty_name():
+    r = client.post("/keys", json={"name": "", "value": "x"})
+    assert r.status_code == 400
+    assert "error" in r.json()
+
+
+def test_keys_delete():
+    client.post("/keys", json={"name": "DEL_KEY", "value": "secretvalue"})
+    r = client.delete("/keys/DEL_KEY")
+    assert r.status_code == 200
+    assert r.json()["ok"] is True
+
+    r2 = client.get("/keys")
+    item = next((k for k in r2.json()["items"] if k["name"] == "DEL_KEY"), None)
+    if item is not None:
+        assert item["set"] is False
+
+
+def test_keys_gemini_reconfigure_does_not_crash():
+    r = client.post("/keys", json={"name": "GEMINI_API_KEY", "value": "dummy-key-xyz"})
+    assert r.status_code == 200
+    client.delete("/keys/GEMINI_API_KEY")
+
+
+# ── /tts rate（話速） ───────────────────────────────────────────────
+def test_tts_with_rate():
+    r = client.post("/tts", json={"text": "テスト", "voice": "ja-JP-NanamiNeural", "rate": "+20%"})
+    assert r.status_code == 200
+    assert "audio_base64" in r.json()
+
+
+def test_tts_invalid_rate_does_not_crash():
+    r = client.post("/tts", json={"text": "テスト", "rate": "bogus"})
+    assert r.status_code == 200
+    assert "audio_base64" in r.json()
