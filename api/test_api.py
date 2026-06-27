@@ -509,3 +509,73 @@ def test_notify_without_tokens_skips_safely():
     data = r.json()
     assert data["ok"] is False
     assert data["skipped"] is True
+
+
+# ── /automations（ノーコード自動化 / Zapier風） ───────────────────────
+def test_automations_list():
+    r = client.get("/automations")
+    assert r.status_code == 200
+    assert "items" in r.json()
+
+
+def test_automations_create_and_normalize_steps():
+    r = client.post("/automations", json={
+        "name": "テスト自動化",
+        "steps": [
+            {"type": "ai_generate", "name": "要約", "params": {"prompt": "{input}を要約"}},
+            {"type": "notify", "name": "通知", "params": {"message": "完了: {input}"}},
+            {"type": "bogus_type", "name": "無効"},  # 不正な type は除外される
+        ],
+    })
+    assert r.status_code == 200
+    f = r.json()
+    assert "id" in f
+    assert f["name"] == "テスト自動化"
+    # 不正ステップが除外され 2 ステップになる
+    assert len(f["steps"]) == 2
+    assert {s["type"] for s in f["steps"]} == {"ai_generate", "notify"}
+
+
+def test_automations_create_empty_name():
+    r = client.post("/automations", json={"name": "", "steps": []})
+    assert r.status_code in (400, 422)
+
+
+def test_automations_run_without_gemini():
+    r = client.post("/automations", json={
+        "name": "実行テスト",
+        "steps": [{"type": "ai_generate", "params": {"prompt": "{input}を分析"}}],
+    })
+    fid = r.json()["id"]
+    r2 = client.post(f"/automations/{fid}/run", json={"input": "テスト入力"})
+    # Gemini 無しでも crash せず、results を返す
+    assert r2.status_code == 200
+    data = r2.json()
+    assert "results" in data
+    assert isinstance(data["results"], list)
+
+
+def test_automations_run_notify_step_without_tokens():
+    """notify ステップのみの自動化は、トークン無しでも crash しない。"""
+    r = client.post("/automations", json={
+        "name": "通知のみ",
+        "steps": [{"type": "notify", "params": {"message": "やあ {input}"}}],
+    })
+    fid = r.json()["id"]
+    r2 = client.post(f"/automations/{fid}/run", json={"input": "world"})
+    assert r2.status_code == 200
+    assert "results" in r2.json()
+
+
+def test_automations_run_not_found():
+    r = client.post("/automations/nonexistent/run", json={"input": "x"})
+    assert r.status_code == 404
+    assert "error" in r.json()
+
+
+def test_automations_delete():
+    r = client.post("/automations", json={"name": "削除自動化", "steps": []})
+    fid = r.json()["id"]
+    r2 = client.delete(f"/automations/{fid}")
+    assert r2.status_code == 200
+    assert r2.json()["ok"] is True

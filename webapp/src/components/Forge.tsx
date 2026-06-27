@@ -35,25 +35,27 @@ export default function Forge() {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<ForgeResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [editInstruction, setEditInstruction] = useState("");
 
   const isVideo = tab === "video";
   const kind: ForgeKind = isVideo ? "app" : tab;
   const active = KINDS.find((k) => k.key === kind)!;
 
-  const run = async () => {
-    if (!prompt.trim() || busy) return;
+  const generate = async (promptText: string) => {
+    const p = promptText.trim();
+    if (!p || busy) return;
     setBusy(true);
     setError(null);
     setResult(null);
     try {
-      const r = await forgeGenerate(kind, prompt.trim());
+      const r = await forgeGenerate(kind, p);
       if (r.error) setError(r.error);
       else {
         setResult(r);
         // Auto-save generated apps to App Archive
         if (r.kind === "app" && r.code) {
-          const name = prompt.trim().slice(0, 40) || "Generated App";
-          addToArchive(name, prompt.trim(), r.code, r.note);
+          const name = prompt.trim().slice(0, 40) || p.slice(0, 40) || "Generated App";
+          addToArchive(name, p, r.code, r.note);
         }
       }
     } catch (e) {
@@ -61,6 +63,16 @@ export default function Forge() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const run = () => generate(prompt);
+
+  // Re-run with an edit instruction appended (修正 / regenerate).
+  const regenerate = () => {
+    if (!editInstruction.trim()) return;
+    const base = prompt.trim() || "（前回の生成物）";
+    generate(`${base}\n\n【前回の生成物への修正指示】\n${editInstruction.trim()}`);
+    setEditInstruction("");
   };
 
   return (
@@ -130,14 +142,52 @@ export default function Forge() {
 
           {error && <div className="panel p-3 text-xs text-[#ff9b9b]">⚠️ {error}</div>}
 
-          {result && !busy && <ForgeResultView result={result} />}
+          {result && !busy && <ForgeResultView result={result} prompt={prompt} />}
+
+          {/* Edit / regenerate (修正) */}
+          {result && !busy && (
+            <div className="panel p-3">
+              <label className="mb-1.5 block text-[10px] tracking-[0.2em] text-muted label-mono">EDIT — 修正して再生成</label>
+              <div className="flex gap-2">
+                <input
+                  value={editInstruction}
+                  onChange={(e) => setEditInstruction(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && regenerate()}
+                  placeholder="例：グラフを追加して / 色を青系に / 章を1つ増やして"
+                  className="min-w-0 flex-1 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2 text-sm text-fg-strong placeholder:text-muted focus:border-[var(--line)] focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={regenerate}
+                  disabled={!editInstruction.trim()}
+                  className="shrink-0 rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] px-4 text-[10px] tracking-[0.14em] text-fg-strong disabled:opacity-40 label-mono"
+                >
+                  修正
+                </button>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>
   );
 }
 
-function ForgeResultView({ result }: { result: ForgeResult }) {
+/** Download a set of files as a single .zip (folder export). */
+async function downloadZip(files: Record<string, string>, zipName: string) {
+  const JSZip = (await import("jszip")).default;
+  const zip = new JSZip();
+  Object.entries(files).forEach(([name, content]) => zip.file(name, content));
+  const blob = await zip.generateAsync({ type: "blob" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = zipName;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function ForgeResultView({ result, prompt }: { result: ForgeResult; prompt: string }) {
   if (result.kind === "image" && result.image_url) {
     return (
       <div className="panel overflow-hidden p-3">
@@ -151,9 +201,38 @@ function ForgeResultView({ result }: { result: ForgeResult }) {
   }
 
   if (result.kind === "app" && result.code) {
+    const projectName = (prompt.trim().slice(0, 30) || "forge_app").replace(/[^\w가-힣ぁ-んァ-ヶ一-龠]+/g, "_");
+    const readme = `# ${prompt.trim() || "Forge App"}\n\nTHE FORGE OS で生成した Streamlit アプリです。\n\n## 実行方法\n\n\`\`\`bash\npip install -r requirements.txt\nstreamlit run app.py\n\`\`\`\n${result.note ? `\n## メモ\n\n${result.note}\n` : ""}`;
+    const exportFolder = () =>
+      downloadZip(
+        {
+          "app.py": result.code!,
+          "requirements.txt": "streamlit\npandas\nnumpy\n",
+          "README.md": readme,
+        },
+        `${projectName}.zip`,
+      );
     return (
       <div className="panel p-3">
-        <Toolbar onDownload={() => download("forge_app.py", result.code!, "text/x-python")} label=".py" />
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] tracking-[0.2em] text-muted label-mono">RESULT</span>
+          <div className="flex gap-1.5">
+            <button
+              type="button"
+              onClick={() => download("app.py", result.code!, "text/x-python")}
+              className="rounded-md border border-panel px-2.5 py-1 text-[10px] tracking-[0.15em] text-fg-strong transition hover:border-[var(--line)] label-mono"
+            >
+              ↓ .py
+            </button>
+            <button
+              type="button"
+              onClick={exportFolder}
+              className="rounded-md border border-panel px-2.5 py-1 text-[10px] tracking-[0.15em] text-fg-strong transition hover:border-[var(--line)] label-mono"
+            >
+              ↓ フォルダ(.zip)
+            </button>
+          </div>
+        </div>
         <pre className="mt-2 max-h-80 overflow-auto rounded-forge bg-black/40 p-3 text-[11px] leading-relaxed text-fg">
           <code>{result.code}</code>
         </pre>

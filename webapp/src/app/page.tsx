@@ -16,6 +16,7 @@ import BootScreen from "@/components/BootScreen";
 import Briefing from "@/components/Briefing";
 import Chat, { type ChatSettings } from "@/components/Chat";
 import CoreOrb, { type CoreState } from "@/components/CoreOrb";
+import Dashboard from "@/components/Dashboard";
 import EntryGate from "@/components/EntryGate";
 import Forge from "@/components/Forge";
 import Income from "@/components/Income";
@@ -25,7 +26,7 @@ import Tasks from "@/components/Tasks";
 import Vault from "@/components/Vault";
 import { health } from "@/lib/api";
 
-type View = "chat" | "forge" | "vault" | "income" | "tasks" | "studio" | "autopilot" | "archive";
+type View = "chat" | "forge" | "vault" | "income" | "tasks" | "studio" | "autopilot" | "board" | "archive";
 
 const LS_NAME = "forge_name";
 const LS_PERSONA = "forge_persona";
@@ -174,6 +175,7 @@ function Hud() {
         {loaded && view === "tasks" && <Tasks />}
         {loaded && view === "studio" && <Studio />}
         {loaded && view === "autopilot" && <Autopilot />}
+        {loaded && view === "board" && <Dashboard />}
         {loaded && view === "archive" && <AppArchive />}
       </section>
 
@@ -213,6 +215,7 @@ const NAV_ITEMS: { key: View; label: string }[] = [
   { key: "income", label: "INCOME" },
   { key: "studio", label: "STUDIO" },
   { key: "autopilot", label: "AUTO" },
+  { key: "board", label: "BOARD" },
   { key: "archive", label: "ARCHIVE" },
 ];
 
@@ -239,6 +242,8 @@ function NavIcon({ name }: { name: View }) {
       return (<svg {...p}><path d="M12 3l1.9 5.4L19 10l-5.1 1.6L12 17l-1.9-5.4L5 10l5.1-1.6L12 3z" /></svg>);
     case "autopilot":
       return (<svg {...p}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>);
+    case "board":
+      return (<svg {...p}><rect x="3" y="4" width="7" height="7" rx="1" /><rect x="14" y="4" width="7" height="4" rx="1" /><rect x="14" y="12" width="7" height="8" rx="1" /><rect x="3" y="15" width="7" height="5" rx="1" /></svg>);
     case "archive":
       return (<svg {...p}><path d="M3 7l9-4 9 4-9 4-9-4z" /><path d="M3 12l9 4 9-4M3 17l9 4 9-4" /></svg>);
     default:

@@ -28,6 +28,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 import autopilot
+import automations
 import config
 import forge
 import income
@@ -120,6 +121,16 @@ class MissionCreateRequest(BaseModel):
 
 class NotifyRequest(BaseModel):
     message: str
+
+
+class AutomationCreateRequest(BaseModel):
+    name: str
+    trigger: Optional[dict] = None
+    steps: list = []
+
+
+class AutomationRunRequest(BaseModel):
+    input: str = ""
 
 
 class MemoryAddRequest(BaseModel):
@@ -772,6 +783,41 @@ async def notify_send(req: NotifyRequest, _auth: None = Depends(require_auth)):
     """設定済みチャンネル（LINE/Discord/Slack）へ通知を送る。未設定なら skipped。"""
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(None, lambda: notify.notify_all(req.message))
+
+
+# ── Automations（ノーコード自動化 / Zapier風） ────────────────────
+
+@app.get("/automations")
+async def automations_list(_auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    return {"items": await loop.run_in_executor(None, automations.list_flows)}
+
+
+@app.post("/automations")
+async def automations_create(req: AutomationCreateRequest, _auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    f = await loop.run_in_executor(
+        None, lambda: automations.create_flow(req.name, req.trigger, req.steps)
+    )
+    if isinstance(f, dict) and f.get("error"):
+        return JSONResponse(status_code=400, content=f)
+    return f
+
+
+@app.delete("/automations/{flow_id}")
+async def automations_delete(flow_id: str, _auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, lambda: automations.delete_flow(flow_id))
+
+
+@app.post("/automations/{flow_id}/run")
+async def automations_run(flow_id: str, req: AutomationRunRequest,
+                          _auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(None, lambda: automations.run_flow(flow_id, req.input))
+    if isinstance(result, dict) and result.get("error"):
+        return JSONResponse(status_code=404, content=result)
+    return result
 
 
 # ── Keychain（APIキー保管庫） ────────────────────────────────────

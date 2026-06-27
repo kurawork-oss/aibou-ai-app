@@ -661,6 +661,69 @@ export async function sendNotify(message: string): Promise<{ ok: boolean; sent?:
   return { ok: Boolean(data.ok), sent: data.sent, skipped: data.skipped };
 }
 
+/* ---------------- Automations (no-code flows / Zapier-style) ---------------- */
+export type StepType = "ai_generate" | "notify" | "create_task";
+
+export interface AutomationStep {
+  id?: string;
+  n?: number;
+  type: StepType;
+  name?: string;
+  params?: Record<string, string>;
+}
+
+export interface Automation {
+  id: string;
+  name: string;
+  enabled?: boolean;
+  trigger?: { type: string; config?: Record<string, unknown> };
+  steps: AutomationStep[];
+  status?: string;
+  created_at?: string;
+}
+
+export interface AutomationRunResult {
+  automation_id: string;
+  name: string;
+  results: Array<{ step: number; name: string; type: string; ok: boolean; output: string; error?: string }>;
+  final_output: string;
+}
+
+export async function automationsList(): Promise<Automation[]> {
+  const res = await fetch(`${requireApiUrl()}/automations`, { headers: authHeaders(), cache: "no-store" });
+  if (!res.ok) throw new Error(`Automations failed (${res.status})`);
+  const data = (await res.json().catch(() => ({ items: [] }))) as { items?: Automation[] };
+  return data.items ?? [];
+}
+
+export async function automationsCreate(name: string, steps: AutomationStep[], trigger?: { type: string }): Promise<Automation> {
+  const res = await fetch(`${requireApiUrl()}/automations`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ name, steps, trigger }),
+  });
+  const data = (await res.json().catch(() => ({}))) as Automation & { error?: string };
+  if (!res.ok) throw new Error(data.error ?? `Create automation failed (${res.status})`);
+  return data;
+}
+
+export async function automationsDelete(id: string): Promise<boolean> {
+  const res = await fetch(`${requireApiUrl()}/automations/${encodeURIComponent(id)}`, { method: "DELETE", headers: authHeaders() });
+  const data = (await res.json().catch(() => ({ ok: false }))) as { ok?: boolean };
+  return Boolean(data.ok);
+}
+
+export async function automationsRun(id: string, input = ""): Promise<AutomationRunResult> {
+  const res = await fetch(`${requireApiUrl()}/automations/${encodeURIComponent(id)}/run`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ input }),
+  });
+  const data = (await res.json().catch(() => ({}))) as AutomationRunResult & { error?: string };
+  if (!res.ok) throw new Error(data.error ?? `Run automation failed (${res.status})`);
+  return data;
+}
+
 /* ---------------- Keychain (API key vault) ---------------- */
 export interface ApiKeyInfo {
   name: string;
