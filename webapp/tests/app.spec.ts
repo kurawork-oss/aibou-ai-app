@@ -70,10 +70,13 @@ test("NavBar shows all 10 navigation items", async ({ page }) => {
   await expect(nav.getByText("ARCHIVE")).toBeVisible();
 });
 
-test("HOME is the default view and renders the cockpit", async ({ page }) => {
+test("CHAT is the default view; HOME shows the cockpit", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
-  // Default landing is HOME
+  // Default landing is CHAT — its message placeholder is unique to that view
+  await expect(page.getByPlaceholder("THE FORGE OS にメッセージ…")).toBeVisible({ timeout: 5_000 });
+  // Navigating to HOME renders the cockpit
+  await page.locator("nav").getByText("HOME").click();
   await expect(page.getByText("PERSONAL COCKPIT")).toBeVisible({ timeout: 5_000 });
   await expect(page.getByText(/QUICK ASSISTANT/i)).toBeVisible();
   await expect(page.getByText("予定 — AGENDA")).toBeVisible();

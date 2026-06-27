@@ -72,7 +72,7 @@ function Hud() {
   const [online, setOnline] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
-  const [view, setView] = useState<View>("home");
+  const [view, setView] = useState<View>("chat");
 
   useEffect(() => {
     try {
@@ -125,48 +125,55 @@ function Hud() {
     [persist],
   );
 
+  const wide = view === "home";
+
   return (
-    <main className="relative mx-auto flex h-[100dvh] w-full max-w-2xl flex-col px-4 pb-3 pt-[max(env(safe-area-inset-top),0.75rem)]">
+    <main
+      className={`relative mx-auto flex h-[100dvh] w-full flex-col px-4 pb-3 pt-[max(env(safe-area-inset-top),0.75rem)] transition-[max-width] duration-300 ${wide ? "max-w-6xl" : "max-w-2xl"}`}
+    >
       {/* Occasional drifting light-silver ambient bloom (behind everything). */}
       <div className="forge-ambient" aria-hidden />
 
-      {/* Top status row */}
-      <div className="flex items-center justify-between py-1">
-        <div className="flex items-center gap-2">
-          <StatusDot online={online} />
-          <span className="text-[10px] tracking-[0.22em] text-muted label-mono">
-            {online ? "LINK ACTIVE" : "OFFLINE"}
-          </span>
+      {/* Chrome (status + core) stays centred/narrow even when the page is wide */}
+      <div className="mx-auto w-full max-w-2xl">
+        {/* Top status row */}
+        <div className="flex items-center justify-between py-1">
+          <div className="flex items-center gap-2">
+            <StatusDot online={online} />
+            <span className="text-[10px] tracking-[0.22em] text-muted label-mono">
+              {online ? "LINK ACTIVE" : "OFFLINE"}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Briefing />
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(true)}
+              className="grid h-8 w-8 place-items-center rounded-lg border border-panel text-muted transition hover:border-[var(--line)] hover:text-fg-strong"
+              aria-label="Settings"
+              title="Settings"
+            >
+              <GearIcon />
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Briefing />
-          <button
-            type="button"
-            onClick={() => setSettingsOpen(true)}
-            className="grid h-8 w-8 place-items-center rounded-lg border border-panel text-muted transition hover:border-[var(--line)] hover:text-fg-strong"
-            aria-label="Settings"
-            title="Settings"
-          >
-            <GearIcon />
-          </button>
-        </div>
+
+        {/* Core + wordmark (compact when not on chat / home) */}
+        <header
+          className="flex flex-col items-center transition-all duration-300"
+          style={{ paddingBottom: view === "chat" || view === "home" ? "0.5rem" : "0.25rem", paddingTop: view === "chat" || view === "home" ? "0.25rem" : "0" }}
+        >
+          <CoreOrb size={view === "chat" || view === "home" ? 108 : 72} state={coreState} />
+          <h1 className="label-mono text-glow mt-3 text-[13px] font-normal text-fg-strong sm:text-sm">
+            THE FORGE OS
+          </h1>
+          <p className="mt-0.5 text-[10px] tracking-[0.28em] text-muted/80 label-mono">
+            {loaded ? `${settings.name} · ${stateLabel(coreState)}` : "INITIALIZING"}
+          </p>
+        </header>
+
+        <div className="divider my-2" />
       </div>
-
-      {/* Core + wordmark (compact when not on chat) */}
-      <header
-        className="flex flex-col items-center transition-all duration-300"
-        style={{ paddingBottom: view === "chat" || view === "home" ? "0.5rem" : "0.25rem", paddingTop: view === "chat" || view === "home" ? "0.25rem" : "0" }}
-      >
-        <CoreOrb size={view === "chat" || view === "home" ? 108 : 72} state={coreState} />
-        <h1 className="label-mono text-glow mt-3 text-[13px] font-normal text-fg-strong sm:text-sm">
-          THE FORGE OS
-        </h1>
-        <p className="mt-0.5 text-[10px] tracking-[0.28em] text-muted/80 label-mono">
-          {loaded ? `${settings.name} · ${stateLabel(coreState)}` : "INITIALIZING"}
-        </p>
-      </header>
-
-      <div className="divider my-2" />
 
       {/* Active view fills remaining space */}
       <section className="min-h-0 flex-1">
@@ -260,11 +267,10 @@ function NavIcon({ name }: { name: View }) {
 }
 
 function NavBar({ view, onChange }: { view: View; onChange: (v: View) => void }) {
+  // 5-column grid (two even rows for 10 modes) — fills the width with no
+  // horizontal overflow, centred within a sensible max width on wide pages.
   return (
-    <nav
-      className="mt-2 flex gap-1.5 overflow-x-auto pt-1 pb-0.5"
-      style={{ scrollbarWidth: "none" }}
-    >
+    <nav className="mx-auto mt-2 grid w-full max-w-2xl grid-cols-5 gap-1.5 pt-1 pb-0.5">
       {NAV_ITEMS.map((it) => {
         const active = it.key === view;
         return (
@@ -272,14 +278,12 @@ function NavBar({ view, onChange }: { view: View; onChange: (v: View) => void })
             key={it.key}
             type="button"
             onClick={() => onChange(it.key)}
-            className="flex shrink-0 flex-col items-center justify-center rounded-forge border py-2 text-[9px] tracking-[0.08em] label-mono transition"
+            className="flex h-[3.4rem] flex-col items-center justify-center rounded-forge border text-[9px] tracking-[0.06em] label-mono transition"
             style={{
               borderColor: active ? "var(--accent)" : "var(--panel-bd)",
               color: active ? "var(--fg-strong)" : "var(--muted)",
               boxShadow: active ? "0 0 12px var(--glow)" : "none",
               background: active ? "var(--btn-bg)" : "transparent",
-              width: "4.25rem",
-              height: "3.5rem",
             }}
           >
             <span className="mb-1 grid place-items-center"><NavIcon name={it.key} /></span>

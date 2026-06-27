@@ -77,59 +77,59 @@ export default function Home({
     : [];
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto pb-2">
-      {/* Greeting */}
-      <div className="panel p-3">
-        <div className="text-sm text-fg-strong">{greeting()}、{settings.name} です。</div>
+    <div className="grid h-full min-h-0 grid-cols-1 content-start gap-3 overflow-y-auto pb-2 lg:grid-cols-3">
+      {/* Greeting — full width */}
+      <div className="glass-silver p-4 lg:col-span-3">
+        <div className="text-base text-fg-strong">{greeting()}、{settings.name} です。</div>
         <div className="text-[10px] tracking-[0.16em] text-muted label-mono">PERSONAL COCKPIT · 本日の状況</div>
       </div>
 
       {offline && (
-        <div className="panel p-3 text-[11px] leading-relaxed text-muted">
+        <div className="glass-silver p-3 text-[11px] leading-relaxed text-muted lg:col-span-3">
           バックエンド未接続です。接続すると各機能の進捗・予定・通知がここに集約されます。
           <button onClick={() => onNavigate("chat")} className="ml-1 text-[var(--accent)] underline">CHATへ</button>
         </div>
       )}
 
-      {/* Quick assistant (mini chat to the core) */}
-      <QuickAssistant settings={settings} />
-
-      {/* KPI summary */}
+      {/* KPI summary — full width */}
       {summary && (
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-6 lg:col-span-3">
           {cards.map((c) => (
             <button
               key={c.label}
               type="button"
               onClick={() => onNavigate(c.view)}
-              className="panel p-2 text-center transition hover:shadow-glow"
+              className="glass-silver p-2 text-center transition hover:shadow-glow"
             >
-              <div className="text-[20px] font-bold text-fg-strong">{c.value}</div>
+              <div className="text-[22px] font-bold text-fg-strong">{c.value}</div>
               <div className="text-[9px] tracking-[0.14em] text-muted label-mono">{c.label}</div>
             </button>
           ))}
         </div>
       )}
 
-      {/* Agenda */}
-      <AgendaPanel events={events} offline={offline} onChange={refresh} setEvents={setEvents} />
+      {/* Left column (wider): quick assistant + agenda */}
+      <div className="flex flex-col gap-3 lg:col-span-2">
+        <QuickAssistant settings={settings} />
+        <AgendaPanel events={events} offline={offline} onChange={refresh} setEvents={setEvents} />
+      </div>
 
-      {/* Notifications */}
-      <NotificationsPanel notes={notes} offline={offline} onRead={async () => { await notificationsMarkRead(); await refresh(); }} />
-
-      {/* External integrations hint */}
-      <div className="panel p-3">
-        <div className="mb-1.5 text-[10px] tracking-[0.2em] text-muted label-mono">外部連携</div>
-        <p className="text-[11px] leading-relaxed text-muted">
-          カレンダー同期 / LINE / メールの受信・返信は、各APIキーを設定すると有効化されます。
-        </p>
-        <button
-          type="button"
-          onClick={() => onNavigate("chat")}
-          className="mt-2 text-[10px] tracking-[0.14em] text-[var(--accent)] hover:underline label-mono"
-        >
-          → Settings → KEYCHAIN でキーを設定
-        </button>
+      {/* Right column: notifications + external */}
+      <div className="flex flex-col gap-3">
+        <NotificationsPanel notes={notes} offline={offline} onRead={async () => { await notificationsMarkRead(); await refresh(); }} />
+        <div className="glass-silver p-3">
+          <div className="mb-1.5 text-[10px] tracking-[0.2em] text-muted label-mono">外部連携</div>
+          <p className="text-[11px] leading-relaxed text-muted">
+            カレンダー同期 / LINE / メールの受信・返信は、各APIキーを設定すると有効化されます。
+          </p>
+          <button
+            type="button"
+            onClick={() => onNavigate("chat")}
+            className="mt-2 text-[10px] tracking-[0.14em] text-[var(--accent)] hover:underline label-mono"
+          >
+            → Settings → KEYCHAIN でキーを設定
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -157,7 +157,7 @@ function QuickAssistant({ settings }: { settings: ChatSettings }) {
   };
 
   return (
-    <div className="panel p-3">
+    <div className="glass-silver p-3">
       <div className="mb-1.5 text-[10px] tracking-[0.2em] text-muted label-mono">QUICK ASSISTANT — コアに指示</div>
       <div className="flex gap-2">
         <input
@@ -212,7 +212,7 @@ function AgendaPanel({
   };
 
   return (
-    <div className="panel p-3">
+    <div className="glass-silver p-3">
       <div className="mb-1.5 text-[10px] tracking-[0.2em] text-muted label-mono">予定 — AGENDA</div>
       <div className="flex gap-2">
         <input
@@ -261,7 +261,7 @@ function NotificationsPanel({
   onRead: () => void;
 }) {
   return (
-    <div className="panel p-3">
+    <div className="glass-silver p-3">
       <div className="mb-1.5 flex items-center justify-between">
         <span className="text-[10px] tracking-[0.2em] text-muted label-mono">通知 — NOTIFICATIONS</span>
         {!offline && notes.some((n) => !n.read) && (
