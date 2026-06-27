@@ -90,6 +90,30 @@ a {
   box-shadow: 0 6px 18px var(--shadow);
 }
 
+/* Futuristic silver glass frame — translucent fill, a bright silver hairline
+   on top, soft depth shadow. Used for the HOME cockpit panels. */
+.glass-silver {
+  position: relative;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.018));
+  border: 1px solid rgba(197, 198, 199, 0.32);
+  border-radius: 16px;
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 8px 28px rgba(0, 0, 0, 0.38);
+}
+/* Bright silver hairline highlight along the top edge. */
+.glass-silver::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  border-radius: 16px 16px 0 0;
+  background: linear-gradient(90deg, transparent, rgba(220, 226, 235, 0.6), transparent);
+  pointer-events: none;
+}
+
 /* Pale-blue glow halo. */
 .glow {
   box-shadow: 0 0 18px var(--glow);
@@ -216,6 +240,190 @@ a {
   40% {
     transform: translateY(-4px);
     opacity: 1;
+  }
+}
+
+/* =====================================================================
+   Core orbit system — the signature "atmosphere": three tilted 3D rings,
+   each with a light that traces its rim. Ported from the original FORGE OS
+   core (Streamlit) and refined. Ring sizes/colors are set inline per-size;
+   these classes own the 3D spin + the tracing dot (::before).
+   ===================================================================== */
+.forge-stage {
+  transform-style: preserve-3d;
+}
+
+.forge-orbit {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  border-radius: 50%;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+/* The light that rides each ring's rim. */
+.forge-orbit::before {
+  content: "";
+  position: absolute;
+  top: -3px;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  margin-left: -3px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow:
+    0 0 10px 2px rgba(200, 225, 255, 0.95),
+    0 0 22px 5px rgba(0, 243, 255, 0.45);
+}
+
+.forge-orbit-1 {
+  animation: forge-orbit-1 7s linear infinite;
+}
+.forge-orbit-2 {
+  animation: forge-orbit-2 12s linear infinite;
+}
+.forge-orbit-3 {
+  animation: forge-orbit-3 17s linear infinite;
+}
+
+@keyframes forge-orbit-1 {
+  from {
+    transform: rotateX(70deg) rotateZ(0deg);
+  }
+  to {
+    transform: rotateX(70deg) rotateZ(360deg);
+  }
+}
+@keyframes forge-orbit-2 {
+  from {
+    transform: rotateZ(-58deg) rotateX(68deg) rotateZ(0deg);
+  }
+  to {
+    transform: rotateZ(-58deg) rotateX(68deg) rotateZ(360deg);
+  }
+}
+@keyframes forge-orbit-3 {
+  from {
+    transform: rotateZ(58deg) rotateX(68deg) rotateZ(0deg);
+  }
+  to {
+    transform: rotateZ(58deg) rotateX(68deg) rotateZ(-360deg);
+  }
+}
+
+/* =====================================================================
+   Futuristic backdrop helpers — used on the entry/boot full-screens.
+   ===================================================================== */
+
+/* Animated holographic grid (masked to a soft radial vignette). */
+.forge-grid {
+  background-image:
+    linear-gradient(rgba(150, 200, 255, 0.09) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(150, 200, 255, 0.09) 1px, transparent 1px);
+  background-size: 46px 46px;
+  -webkit-mask-image: radial-gradient(circle at 50% 42%, #000 0%, transparent 70%);
+  mask-image: radial-gradient(circle at 50% 42%, #000 0%, transparent 70%);
+  animation: forge-grid-drift 16s linear infinite;
+}
+@keyframes forge-grid-drift {
+  from {
+    background-position: 0 0, 0 0;
+  }
+  to {
+    background-position: 0 46px, 46px 0;
+  }
+}
+
+/* A single scanline that sweeps top→bottom. */
+.forge-scan {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 120px;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    rgba(0, 243, 255, 0.06) 45%,
+    rgba(150, 200, 255, 0.12) 50%,
+    rgba(0, 243, 255, 0.06) 55%,
+    transparent
+  );
+  animation: forge-scan 5.5s ease-in-out infinite;
+}
+@keyframes forge-scan {
+  0% {
+    transform: translateY(-130px);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(100vh);
+    opacity: 0;
+  }
+}
+
+/* Slow conic sweep used behind the wordmark on full-screens. */
+@keyframes forge-sweep {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Occasional light-silver ambient bloom that slowly drifts across the
+   backdrop and fades in/out (so it appears only now and then). Sits behind
+   all content (z-index:-1 inside the relative <main>). */
+.forge-ambient {
+  position: fixed;
+  top: -25vmax;
+  left: -25vmax;
+  width: 70vmax;
+  height: 70vmax;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(214, 222, 235, 0.14),
+    rgba(196, 206, 224, 0.06) 42%,
+    transparent 68%
+  );
+  filter: blur(8px);
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: forge-ambient 34s ease-in-out infinite;
+}
+@keyframes forge-ambient {
+  0% {
+    transform: translate(0, 0) scale(0.9);
+    opacity: 0;
+  }
+  18% {
+    opacity: 0.55;
+  }
+  50% {
+    transform: translate(85vw, 40vh) scale(1.2);
+    opacity: 0.3;
+  }
+  82% {
+    opacity: 0.5;
+  }
+  100% {
+    transform: translate(20vw, 92vh) scale(0.95);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .forge-ambient {
+    animation: none;
+    opacity: 0;
   }
 }
 

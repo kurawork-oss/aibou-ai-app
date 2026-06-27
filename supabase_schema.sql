@@ -94,3 +94,92 @@ CREATE TABLE IF NOT EXISTS agent_memory (
   created_at timestamptz DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_agent_memory_user ON agent_memory(user_id, created_at DESC);
+
+-- =====================================================================
+-- 🚀 Next.js webapp（FastAPI バックエンド）が使う新テーブル
+-- これらが無くてもアプリはメモリ・フォールバックで動くが、
+-- 永続化するには SQL Editor でこのブロックを実行する。
+-- =====================================================================
+
+-- ⚡ アクティブタスク（Tasks）
+CREATE TABLE IF NOT EXISTS tasks (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  title      text NOT NULL,
+  content    text DEFAULT '',
+  status     text DEFAULT 'pending',   -- pending/in_progress/awaiting_approval/completed/cancelled
+  response   text DEFAULT '',
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status, created_at DESC);
+
+-- ✦ AI Studio：カスタムAI
+CREATE TABLE IF NOT EXISTS studio_ais (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name       text NOT NULL,
+  persona    text DEFAULT '',
+  model      text DEFAULT 'gemini-2.5-flash',
+  rules      text DEFAULT '',
+  created_at timestamptz DEFAULT now()
+);
+
+-- ✦ AI Studio：ワークフロー（多段プロンプト連鎖）
+CREATE TABLE IF NOT EXISTS studio_workflows (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name       text NOT NULL,
+  steps      jsonb DEFAULT '[]'::jsonb,
+  created_at timestamptz DEFAULT now()
+);
+
+-- 🔐 APIキー保管庫（Keychain）。値はサーバー側専用、APIではマスクのみ返す。
+CREATE TABLE IF NOT EXISTS api_keys (
+  name       text PRIMARY KEY,
+  value      text DEFAULT '',
+  updated_at timestamptz DEFAULT now()
+);
+
+-- 🛰 オートパイロット：ゴール自動実行ミッション
+CREATE TABLE IF NOT EXISTS missions (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  goal       text NOT NULL,
+  status     text DEFAULT 'active',    -- active/completed/failed/paused
+  steps      jsonb DEFAULT '[]'::jsonb,
+  current    int DEFAULT 0,
+  log        jsonb DEFAULT '[]'::jsonb,
+  notify     boolean DEFAULT true,
+  created_at timestamptz DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_missions_status ON missions(status, created_at DESC);
+
+-- 🔀 ノーコード自動化（Zapier風フロー）
+CREATE TABLE IF NOT EXISTS automations (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name       text NOT NULL,
+  enabled    boolean DEFAULT true,
+  trigger    jsonb DEFAULT '{}'::jsonb,
+  steps      jsonb DEFAULT '[]'::jsonb,
+  status     text DEFAULT 'idle',
+  log        jsonb DEFAULT '[]'::jsonb,
+  created_at timestamptz DEFAULT now()
+);
+
+-- 📅 組み込みカレンダー（Agenda）
+CREATE TABLE IF NOT EXISTS events (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  title      text NOT NULL,
+  date       text DEFAULT '',
+  time       text DEFAULT '',
+  note       text DEFAULT '',
+  created_at timestamptz DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_events_date ON events(date);
+
+-- 🔔 アプリ内通知（Notifications）
+CREATE TABLE IF NOT EXISTS notifications (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  message    text DEFAULT '',
+  channel    text DEFAULT 'system',
+  read       boolean DEFAULT false,
+  created_at timestamptz DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read, created_at DESC);

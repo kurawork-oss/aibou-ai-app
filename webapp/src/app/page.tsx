@@ -3,36 +3,66 @@
 /**
  * THE FORGE OS — main HUD.
  *
- * Layout: centered CoreOrb + wordmark + online dot up top, the Chat surface
- * filling the rest (mobile-first, max-width container). A slim status row and a
- * settings affordance let the user set the assistant name + persona, persisted
- * to localStorage and sent to /chat. The whole page is wrapped in BootScreen so
- * a backend cold-start is masked by the branded loader.
+ * Flows: EntryGate → BootScreen → Hud.
+ * Views: CHAT / FORGE / VAULT / INCOME / TASKS / STUDIO / ARCHIVE.
+ * Horizontally scrollable NavBar for 7+ views without crowding.
  */
 
 import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useState } from "react";
+import AppArchive from "@/components/AppArchive";
+import Autopilot from "@/components/Autopilot";
 import BootScreen from "@/components/BootScreen";
 import Briefing from "@/components/Briefing";
 import Chat, { type ChatSettings } from "@/components/Chat";
 import CoreOrb, { type CoreState } from "@/components/CoreOrb";
+import Dashboard from "@/components/Dashboard";
+import EntryGate from "@/components/EntryGate";
 import Forge from "@/components/Forge";
+import Home from "@/components/Home";
 import Income from "@/components/Income";
+import Keychain from "@/components/Keychain";
+import Studio from "@/components/Studio";
+import Tasks from "@/components/Tasks";
 import Vault from "@/components/Vault";
 import { health } from "@/lib/api";
+import { supabase, supabaseEnabled } from "@/lib/supabase";
 
-type View = "chat" | "forge" | "vault" | "income";
+type View = "chat" | "forge" | "vault" | "income" | "tasks" | "studio" | "autopilot" | "board" | "archive" | "home";
 
 const LS_NAME = "forge_name";
 const LS_PERSONA = "forge_persona";
 const LS_VOICE = "forge_voice_replies";
+const LS_TTS_VOICE = "forge_tts_voice";
+const LS_TTS_RATE = "forge_tts_rate";
 const DEFAULT_NAME = "JARVIS";
+const DEFAULT_TTS_VOICE = "ja-JP-NanamiNeural";
+const DEFAULT_TTS_RATE = 1.0;
+
+// edge-tts ja-JP voices (used by the API fallback; browser TTS auto-picks ja-JP).
+const VOICE_PRESETS = [
+  { label: "NANAMI (女性)", value: "ja-JP-NanamiNeural" },
+  { label: "KEITA (男性)", value: "ja-JP-KeitaNeural" },
+  { label: "AOI (女性)", value: "ja-JP-AoiNeural" },
+  { label: "DAICHI (男性)", value: "ja-JP-DaichiNeural" },
+  { label: "MAYU (女性)", value: "ja-JP-MayuNeural" },
+  { label: "NAOKI (男性)", value: "ja-JP-NaokiNeural" },
+];
+
+const PERSONA_PRESETS = [
+  { label: "JARVIS", value: "冷静で知的、先を読んで行動し、ユーザーを名前で呼ぶ。常に敬語で簡潔に。" },
+  { label: "FRIENDLY", value: "フレンドリーで親しみやすく、ポジティブな雰囲気を保つ。絵文字も使ってよい。" },
+  { label: "SECRETARY", value: "効率的なアシスタント。タスク管理・予定・優先順位を意識してサポートする。" },
+  { label: "TACTICAL", value: "戦略家視点。課題を分解し、リスクと機会を明確にして行動プランを提示する。" },
+];
 
 export default function Page() {
   return (
-    <BootScreen>
-      <Hud />
-    </BootScreen>
+    <EntryGate>
+      <BootScreen>
+        <Hud />
+      </BootScreen>
+    </EntryGate>
   );
 }
 
@@ -45,21 +75,20 @@ function Hud() {
   const [loaded, setLoaded] = useState(false);
   const [view, setView] = useState<View>("chat");
 
-  // Hydrate settings from localStorage (client-only).
   useEffect(() => {
     try {
       const name = localStorage.getItem(LS_NAME) || DEFAULT_NAME;
       const persona = localStorage.getItem(LS_PERSONA) || "";
       const voice = localStorage.getItem(LS_VOICE);
-      setSettings({ name, persona });
+      const ttsVoice = localStorage.getItem(LS_TTS_VOICE) || DEFAULT_TTS_VOICE;
+      const rateRaw = localStorage.getItem(LS_TTS_RATE);
+      const rate = rateRaw ? Number(rateRaw) || DEFAULT_TTS_RATE : DEFAULT_TTS_RATE;
+      setSettings({ name, persona, voice: ttsVoice, rate });
       if (voice !== null) setVoiceReplies(voice === "1");
-    } catch {
-      /* ignore */
-    }
+    } catch { /* ignore */ }
     setLoaded(true);
   }, []);
 
-  // Lightweight online indicator: re-check health periodically.
   useEffect(() => {
     let active = true;
     const check = async () => {
@@ -68,10 +97,7 @@ function Hud() {
     };
     void check();
     const id = setInterval(check, 20_000);
-    return () => {
-      active = false;
-      clearInterval(id);
-    };
+    return () => { active = false; clearInterval(id); };
   }, []);
 
   const persist = useCallback((next: ChatSettings, voice: boolean) => {
@@ -79,9 +105,9 @@ function Hud() {
       localStorage.setItem(LS_NAME, next.name);
       localStorage.setItem(LS_PERSONA, next.persona);
       localStorage.setItem(LS_VOICE, voice ? "1" : "0");
-    } catch {
-      /* ignore */
-    }
+      localStorage.setItem(LS_TTS_VOICE, next.voice || DEFAULT_TTS_VOICE);
+      localStorage.setItem(LS_TTS_RATE, String(next.rate ?? DEFAULT_TTS_RATE));
+    } catch { /* ignore */ }
   }, []);
 
   const handleSave = useCallback(
@@ -89,6 +115,8 @@ function Hud() {
       const cleaned: ChatSettings = {
         name: next.name.trim() || DEFAULT_NAME,
         persona: next.persona.trim(),
+        voice: next.voice || DEFAULT_TTS_VOICE,
+        rate: next.rate ?? DEFAULT_TTS_RATE,
       };
       setSettings(cleaned);
       setVoiceReplies(voice);
@@ -98,55 +126,74 @@ function Hud() {
     [persist],
   );
 
+  // Every mode uses the full width; each view manages its own internal
+  // centering. Chat goes extra-wide so the history rail sits in the far-left
+  // margin while the conversation stays centred.
   return (
-    <main className="relative mx-auto flex h-[100dvh] w-full max-w-2xl flex-col px-4 pb-3 pt-[max(env(safe-area-inset-top),0.75rem)]">
-      {/* Top status row */}
-      <div className="flex items-center justify-between py-1">
-        <div className="flex items-center gap-2">
-          <StatusDot online={online} />
-          <span className="text-[10px] tracking-[0.22em] text-muted label-mono">
-            {online ? "LINK ACTIVE" : "OFFLINE"}
-          </span>
+    <main
+      className={`relative mx-auto flex h-[100dvh] w-full flex-col px-4 pb-3 pt-[max(env(safe-area-inset-top),0.75rem)] transition-[max-width] duration-300 ${view === "chat" ? "max-w-[1700px]" : "max-w-6xl"}`}
+    >
+      {/* Occasional drifting light-silver ambient bloom (behind everything). */}
+      <div className="forge-ambient" aria-hidden />
+
+      {/* Chrome (status + core) stays centred/narrow even when the page is wide */}
+      <div className="mx-auto w-full max-w-2xl">
+        {/* Top status row */}
+        <div className="flex items-center justify-between py-1">
+          <div className="flex items-center gap-2">
+            <StatusDot online={online} />
+            <span className="text-[10px] tracking-[0.22em] text-muted label-mono">
+              {online ? "LINK ACTIVE" : "OFFLINE"}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Briefing />
+            <ModeLauncher view={view} onChange={setView} />
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(true)}
+              className="grid h-8 w-8 place-items-center rounded-lg border border-panel text-muted transition hover:border-[var(--line)] hover:text-fg-strong"
+              aria-label="Settings"
+              title="Settings"
+            >
+              <GearIcon />
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Briefing />
-          <button
-            type="button"
-            onClick={() => setSettingsOpen(true)}
-            className="grid h-8 w-8 place-items-center rounded-lg border border-panel text-muted transition hover:border-[var(--line)] hover:text-fg-strong"
-            aria-label="Settings"
-            title="Settings"
-          >
-            <GearIcon />
-          </button>
-        </div>
+
+        {/* Core + wordmark (compact when not on chat / home) */}
+        <header
+          className="flex flex-col items-center transition-all duration-300"
+          style={{ paddingBottom: view === "chat" || view === "home" ? "0.5rem" : "0.25rem", paddingTop: view === "chat" || view === "home" ? "0.25rem" : "0" }}
+        >
+          <CoreOrb size={view === "chat" || view === "home" ? 108 : 72} state={coreState} />
+          <h1 className="label-mono text-glow mt-3 text-[13px] font-normal text-fg-strong sm:text-sm">
+            THE FORGE OS
+          </h1>
+          <p className="mt-0.5 text-[10px] tracking-[0.28em] text-muted/80 label-mono">
+            {loaded ? `${settings.name} · ${stateLabel(coreState)}` : "INITIALIZING"}
+          </p>
+        </header>
+
+        <div className="divider my-2" />
       </div>
 
-      {/* Core + wordmark */}
-      <header className="flex flex-col items-center pb-2 pt-1">
-        <CoreOrb size={108} state={coreState} />
-        <h1 className="label-mono text-glow mt-4 text-[13px] font-normal text-fg-strong sm:text-sm">
-          THE FORGE OS
-        </h1>
-        <p className="mt-1 text-[10px] tracking-[0.28em] text-muted/80 label-mono">
-          {loaded ? `${settings.name} · ${stateLabel(coreState)}` : "INITIALIZING"}
-        </p>
-      </header>
-
-      <div className="divider my-2" />
-
-      {/* Active view fills remaining space */}
+      {/* Active view fills remaining space. Home & Forge own the full width
+          (custom layouts); the rest are centred so they don't look stretched. */}
       <section className="min-h-0 flex-1">
+        {loaded && view === "home" && <Home settings={settings} onNavigate={setView} />}
         {loaded && view === "chat" && (
           <Chat settings={settings} voiceReplies={voiceReplies} onStateChange={setCoreState} />
         )}
         {loaded && view === "forge" && <Forge />}
-        {loaded && view === "vault" && <Vault />}
-        {loaded && view === "income" && <Income />}
+        {loaded && view === "vault" && <Centered><Vault /></Centered>}
+        {loaded && view === "income" && <Centered><Income /></Centered>}
+        {loaded && view === "tasks" && <Centered><Tasks /></Centered>}
+        {loaded && view === "studio" && <Centered><Studio /></Centered>}
+        {loaded && view === "autopilot" && <Centered><Autopilot /></Centered>}
+        {loaded && view === "board" && <Centered><Dashboard /></Centered>}
+        {loaded && view === "archive" && <Centered><AppArchive /></Centered>}
       </section>
-
-      {/* Bottom navigation */}
-      <NavBar view={view} onChange={setView} />
 
       {/* Settings drawer */}
       <AnimatePresence>
@@ -154,6 +201,7 @@ function Hud() {
           <SettingsPanel
             initial={settings}
             initialVoice={voiceReplies}
+            online={online}
             onClose={() => setSettingsOpen(false)}
             onSave={handleSave}
           />
@@ -165,46 +213,142 @@ function Hud() {
 
 function stateLabel(state: CoreState): string {
   switch (state) {
-    case "listening":
-      return "LISTENING";
-    case "speaking":
-      return "SPEAKING";
-    case "thinking":
-      return "THINKING";
-    default:
-      return "ONLINE";
+    case "listening": return "LISTENING";
+    case "speaking": return "SPEAKING";
+    case "thinking": return "THINKING";
+    default: return "ONLINE";
   }
 }
 
-function NavBar({ view, onChange }: { view: View; onChange: (v: View) => void }) {
-  const items: { key: View; label: string }[] = [
-    { key: "chat", label: "CHAT" },
-    { key: "forge", label: "FORGE" },
-    { key: "vault", label: "VAULT" },
-    { key: "income", label: "INCOME" },
-  ];
+const NAV_ITEMS: { key: View; label: string }[] = [
+  { key: "home", label: "HOME" },
+  { key: "chat", label: "CHAT" },
+  { key: "forge", label: "FORGE" },
+  { key: "vault", label: "VAULT" },
+  { key: "tasks", label: "TASKS" },
+  { key: "income", label: "INCOME" },
+  { key: "studio", label: "STUDIO" },
+  { key: "autopilot", label: "AUTO" },
+  { key: "board", label: "BOARD" },
+  { key: "archive", label: "ARCHIVE" },
+];
+
+/* Silver line-art nav icons (stroke = currentColor → inherits the muted /
+   bright text colour). No coloured emoji — keeps the futuristic monochrome. */
+function NavIcon({ name }: { name: View }) {
+  const p = {
+    width: 17, height: 17, viewBox: "0 0 24 24", fill: "none",
+    stroke: "currentColor", strokeWidth: 1.6,
+    strokeLinecap: "round" as const, strokeLinejoin: "round" as const,
+  };
+  switch (name) {
+    case "home":
+      return (<svg {...p}><path d="M3 11l9-7 9 7" /><path d="M5 10v10h14V10" /><path d="M9 20v-6h6v6" /></svg>);
+    case "chat":
+      return (<svg {...p}><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.7A8.5 8.5 0 1 1 21 11.5z" /></svg>);
+    case "forge":
+      return (<svg {...p}><path d="M12 3l7.5 4.5v9L12 21l-7.5-4.5v-9L12 3z" /><circle cx="12" cy="12" r="3" /></svg>);
+    case "vault":
+      return (<svg {...p}><rect x="4" y="10" width="16" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg>);
+    case "tasks":
+      return (<svg {...p}><path d="M10 6h10M10 12h10M10 18h10" /><path d="M3.5 6l1.2 1.2L7 5M3.5 12l1.2 1.2L7 11M3.5 18l1.2 1.2L7 17" /></svg>);
+    case "income":
+      return (<svg {...p}><path d="M3 17l5-5 4 4 7-7" /><path d="M16 9h5v5" /></svg>);
+    case "studio":
+      return (<svg {...p}><path d="M12 3l1.9 5.4L19 10l-5.1 1.6L12 17l-1.9-5.4L5 10l5.1-1.6L12 3z" /></svg>);
+    case "autopilot":
+      return (<svg {...p}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>);
+    case "board":
+      return (<svg {...p}><rect x="3" y="4" width="7" height="7" rx="1" /><rect x="14" y="4" width="7" height="4" rx="1" /><rect x="14" y="12" width="7" height="8" rx="1" /><rect x="3" y="15" width="7" height="5" rx="1" /></svg>);
+    case "archive":
+      return (<svg {...p}><path d="M3 7l9-4 9 4-9 4-9-4z" /><path d="M3 12l9 4 9-4M3 17l9 4 9-4" /></svg>);
+    default:
+      return null;
+  }
+}
+
+/** Centres non-fullbleed views so they don't stretch on the wide page. */
+function Centered({ children }: { children: React.ReactNode }) {
+  return <div className="mx-auto h-full w-full max-w-5xl">{children}</div>;
+}
+
+function WaffleIcon() {
   return (
-    <nav className="mt-2 flex items-center justify-center gap-2 pt-1">
-      {items.map((it) => {
-        const activeView = it.key === view;
-        return (
-          <button
-            key={it.key}
-            type="button"
-            onClick={() => onChange(it.key)}
-            className="flex-1 rounded-forge border py-2 text-[10px] tracking-[0.2em] label-mono transition"
-            style={{
-              borderColor: activeView ? "var(--accent)" : "var(--panel-bd)",
-              color: activeView ? "var(--fg-strong)" : "var(--muted)",
-              boxShadow: activeView ? "0 0 12px var(--glow)" : "none",
-              background: activeView ? "var(--btn-bg)" : "transparent",
-            }}
-          >
-            {it.label}
-          </button>
-        );
-      })}
-    </nav>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      {[4, 10, 16].flatMap((y) => [4, 10, 16].map((x) => (
+        <circle key={`${x}-${y}`} cx={x + 1} cy={y + 1} r="1.6" />
+      )))}
+    </svg>
+  );
+}
+
+/** Google-apps-style mode launcher: a waffle button → popover grid of modes. */
+function ModeLauncher({ view, onChange }: { view: View; onChange: (v: View) => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="grid h-8 w-8 place-items-center rounded-lg border border-panel text-muted transition hover:border-[var(--line)] hover:text-fg-strong"
+        aria-label="Modes"
+        title="Modes"
+        aria-expanded={open}
+      >
+        <WaffleIcon />
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <>
+            {/* click-away backdrop */}
+            <button
+              type="button"
+              aria-hidden
+              tabIndex={-1}
+              onClick={() => setOpen(false)}
+              className="fixed inset-0 z-40 cursor-default"
+            />
+            {/* Outer owns positioning (absolute); inner owns the glass look.
+                (Keeping glass-silver — which is position:relative — off the
+                positioned element avoids it overriding `absolute`.) */}
+            <motion.nav
+              initial={{ opacity: 0, y: -8, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -8, scale: 0.97 }}
+              transition={{ type: "spring", stiffness: 360, damping: 28 }}
+              className="absolute right-0 top-11 z-50 w-[17rem] origin-top-right"
+            >
+              <div className="glass-silver p-3">
+                <div className="mb-2 px-1 text-[9px] tracking-[0.22em] text-muted label-mono">MODES</div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {NAV_ITEMS.map((it) => {
+                    const active = it.key === view;
+                    return (
+                      <button
+                        key={it.key}
+                        type="button"
+                        onClick={() => { onChange(it.key); setOpen(false); }}
+                        className="flex h-[4.25rem] flex-col items-center justify-center gap-1.5 rounded-forge border text-[9px] tracking-[0.06em] label-mono transition"
+                        style={{
+                          borderColor: active ? "var(--accent)" : "var(--panel-bd)",
+                          color: active ? "var(--fg-strong)" : "var(--muted)",
+                          boxShadow: active ? "0 0 12px var(--glow)" : "none",
+                          background: active ? "var(--btn-bg)" : "rgba(255,255,255,0.02)",
+                        }}
+                      >
+                        <NavIcon name={it.key} />
+                        <span>{it.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </motion.nav>
+          </>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 
@@ -239,22 +383,29 @@ function GearIcon() {
   );
 }
 
-/* ------------------------------------------------------------------ */
+/* ─── Settings Panel (enhanced) ──────────────────────────────────── */
+
+type SettingsTab = "core" | "persona" | "keychain" | "diagnostics";
 
 function SettingsPanel({
   initial,
   initialVoice,
+  online,
   onClose,
   onSave,
 }: {
   initial: ChatSettings;
   initialVoice: boolean;
+  online: boolean;
   onClose: () => void;
   onSave: (settings: ChatSettings, voice: boolean) => void;
 }) {
+  const [tab, setTab] = useState<SettingsTab>("core");
   const [name, setName] = useState(initial.name);
   const [persona, setPersona] = useState(initial.persona);
   const [voice, setVoice] = useState(initialVoice);
+  const [ttsVoice, setTtsVoice] = useState(initial.voice || DEFAULT_TTS_VOICE);
+  const [rate, setRate] = useState(initial.rate ?? DEFAULT_TTS_RATE);
 
   return (
     <motion.div
@@ -263,7 +414,6 @@ function SettingsPanel({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
     >
-      {/* Backdrop */}
       <button
         type="button"
         aria-label="Close settings"
@@ -272,70 +422,220 @@ function SettingsPanel({
       />
 
       <motion.div
-        className="panel relative z-10 m-3 w-full max-w-md p-5"
+        className="panel relative z-10 m-3 w-full max-w-md"
         initial={{ y: 30, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: 30, opacity: 0 }}
         transition={{ type: "spring", stiffness: 320, damping: 30 }}
       >
-        <div className="mb-4 flex items-center justify-between">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-panel p-4">
           <h2 className="label-mono text-glow text-sm text-fg-strong">CORE SETTINGS</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md px-2 py-1 text-muted transition hover:text-fg-strong"
-            aria-label="Close"
-          >
-            ✕
-          </button>
+          <button type="button" onClick={onClose} className="text-muted transition hover:text-fg-strong">✕</button>
         </div>
 
-        <label className="mb-1 block text-[10px] tracking-[0.2em] text-muted label-mono">ASSISTANT NAME</label>
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder={DEFAULT_NAME}
-          className="mb-4 w-full rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2.5 text-sm text-fg-strong placeholder:text-muted focus:border-[var(--line)] focus:shadow-glow focus:outline-none"
-        />
-
-        <label className="mb-1 block text-[10px] tracking-[0.2em] text-muted label-mono">PERSONA / BEHAVIOR</label>
-        <textarea
-          value={persona}
-          onChange={(e) => setPersona(e.target.value)}
-          rows={4}
-          placeholder="e.g. Calm, concise, proactive. Address me by name. Anticipate next steps."
-          className="mb-4 w-full resize-none rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2.5 text-sm text-fg-strong placeholder:text-muted focus:border-[var(--line)] focus:shadow-glow focus:outline-none"
-        />
-
-        <label className="mb-5 flex cursor-pointer items-center justify-between">
-          <span className="text-[10px] tracking-[0.2em] text-muted label-mono">SPOKEN REPLIES</span>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={voice}
-            onClick={() => setVoice((v) => !v)}
-            className="relative h-6 w-11 rounded-full border border-panel-strong transition"
-            style={{ background: voice ? "rgba(0,243,255,0.18)" : "rgba(255,255,255,0.05)" }}
-          >
-            <span
-              className="absolute top-1/2 h-4 w-4 -translate-y-1/2 rounded-full transition-all"
+        {/* Tab bar */}
+        <div className="flex border-b border-panel">
+          {(["core", "persona", "keychain", "diagnostics"] as SettingsTab[]).map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTab(t)}
+              className="flex-1 py-2.5 text-[9px] tracking-[0.12em] transition label-mono"
               style={{
-                left: voice ? "calc(100% - 1.25rem)" : "0.2rem",
-                background: voice ? "var(--accent)" : "var(--muted)",
-                boxShadow: voice ? "0 0 8px rgba(0,243,255,0.7)" : "none",
+                color: tab === t ? "var(--fg-strong)" : "var(--muted)",
+                borderBottom: tab === t ? "2px solid var(--accent)" : "2px solid transparent",
               }}
-            />
-          </button>
-        </label>
+            >
+              {t.toUpperCase()}
+            </button>
+          ))}
+        </div>
 
-        <button
-          type="button"
-          onClick={() => onSave({ name, persona }, voice)}
-          className="w-full rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] py-2.5 text-[11px] tracking-[0.2em] text-fg-strong shadow-glow transition hover:shadow-glow-strong label-mono"
-        >
-          SAVE & SYNC
-        </button>
+        <div className="max-h-[60vh] overflow-y-auto p-5">
+          {tab === "core" && (
+            <>
+              <label className="mb-1 block text-[10px] tracking-[0.2em] text-muted label-mono">ASSISTANT NAME</label>
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder={DEFAULT_NAME}
+                className="mb-4 w-full rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2.5 text-sm text-fg-strong placeholder:text-muted focus:border-[var(--line)] focus:shadow-glow focus:outline-none"
+              />
+
+              <label className="mb-4 flex cursor-pointer items-center justify-between">
+                <span className="text-[10px] tracking-[0.2em] text-muted label-mono">SPOKEN REPLIES</span>
+                <ToggleSwitch checked={voice} onChange={setVoice} />
+              </label>
+
+              {/* Voice selection */}
+              <label className="mb-1 block text-[10px] tracking-[0.2em] text-muted label-mono">CORE VOICE</label>
+              <select
+                value={ttsVoice}
+                onChange={(e) => setTtsVoice(e.target.value)}
+                className="mb-4 w-full rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2.5 text-sm text-fg-strong focus:border-[var(--line)] focus:outline-none"
+              >
+                {VOICE_PRESETS.map((v) => (
+                  <option key={v.value} value={v.value} className="bg-[#0a0e16]">{v.label}</option>
+                ))}
+              </select>
+
+              {/* Talk speed */}
+              <div className="mb-4">
+                <div className="mb-1 flex items-center justify-between">
+                  <span className="text-[10px] tracking-[0.2em] text-muted label-mono">TALK SPEED</span>
+                  <span className="text-[10px] text-fg-strong label-mono">{rate.toFixed(2)}×</span>
+                </div>
+                <input
+                  type="range"
+                  min={0.5}
+                  max={2}
+                  step={0.05}
+                  value={rate}
+                  onChange={(e) => setRate(Number(e.target.value))}
+                  className="w-full accent-[var(--accent)]"
+                  aria-label="Talk speed"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={() => onSave({ name, persona, voice: ttsVoice, rate }, voice)}
+                className="w-full rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] py-2.5 text-[11px] tracking-[0.2em] text-fg-strong shadow-glow transition hover:shadow-glow-strong label-mono"
+              >
+                SAVE & SYNC
+              </button>
+            </>
+          )}
+
+          {tab === "persona" && (
+            <>
+              <div className="mb-3 text-[10px] tracking-[0.2em] text-muted label-mono">PRESETS</div>
+              <div className="mb-4 grid grid-cols-2 gap-1.5">
+                {PERSONA_PRESETS.map((p) => (
+                  <button
+                    key={p.label}
+                    type="button"
+                    onClick={() => setPersona(p.value)}
+                    className="rounded-forge border px-2.5 py-2 text-left transition"
+                    style={{
+                      borderColor: persona === p.value ? "var(--accent)" : "var(--panel-bd)",
+                      background: persona === p.value ? "var(--btn-bg)" : "transparent",
+                    }}
+                  >
+                    <span className="block text-[10px] tracking-[0.16em] text-fg-strong label-mono">{p.label}</span>
+                  </button>
+                ))}
+              </div>
+
+              <label className="mb-1 block text-[10px] tracking-[0.2em] text-muted label-mono">CUSTOM PERSONA</label>
+              <textarea
+                value={persona}
+                onChange={(e) => setPersona(e.target.value)}
+                rows={5}
+                placeholder="例: 冷静で知的、先を読んで行動し、ユーザーをさん付けで呼ぶ。"
+                className="mb-4 w-full resize-none rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2.5 text-sm text-fg-strong placeholder:text-muted focus:border-[var(--line)] focus:shadow-glow focus:outline-none"
+              />
+
+              <button
+                type="button"
+                onClick={() => onSave({ name, persona, voice: ttsVoice, rate }, voice)}
+                className="w-full rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] py-2.5 text-[11px] tracking-[0.2em] text-fg-strong shadow-glow transition hover:shadow-glow-strong label-mono"
+              >
+                SAVE & SYNC
+              </button>
+            </>
+          )}
+
+          {tab === "keychain" && (
+            <>
+              <div className="mb-3 text-[10px] leading-relaxed text-muted">
+                各APIキーをここで設定します。値はマスク表示され、フルの値は画面に出ません。
+              </div>
+              <Keychain />
+            </>
+          )}
+
+          {tab === "diagnostics" && (
+            <div className="flex flex-col gap-3">
+              <DiagRow label="LINK STATUS" value={online ? "ACTIVE" : "OFFLINE"} ok={online} />
+              <DiagRow label="FRONTEND" value="NEXT.JS 14 · VERCEL" ok={true} />
+              <DiagRow label="BACKEND" value={process.env.NEXT_PUBLIC_API_URL ? "CONFIGURED" : "NOT SET"} ok={!!process.env.NEXT_PUBLIC_API_URL} />
+              <DiagRow label="AUTH" value={supabaseEnabled ? "SUPABASE" : process.env.NEXT_PUBLIC_API_TOKEN ? "BEARER TOKEN" : "OPEN"} ok={true} />
+              <DiagRow label="DATABASE" value={supabaseEnabled ? "CONNECTED" : "NOT SET"} ok={supabaseEnabled} />
+              <DiagRow label="GATE PIN" value={process.env.NEXT_PUBLIC_GATE_PIN ? "ACTIVE" : "DISABLED"} ok={true} />
+
+              <div className="mt-2 rounded-forge border border-panel p-3">
+                <div className="mb-2 text-[10px] tracking-[0.2em] text-muted label-mono">ENVIRONMENT</div>
+                <div className="text-[10px] text-muted">
+                  <p>API_URL: <span className="text-fg">{process.env.NEXT_PUBLIC_API_URL || "(not set)"}</span></p>
+                </div>
+              </div>
+
+              {supabaseEnabled && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try { await supabase?.auth.signOut(); } catch { /* ignore */ }
+                    window.location.reload();
+                  }}
+                  className="rounded-forge border border-panel py-2 text-[10px] tracking-[0.18em] text-muted transition hover:text-fg-strong label-mono"
+                >
+                  サインアウト
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => {
+                  try { localStorage.clear(); } catch { /* ignore */ }
+                  try { sessionStorage.clear(); } catch { /* ignore */ }
+                  window.location.reload();
+                }}
+                className="rounded-forge border border-[#ff6b6b44] py-2 text-[10px] tracking-[0.18em] text-[#ff6b6b] transition hover:border-[#ff6b6b] label-mono"
+              >
+                CLEAR LOCAL DATA & RELOAD
+              </button>
+            </div>
+          )}
+        </div>
       </motion.div>
     </motion.div>
+  );
+}
+
+function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className="relative h-6 w-11 rounded-full border border-panel-strong transition"
+      style={{ background: checked ? "rgba(0,243,255,0.18)" : "rgba(255,255,255,0.05)" }}
+    >
+      <span
+        className="absolute top-1/2 h-4 w-4 -translate-y-1/2 rounded-full transition-all"
+        style={{
+          left: checked ? "calc(100% - 1.25rem)" : "0.2rem",
+          background: checked ? "var(--accent)" : "var(--muted)",
+          boxShadow: checked ? "0 0 8px rgba(0,243,255,0.7)" : "none",
+        }}
+      />
+    </button>
+  );
+}
+
+function DiagRow({ label, value, ok }: { label: string; value: string; ok: boolean }) {
+  return (
+    <div className="flex items-center justify-between rounded-forge border border-panel p-2.5">
+      <span className="text-[10px] tracking-[0.16em] text-muted label-mono">{label}</span>
+      <span
+        className="text-[10px] tracking-[0.12em] label-mono"
+        style={{ color: ok ? "#60d394" : "#ff6b6b" }}
+      >
+        {value}
+      </span>
+    </div>
   );
 }

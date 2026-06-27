@@ -32,8 +32,13 @@ export const metadata: Metadata = {
     title: "FORGE",
   },
   icons: {
-    icon: "/icon-192.png",
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/icon-192.png", type: "image/png", sizes: "192x192" },
+      { url: "/icon-512.png", type: "image/png", sizes: "512x512" },
+    ],
     apple: "/icon-192.png",
+    shortcut: "/favicon.ico",
   },
   formatDetection: {
     telephone: false,

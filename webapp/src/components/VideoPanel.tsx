@@ -71,7 +71,7 @@ export default function VideoPanel() {
         disabled={busy || !scenesText.trim()}
         className="rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] py-2.5 text-[11px] tracking-[0.2em] text-fg-strong shadow-glow transition hover:shadow-glow-strong disabled:opacity-40 label-mono"
       >
-        {busy ? "RENDERING…" : "🎬 動画(MP4)を生成"}
+        {busy ? "RENDERING…" : "動画(MP4)を生成"}
       </button>
 
       {busy && (

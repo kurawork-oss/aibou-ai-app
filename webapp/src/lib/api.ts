@@ -38,6 +38,8 @@ export interface VisionParams {
 export interface TTSParams {
   text: string;
   voice?: string;
+  /** edge-tts rate string, e.g. "+0%", "-20%", "+30%". */
+  rate?: string;
 }
 
 export interface IncomeSummary {
@@ -247,7 +249,7 @@ export async function tts(params: TTSParams): Promise<string> {
   const res = await fetch(`${requireApiUrl()}/tts`, {
     method: "POST",
     headers: authHeaders({ "Content-Type": "application/json" }),
-    body: JSON.stringify({ text: params.text, voice: params.voice }),
+    body: JSON.stringify({ text: params.text, voice: params.voice, rate: params.rate }),
   });
   const data = (await res.json().catch(() => ({}))) as { audio_base64?: string; error?: string };
   if (!res.ok) throw new Error(data.error || `TTS failed (${res.status})`);
@@ -394,6 +396,175 @@ export async function vaultQuery(notebookId: string, question: string): Promise<
   return { answer: data.answer ?? data.error ?? "" };
 }
 
+/** POST /vault/generate — author a Markdown document grounded in the notebook. */
+export async function vaultGenerateDoc(notebookId: string, instruction: string): Promise<{ markdown: string }> {
+  const res = await fetch(`${requireApiUrl()}/vault/generate`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ notebook_id: notebookId, instruction }),
+  });
+  const data = (await res.json().catch(() => ({}))) as { markdown?: string; error?: string };
+  if (!res.ok && !data.error) throw new Error(`Doc generation failed (${res.status})`);
+  if (data.error) throw new Error(data.error);
+  return { markdown: data.markdown ?? "" };
+}
+
+/** POST /vault/diagram — generate a Mermaid diagram (logic tree/flow/mindmap). */
+export async function vaultGenerateDiagram(notebookId: string, kind = "tree"): Promise<{ mermaid: string; kind: string }> {
+  const res = await fetch(`${requireApiUrl()}/vault/diagram`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ notebook_id: notebookId, kind }),
+  });
+  const data = (await res.json().catch(() => ({}))) as { mermaid?: string; kind?: string; error?: string };
+  if (!res.ok && !data.error) throw new Error(`Diagram generation failed (${res.status})`);
+  if (data.error) throw new Error(data.error);
+  return { mermaid: data.mermaid ?? "", kind: data.kind ?? kind };
+}
+
+/* ---------------- Tasks (Active Tasks) ---------------- */
+export interface Task {
+  id: string;
+  title: string;
+  status: "pending" | "in_progress" | "awaiting_approval" | "completed" | "cancelled";
+  content?: string;
+  response?: string;
+  created_at?: string;
+  updated_at?: string;
+  [key: string]: unknown;
+}
+
+/** GET /tasks — list tasks. */
+export async function listTasks(status?: string, limit = 100): Promise<Task[]> {
+  const q = new URLSearchParams();
+  if (status) q.set("status", status);
+  q.set("limit", String(limit));
+  const res = await fetch(`${requireApiUrl()}/tasks?${q}`, { headers: authHeaders(), cache: "no-store" });
+  if (!res.ok) throw new Error(`Tasks failed (${res.status})`);
+  const data = (await res.json().catch(() => ({ items: [] }))) as { items?: Task[] };
+  return data.items ?? [];
+}
+
+/** POST /tasks — create a new task. */
+export async function createTask(title: string, content = "", status = "pending"): Promise<Task> {
+  const res = await fetch(`${requireApiUrl()}/tasks`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ title, content, status }),
+  });
+  const data = (await res.json().catch(() => ({}))) as Task & { error?: string };
+  if (!res.ok) throw new Error(data.error ?? `Create task failed (${res.status})`);
+  return data;
+}
+
+/** PATCH /tasks/{id} — update task. */
+export async function updateTask(id: string, updates: { status?: string; response?: string; content?: string }): Promise<Task> {
+  const res = await fetch(`${requireApiUrl()}/tasks/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(updates),
+  });
+  const data = (await res.json().catch(() => ({}))) as Task & { error?: string };
+  if (!res.ok) throw new Error(data.error ?? `Update task failed (${res.status})`);
+  return data;
+}
+
+/** DELETE /tasks/{id} — delete a task. */
+export async function deleteTask(id: string): Promise<boolean> {
+  const res = await fetch(`${requireApiUrl()}/tasks/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  const data = (await res.json().catch(() => ({ ok: false }))) as { ok?: boolean };
+  return Boolean(data.ok);
+}
+
+/* ---------------- Studio (Custom AI + Workflows) ---------------- */
+export interface StudioAI {
+  id: string;
+  name: string;
+  persona?: string;
+  model?: string;
+  rules?: string;
+  created_at?: string;
+}
+
+export interface WorkflowStep {
+  name?: string;
+  prompt: string;
+}
+
+export interface StudioWorkflow {
+  id: string;
+  name: string;
+  steps: WorkflowStep[];
+  created_at?: string;
+}
+
+export interface WorkflowResult {
+  workflow_id: string;
+  workflow_name: string;
+  results: Array<{ step: number; name: string; output: string }>;
+  final_output: string;
+}
+
+export async function studioListAIs(): Promise<StudioAI[]> {
+  const res = await fetch(`${requireApiUrl()}/studio/ais`, { headers: authHeaders(), cache: "no-store" });
+  if (!res.ok) throw new Error(`Studio AIs failed (${res.status})`);
+  const data = (await res.json().catch(() => ({ items: [] }))) as { items?: StudioAI[] };
+  return data.items ?? [];
+}
+
+export async function studioCreateAI(ai: { name: string; persona?: string; model?: string; rules?: string }): Promise<StudioAI> {
+  const res = await fetch(`${requireApiUrl()}/studio/ais`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(ai),
+  });
+  const data = (await res.json().catch(() => ({}))) as StudioAI & { error?: string };
+  if (!res.ok) throw new Error(data.error ?? `Create AI failed (${res.status})`);
+  return data;
+}
+
+export async function studioDeleteAI(id: string): Promise<boolean> {
+  const res = await fetch(`${requireApiUrl()}/studio/ais/${encodeURIComponent(id)}`, { method: "DELETE", headers: authHeaders() });
+  return res.ok;
+}
+
+export async function studioListWorkflows(): Promise<StudioWorkflow[]> {
+  const res = await fetch(`${requireApiUrl()}/studio/workflows`, { headers: authHeaders(), cache: "no-store" });
+  if (!res.ok) throw new Error(`Workflows failed (${res.status})`);
+  const data = (await res.json().catch(() => ({ items: [] }))) as { items?: StudioWorkflow[] };
+  return data.items ?? [];
+}
+
+export async function studioCreateWorkflow(name: string, steps: WorkflowStep[]): Promise<StudioWorkflow> {
+  const res = await fetch(`${requireApiUrl()}/studio/workflows`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ name, steps }),
+  });
+  const data = (await res.json().catch(() => ({}))) as StudioWorkflow & { error?: string };
+  if (!res.ok) throw new Error(data.error ?? `Create workflow failed (${res.status})`);
+  return data;
+}
+
+export async function studioDeleteWorkflow(id: string): Promise<boolean> {
+  const res = await fetch(`${requireApiUrl()}/studio/workflows/${encodeURIComponent(id)}`, { method: "DELETE", headers: authHeaders() });
+  return res.ok;
+}
+
+export async function studioRunWorkflow(id: string, input = ""): Promise<WorkflowResult> {
+  const res = await fetch(`${requireApiUrl()}/studio/workflows/${encodeURIComponent(id)}/run`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ input }),
+  });
+  const data = (await res.json().catch(() => ({}))) as WorkflowResult & { error?: string };
+  if (!res.ok) throw new Error(data.error ?? `Run workflow failed (${res.status})`);
+  return data;
+}
+
 /* ---------------- Video ---------------- */
 export interface VideoResult {
   video_base64?: string;
@@ -415,6 +586,281 @@ export async function videoGenerate(scenes: VideoScene[], imagePrompt = ""): Pro
   const data = (await res.json().catch(() => ({}))) as VideoResult;
   if (!res.ok && !data.error) return { error: `Video failed (${res.status})` };
   return data;
+}
+
+/* ---------------- Autopilot (goal-based autonomous missions) ---------------- */
+export interface MissionStep {
+  n: number;
+  title: string;
+  status: "pending" | "done" | "failed";
+  result?: string;
+}
+
+export interface Mission {
+  id: string;
+  goal: string;
+  status: "active" | "completed" | "failed" | "paused";
+  steps: MissionStep[];
+  current: number;
+  log?: string[];
+  notify?: boolean;
+  created_at?: string;
+}
+
+export interface StepResult {
+  mission?: Mission;
+  done?: boolean;
+  step?: MissionStep;
+  error?: string;
+  message?: string;
+}
+
+export async function autopilotList(): Promise<Mission[]> {
+  const res = await fetch(`${requireApiUrl()}/autopilot/missions`, { headers: authHeaders(), cache: "no-store" });
+  if (!res.ok) throw new Error(`Missions failed (${res.status})`);
+  const data = (await res.json().catch(() => ({ items: [] }))) as { items?: Mission[] };
+  return data.items ?? [];
+}
+
+export async function autopilotCreate(goal: string, notify = true): Promise<Mission> {
+  const res = await fetch(`${requireApiUrl()}/autopilot/missions`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ goal, notify }),
+  });
+  const data = (await res.json().catch(() => ({}))) as Mission & { error?: string };
+  if (!res.ok) throw new Error(data.error ?? `Create mission failed (${res.status})`);
+  return data;
+}
+
+export async function autopilotStep(id: string): Promise<StepResult> {
+  const res = await fetch(`${requireApiUrl()}/autopilot/missions/${encodeURIComponent(id)}/step`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+  });
+  const data = (await res.json().catch(() => ({}))) as StepResult;
+  if (!res.ok && !data.mission) throw new Error(data.error ?? `Step failed (${res.status})`);
+  return data;
+}
+
+export async function autopilotDelete(id: string): Promise<boolean> {
+  const res = await fetch(`${requireApiUrl()}/autopilot/missions/${encodeURIComponent(id)}`, { method: "DELETE", headers: authHeaders() });
+  const data = (await res.json().catch(() => ({ ok: false }))) as { ok?: boolean };
+  return Boolean(data.ok);
+}
+
+/** POST /notify — send a test/manual notification to configured channels. */
+export async function sendNotify(message: string): Promise<{ ok: boolean; sent?: string[]; skipped?: boolean }> {
+  const res = await fetch(`${requireApiUrl()}/notify`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ message }),
+  });
+  const data = (await res.json().catch(() => ({ ok: false }))) as { ok?: boolean; sent?: string[]; skipped?: boolean };
+  if (!res.ok) throw new Error(`Notify failed (${res.status})`);
+  return { ok: Boolean(data.ok), sent: data.sent, skipped: data.skipped };
+}
+
+/* ---------------- Automations (no-code flows / Zapier-style) ---------------- */
+export type StepType = "ai_generate" | "notify" | "create_task";
+
+export interface AutomationStep {
+  id?: string;
+  n?: number;
+  type: StepType;
+  name?: string;
+  params?: Record<string, string>;
+}
+
+export interface Automation {
+  id: string;
+  name: string;
+  enabled?: boolean;
+  trigger?: { type: string; config?: Record<string, unknown> };
+  steps: AutomationStep[];
+  status?: string;
+  created_at?: string;
+}
+
+export interface AutomationRunResult {
+  automation_id: string;
+  name: string;
+  results: Array<{ step: number; name: string; type: string; ok: boolean; output: string; error?: string }>;
+  final_output: string;
+}
+
+export async function automationsList(): Promise<Automation[]> {
+  const res = await fetch(`${requireApiUrl()}/automations`, { headers: authHeaders(), cache: "no-store" });
+  if (!res.ok) throw new Error(`Automations failed (${res.status})`);
+  const data = (await res.json().catch(() => ({ items: [] }))) as { items?: Automation[] };
+  return data.items ?? [];
+}
+
+export async function automationsCreate(name: string, steps: AutomationStep[], trigger?: { type: string }): Promise<Automation> {
+  const res = await fetch(`${requireApiUrl()}/automations`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ name, steps, trigger }),
+  });
+  const data = (await res.json().catch(() => ({}))) as Automation & { error?: string };
+  if (!res.ok) throw new Error(data.error ?? `Create automation failed (${res.status})`);
+  return data;
+}
+
+export async function automationsDelete(id: string): Promise<boolean> {
+  const res = await fetch(`${requireApiUrl()}/automations/${encodeURIComponent(id)}`, { method: "DELETE", headers: authHeaders() });
+  const data = (await res.json().catch(() => ({ ok: false }))) as { ok?: boolean };
+  return Boolean(data.ok);
+}
+
+export async function automationsRun(id: string, input = ""): Promise<AutomationRunResult> {
+  const res = await fetch(`${requireApiUrl()}/automations/${encodeURIComponent(id)}/run`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ input }),
+  });
+  const data = (await res.json().catch(() => ({}))) as AutomationRunResult & { error?: string };
+  if (!res.ok) throw new Error(data.error ?? `Run automation failed (${res.status})`);
+  return data;
+}
+
+/* ---------------- Home / Agenda / Notifications (personal cockpit) ---------------- */
+export interface AgendaEvent {
+  id: string;
+  title: string;
+  date?: string;
+  time?: string;
+  note?: string;
+}
+
+export interface AppNotification {
+  id: string;
+  message: string;
+  channel?: string;
+  read?: boolean;
+  created_at?: string;
+}
+
+export interface HomeSummary {
+  tasks: { total: number; by_status: Record<string, number>; open: number };
+  missions: { total: number; active: number };
+  automations: { total: number };
+  income: { pending: number };
+  events: { total: number; upcoming: AgendaEvent[] };
+  notifications: { unread: number };
+}
+
+export async function homeSummary(): Promise<HomeSummary> {
+  const res = await fetch(`${requireApiUrl()}/home/summary`, { headers: authHeaders(), cache: "no-store" });
+  if (!res.ok) throw new Error(`Home summary failed (${res.status})`);
+  return (await res.json()) as HomeSummary;
+}
+
+export async function agendaList(): Promise<AgendaEvent[]> {
+  const res = await fetch(`${requireApiUrl()}/agenda`, { headers: authHeaders(), cache: "no-store" });
+  if (!res.ok) throw new Error(`Agenda failed (${res.status})`);
+  const data = (await res.json().catch(() => ({ items: [] }))) as { items?: AgendaEvent[] };
+  return data.items ?? [];
+}
+
+export async function agendaAdd(title: string, date = "", time = "", note = ""): Promise<AgendaEvent> {
+  const res = await fetch(`${requireApiUrl()}/agenda`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ title, date, time, note }),
+  });
+  const data = (await res.json().catch(() => ({}))) as AgendaEvent & { error?: string };
+  if (!res.ok) throw new Error(data.error ?? `Add event failed (${res.status})`);
+  return data;
+}
+
+/** Natural-language → parsed event ("明日15時に歯医者"). */
+export async function agendaParse(text: string, today = ""): Promise<AgendaEvent> {
+  const res = await fetch(`${requireApiUrl()}/agenda/parse`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ text, today }),
+  });
+  const data = (await res.json().catch(() => ({}))) as AgendaEvent & { error?: string };
+  if (!res.ok) throw new Error(data.error ?? `Parse event failed (${res.status})`);
+  return data;
+}
+
+export async function agendaDelete(id: string): Promise<boolean> {
+  const res = await fetch(`${requireApiUrl()}/agenda/${encodeURIComponent(id)}`, { method: "DELETE", headers: authHeaders() });
+  const data = (await res.json().catch(() => ({ ok: false }))) as { ok?: boolean };
+  return Boolean(data.ok);
+}
+
+export async function notificationsList(): Promise<{ items: AppNotification[]; unread: number }> {
+  const res = await fetch(`${requireApiUrl()}/notifications`, { headers: authHeaders(), cache: "no-store" });
+  if (!res.ok) throw new Error(`Notifications failed (${res.status})`);
+  const data = (await res.json().catch(() => ({ items: [], unread: 0 }))) as { items?: AppNotification[]; unread?: number };
+  return { items: data.items ?? [], unread: data.unread ?? 0 };
+}
+
+export async function notificationsMarkRead(): Promise<boolean> {
+  const res = await fetch(`${requireApiUrl()}/notifications/read`, { method: "POST", headers: authHeaders() });
+  const data = (await res.json().catch(() => ({ ok: false }))) as { ok?: boolean };
+  return Boolean(data.ok);
+}
+
+/* ---------------- Evolve (self-evolution: instruction → proposal) ---------------- */
+export type EvolveType = "app" | "custom_ai" | "automation" | "answer";
+
+export interface EvolveProposal {
+  type: EvolveType;
+  summary: string;
+  params: Record<string, unknown>;
+  raw?: string;
+}
+
+/** POST /evolve/propose — turn a natural-language wish into a buildable proposal. */
+export async function evolvePropose(instruction: string): Promise<EvolveProposal> {
+  const res = await fetch(`${requireApiUrl()}/evolve/propose`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ instruction }),
+  });
+  const data = (await res.json().catch(() => ({}))) as EvolveProposal & { error?: string };
+  if (!res.ok || data.error) throw new Error(data.error ?? `Evolve failed (${res.status})`);
+  return data;
+}
+
+/* ---------------- Keychain (API key vault) ---------------- */
+export interface ApiKeyInfo {
+  name: string;
+  label?: string;
+  hint?: string;
+  masked: string;
+  set: boolean;
+}
+
+/** GET /keys — masked list of known + stored API keys (full values never returned). */
+export async function listKeys(): Promise<ApiKeyInfo[]> {
+  const res = await fetch(`${requireApiUrl()}/keys`, { headers: authHeaders(), cache: "no-store" });
+  if (!res.ok) throw new Error(`Keys failed (${res.status})`);
+  const data = (await res.json().catch(() => ({ items: [] }))) as { items?: ApiKeyInfo[] };
+  return data.items ?? [];
+}
+
+/** POST /keys — store/update a key. */
+export async function setKey(name: string, value: string): Promise<{ ok: boolean; masked?: string }> {
+  const res = await fetch(`${requireApiUrl()}/keys`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ name, value }),
+  });
+  const data = (await res.json().catch(() => ({}))) as { ok?: boolean; masked?: string; error?: string };
+  if (!res.ok) throw new Error(data.error ?? `Set key failed (${res.status})`);
+  return { ok: Boolean(data.ok), masked: data.masked };
+}
+
+/** DELETE /keys/{name} — remove a stored key. */
+export async function deleteKey(name: string): Promise<boolean> {
+  const res = await fetch(`${requireApiUrl()}/keys/${encodeURIComponent(name)}`, { method: "DELETE", headers: authHeaders() });
+  const data = (await res.json().catch(() => ({ ok: false }))) as { ok?: boolean };
+  return Boolean(data.ok);
 }
 
 /* ---------------- Proactive ---------------- */

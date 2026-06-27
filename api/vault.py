@@ -14,6 +14,8 @@
 #   created_at timestamptz default now()
 # =====================================================================
 
+import re
+
 import config
 
 
@@ -157,5 +159,91 @@ def query(notebook_id: str, question: str) -> dict:
     try:
         resp = model.generate_content(prompt)
         return {"answer": getattr(resp, "text", "") or ""}
+    except Exception as e:
+        return {"error": f"generation failed: {e}"}
+
+
+def _load_context(notebook_id: str):
+    """ノートブックの全資料を「## タイトル\\n本文」で連結して返す。
+    (context, error_dict) のタプル。error_dict が None なら成功。"""
+    notebook_id = (notebook_id or "").strip()
+    if not notebook_id:
+        return None, {"error": "notebook_id is empty"}
+    c = config.get_supabase()
+    if not c:
+        return None, {"error": "vault unavailable (Supabase not configured)"}
+    try:
+        rows = (c.table("vault_notebooks").select("docs")
+                .eq("id", notebook_id).limit(1).execute().data) or []
+    except Exception as e:
+        return None, {"error": f"load failed: {e}"}
+    if not rows:
+        return None, {"error": "notebook not found"}
+    docs = rows[0].get("docs") or {}
+    if not isinstance(docs, dict):
+        docs = {}
+    parts = []
+    for title, content in docs.items():
+        body = content if isinstance(content, str) else str(content or "")
+        if body.strip():
+            parts.append(f"## {title}\n{body.strip()}")
+    return "\n\n".join(parts).strip(), None
+
+
+def generate_doc(notebook_id: str, instruction: str) -> dict:
+    """ノートブックの資料を根拠に、指示に沿った文書(Markdown)を作成する。"""
+    instruction = (instruction or "").strip() or "資料を分かりやすくまとめた要約資料を作成してください。"
+    context, err = _load_context(notebook_id)
+    if err:
+        return err
+    if not context:
+        return {"error": "このノートブックにはまだ資料が登録されていません。"}
+    model = config.get_gemini_model()
+    if model is None:
+        return {"error": "GEMINI_API_KEY is not configured"}
+    prompt = (
+        "あなたは資料を整理して文書を作成する編集者です。"
+        "以下の【資料】の情報だけを根拠に、【指示】に沿った文書を日本語の Markdown で作成してください。"
+        "見出し(H2/H3)・箇条書き・表を適切に使い、読みやすく構成してください。\n\n"
+        f"【資料】\n{context}\n\n【指示】\n{instruction}\n\n【文書(Markdown)】\n"
+    )
+    try:
+        resp = model.generate_content(prompt)
+        return {"markdown": getattr(resp, "text", "") or ""}
+    except Exception as e:
+        return {"error": f"generation failed: {e}"}
+
+
+def generate_diagram(notebook_id: str, kind: str = "tree") -> dict:
+    """資料から Mermaid 図（ロジックツリー等）を生成する。{mermaid, kind} を返す。"""
+    kind = (kind or "tree").strip().lower()
+    diagram_hint = {
+        "tree": "ロジックツリー（mindmap または graph TD の木構造）",
+        "flow": "フローチャート（flowchart TD）",
+        "mindmap": "マインドマップ（mindmap）",
+        "sequence": "シーケンス図（sequenceDiagram）",
+    }.get(kind, "ロジックツリー（graph TD）")
+
+    context, err = _load_context(notebook_id)
+    if err:
+        return err
+    if not context:
+        return {"error": "このノートブックにはまだ資料が登録されていません。"}
+    model = config.get_gemini_model()
+    if model is None:
+        return {"error": "GEMINI_API_KEY is not configured"}
+    prompt = (
+        "あなたは情報を構造化して図解する専門家です。"
+        f"以下の【資料】の要点を、{diagram_hint} として Mermaid 記法で表現してください。"
+        "出力は Mermaid のコードだけにし、説明文やコードフェンスは付けないでください。"
+        "日本語ノードラベルは半角の () [] {} を含めないでください（図が壊れます）。\n\n"
+        f"【資料】\n{context}\n\n【Mermaid】\n"
+    )
+    try:
+        resp = model.generate_content(prompt)
+        code = (getattr(resp, "text", "") or "").strip()
+        # 念のためコードフェンスを除去
+        code = re.sub(r"^```[a-zA-Z]*\s*|\s*```$", "", code).strip()
+        return {"mermaid": code, "kind": kind}
     except Exception as e:
         return {"error": f"generation failed: {e}"}

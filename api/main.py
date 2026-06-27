@@ -27,10 +27,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
+import agenda
+import autopilot
+import automations
 import config
+import evolve
 import forge
 import income
+import keychain
+import notify
 import proactive
+import studio
+import tasks as tasks_module
 import tools
 import vault
 from memory_store import mem_add, mem_recall, mem_recent
@@ -90,6 +98,57 @@ class VisionRequest(BaseModel):
 class TTSRequest(BaseModel):
     text: str
     voice: Optional[str] = None  # 既定は config.DEFAULT_TTS_VOICE
+    rate: Optional[str] = None   # 話速 例 "+0%" / "-20%" / "+30%"。既定 config.DEFAULT_TTS_RATE
+
+
+class KeySetRequest(BaseModel):
+    name: str
+    value: str = ""
+
+
+class VaultGenerateRequest(BaseModel):
+    notebook_id: str
+    instruction: str = ""
+
+
+class VaultDiagramRequest(BaseModel):
+    notebook_id: str
+    kind: str = "tree"
+
+
+class MissionCreateRequest(BaseModel):
+    goal: str
+    notify: bool = True
+
+
+class NotifyRequest(BaseModel):
+    message: str
+
+
+class AutomationCreateRequest(BaseModel):
+    name: str
+    trigger: Optional[dict] = None
+    steps: list = []
+
+
+class AutomationRunRequest(BaseModel):
+    input: str = ""
+
+
+class EvolveRequest(BaseModel):
+    instruction: str
+
+
+class AgendaAddRequest(BaseModel):
+    title: str
+    date: str = ""
+    time: str = ""
+    note: str = ""
+
+
+class AgendaParseRequest(BaseModel):
+    text: str
+    today: str = ""
 
 
 class MemoryAddRequest(BaseModel):
@@ -134,6 +193,34 @@ class VaultAddRequest(BaseModel):
 class VaultQueryRequest(BaseModel):
     notebook_id: str
     question: str
+
+
+class TaskCreateRequest(BaseModel):
+    title: str
+    content: str = ""
+    status: str = "pending"
+
+
+class TaskUpdateRequest(BaseModel):
+    status: Optional[str] = None
+    response: Optional[str] = None
+    content: Optional[str] = None
+
+
+class AiCreateRequest(BaseModel):
+    name: str
+    persona: str = ""
+    model: str = "gemini-2.5-flash"
+    rules: str = ""
+
+
+class WorkflowCreateRequest(BaseModel):
+    name: str
+    steps: list = []
+
+
+class WorkflowRunRequest(BaseModel):
+    input: str = ""
 
 
 # =====================================================================
@@ -345,9 +432,10 @@ async def tts(req: TTSRequest, _auth: None = Depends(require_auth)):
     if not text:
         return {"audio_base64": "", "error": "text is empty"}
     voice = (req.voice or config.DEFAULT_TTS_VOICE).strip() or config.DEFAULT_TTS_VOICE
+    rate = (req.rate or config.DEFAULT_TTS_RATE).strip() or config.DEFAULT_TTS_RATE
 
     try:
-        audio_bytes = await _synthesize_tts(text, voice)
+        audio_bytes = await _synthesize_tts(text, voice, rate)
         if not audio_bytes:
             return {"audio_base64": "", "error": "tts produced no audio"}
         return {"audio_base64": base64.b64encode(audio_bytes).decode("ascii")}
@@ -356,10 +444,14 @@ async def tts(req: TTSRequest, _auth: None = Depends(require_auth)):
         return {"audio_base64": "", "error": f"tts failed: {e}"}
 
 
-async def _synthesize_tts(text: str, voice: str) -> bytes:
-    """edge-tts で MP3 バイト列を生成する（asyncで実行）。"""
+async def _synthesize_tts(text: str, voice: str, rate: str = "+0%") -> bytes:
+    """edge-tts で MP3 バイト列を生成する（asyncで実行）。rate は "+0%" 等の文字列。"""
     import edge_tts
-    communicate = edge_tts.Communicate(text, voice)
+    # rate が不正フォーマットなら edge-tts が例外を出すので軽くサニタイズ
+    r = (rate or "+0%").strip()
+    if not (r.endswith("%") and (r[0] in "+-")):
+        r = "+0%"
+    communicate = edge_tts.Communicate(text, voice, rate=r)
     buf = bytearray()
     async for chunk in communicate.stream():
         if chunk.get("type") == "audio" and chunk.get("data"):
@@ -476,6 +568,28 @@ async def vault_query(req: VaultQueryRequest, _auth: None = Depends(require_auth
     )
 
 
+@app.post("/vault/generate")
+async def vault_generate(req: VaultGenerateRequest, _auth: None = Depends(require_auth)):
+    """ノートブックの資料を根拠に文書(Markdown)を作成する。"""
+    result = await asyncio.get_event_loop().run_in_executor(
+        None, lambda: vault.generate_doc(req.notebook_id, req.instruction)
+    )
+    if isinstance(result, dict) and result.get("error"):
+        return JSONResponse(status_code=503, content=result)
+    return result
+
+
+@app.post("/vault/diagram")
+async def vault_diagram(req: VaultDiagramRequest, _auth: None = Depends(require_auth)):
+    """資料から Mermaid 図（ロジックツリー等）を生成する。"""
+    result = await asyncio.get_event_loop().run_in_executor(
+        None, lambda: vault.generate_diagram(req.notebook_id, req.kind)
+    )
+    if isinstance(result, dict) and result.get("error"):
+        return JSONResponse(status_code=503, content=result)
+    return result
+
+
 # ── プロアクティブ（今日のブリーフィング） ───────────────────────
 @app.get("/briefing")
 async def briefing(_auth: None = Depends(require_auth)):
@@ -544,6 +658,329 @@ def _load_renderer():
     except Exception:
         _renderer_module = None
         return None
+
+
+# ── Tasks（アクティブタスク管理） ─────────────────────────────────
+
+@app.get("/tasks")
+async def get_tasks(status: Optional[str] = None, limit: int = 100,
+                    _auth: None = Depends(require_auth)):
+    """タスク一覧を返す。status パラメータで絞り込み可。"""
+    loop = asyncio.get_event_loop()
+    items = await loop.run_in_executor(None, lambda: tasks_module.list_tasks(status, limit))
+    return {"items": items}
+
+
+@app.post("/tasks")
+async def create_task(req: TaskCreateRequest, _auth: None = Depends(require_auth)):
+    """新しいタスクを作成する。"""
+    loop = asyncio.get_event_loop()
+    task = await loop.run_in_executor(
+        None, lambda: tasks_module.create_task(req.title, req.content, req.status)
+    )
+    if isinstance(task, dict) and task.get("error"):
+        return JSONResponse(status_code=400, content=task)
+    return task
+
+
+@app.patch("/tasks/{task_id}")
+async def update_task(task_id: str, req: TaskUpdateRequest,
+                      _auth: None = Depends(require_auth)):
+    """タスクのステータス・返答・内容を更新する。"""
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(
+        None, lambda: tasks_module.update_task(task_id, req.status, req.response, req.content)
+    )
+    if isinstance(result, dict) and result.get("error"):
+        return JSONResponse(status_code=404, content=result)
+    return result
+
+
+@app.delete("/tasks/{task_id}")
+async def delete_task(task_id: str, _auth: None = Depends(require_auth)):
+    """タスクを削除する。"""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, lambda: tasks_module.delete_task(task_id))
+
+
+# ── AI Studio（カスタムAI・ワークフロー） ──────────────────────────
+
+@app.get("/studio/ais")
+async def studio_list_ais(_auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    return {"items": await loop.run_in_executor(None, studio.list_ais)}
+
+
+@app.post("/studio/ais")
+async def studio_create_ai(req: AiCreateRequest, _auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    ai = await loop.run_in_executor(
+        None, lambda: studio.create_ai(req.name, req.persona, req.model, req.rules)
+    )
+    if isinstance(ai, dict) and ai.get("error"):
+        return JSONResponse(status_code=400, content=ai)
+    return ai
+
+
+@app.delete("/studio/ais/{ai_id}")
+async def studio_delete_ai(ai_id: str, _auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, lambda: studio.delete_ai(ai_id))
+
+
+@app.get("/studio/workflows")
+async def studio_list_workflows(_auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    return {"items": await loop.run_in_executor(None, studio.list_workflows)}
+
+
+@app.post("/studio/workflows")
+async def studio_create_workflow(req: WorkflowCreateRequest, _auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    wf = await loop.run_in_executor(
+        None, lambda: studio.create_workflow(req.name, req.steps)
+    )
+    if isinstance(wf, dict) and wf.get("error"):
+        return JSONResponse(status_code=400, content=wf)
+    return wf
+
+
+@app.delete("/studio/workflows/{wf_id}")
+async def studio_delete_workflow(wf_id: str, _auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, lambda: studio.delete_workflow(wf_id))
+
+
+@app.post("/studio/workflows/{wf_id}/run")
+async def studio_run_workflow(wf_id: str, req: WorkflowRunRequest,
+                              _auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(
+        None, lambda: studio.run_workflow(wf_id, req.input)
+    )
+    if isinstance(result, dict) and result.get("error"):
+        return JSONResponse(status_code=503, content=result)
+    return result
+
+
+# ── Autopilot（ゴール自動実行） ───────────────────────────────────
+
+@app.get("/autopilot/missions")
+async def autopilot_list(_auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    return {"items": await loop.run_in_executor(None, autopilot.list_missions)}
+
+
+@app.post("/autopilot/missions")
+async def autopilot_create(req: MissionCreateRequest, _auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    m = await loop.run_in_executor(None, lambda: autopilot.create_mission(req.goal, req.notify))
+    if isinstance(m, dict) and m.get("error"):
+        return JSONResponse(status_code=400, content=m)
+    return m
+
+
+@app.post("/autopilot/missions/{mission_id}/step")
+async def autopilot_step(mission_id: str, _auth: None = Depends(require_auth)):
+    """次の未完了ステップを1つ実行する（フロント or cron が繰り返し呼ぶ）。"""
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(None, lambda: autopilot.run_step(mission_id))
+    if isinstance(result, dict) and result.get("error") and not result.get("mission"):
+        return JSONResponse(status_code=404, content=result)
+    return result
+
+
+@app.delete("/autopilot/missions/{mission_id}")
+async def autopilot_delete(mission_id: str, _auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, lambda: autopilot.delete_mission(mission_id))
+
+
+@app.post("/notify")
+async def notify_send(req: NotifyRequest, _auth: None = Depends(require_auth)):
+    """設定済みチャンネル（LINE/Discord/Slack）へ通知を送る。未設定なら skipped。"""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, lambda: notify.notify_all(req.message))
+
+
+# ── Automations（ノーコード自動化 / Zapier風） ────────────────────
+
+@app.get("/automations")
+async def automations_list(_auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    return {"items": await loop.run_in_executor(None, automations.list_flows)}
+
+
+@app.post("/automations")
+async def automations_create(req: AutomationCreateRequest, _auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    f = await loop.run_in_executor(
+        None, lambda: automations.create_flow(req.name, req.trigger, req.steps)
+    )
+    if isinstance(f, dict) and f.get("error"):
+        return JSONResponse(status_code=400, content=f)
+    return f
+
+
+@app.delete("/automations/{flow_id}")
+async def automations_delete(flow_id: str, _auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, lambda: automations.delete_flow(flow_id))
+
+
+@app.post("/automations/{flow_id}/run")
+async def automations_run(flow_id: str, req: AutomationRunRequest,
+                          _auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(None, lambda: automations.run_flow(flow_id, req.input))
+    if isinstance(result, dict) and result.get("error"):
+        return JSONResponse(status_code=404, content=result)
+    return result
+
+
+# ── Agenda（組み込みカレンダー / 予定） ───────────────────────────
+
+@app.get("/agenda")
+async def agenda_list(_auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    return {"items": await loop.run_in_executor(None, agenda.list_events)}
+
+
+@app.post("/agenda")
+async def agenda_add(req: AgendaAddRequest, _auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    ev = await loop.run_in_executor(
+        None, lambda: agenda.add_event(req.title, req.date, req.time, req.note)
+    )
+    if isinstance(ev, dict) and ev.get("error"):
+        return JSONResponse(status_code=400, content=ev)
+    return ev
+
+
+@app.post("/agenda/parse")
+async def agenda_parse(req: AgendaParseRequest, _auth: None = Depends(require_auth)):
+    """自然言語の予定文を解釈して登録する。"""
+    loop = asyncio.get_event_loop()
+    ev = await loop.run_in_executor(None, lambda: agenda.parse_and_add(req.text, req.today))
+    if isinstance(ev, dict) and ev.get("error"):
+        return JSONResponse(status_code=400, content=ev)
+    return ev
+
+
+@app.delete("/agenda/{event_id}")
+async def agenda_delete(event_id: str, _auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, lambda: agenda.delete_event(event_id))
+
+
+# ── Notifications（アプリ内通知） ─────────────────────────────────
+
+@app.get("/notifications")
+async def notifications_list(_auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    items = await loop.run_in_executor(None, notify.list_internal)
+    unread = sum(1 for n in items if not n.get("read"))
+    return {"items": items, "unread": unread}
+
+
+@app.post("/notifications/read")
+async def notifications_read(_auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, notify.mark_all_read)
+
+
+# ── Home（コックピット集約サマリー） ──────────────────────────────
+
+@app.get("/home/summary")
+async def home_summary(_auth: None = Depends(require_auth)):
+    """ホーム画面のKPIを1回で集約して返す（各機能の進捗）。"""
+    loop = asyncio.get_event_loop()
+
+    def _gather():
+        # タスク
+        try:
+            all_tasks = tasks_module.list_tasks(None, 1000)
+        except Exception:
+            all_tasks = []
+        task_counts = {}
+        for t in all_tasks:
+            s = t.get("status") or "pending"
+            task_counts[s] = task_counts.get(s, 0) + 1
+        # ミッション
+        try:
+            missions = autopilot.list_missions(1000)
+        except Exception:
+            missions = []
+        active_missions = sum(1 for m in missions if m.get("status") == "active")
+        # 自動化
+        try:
+            flows = automations.list_flows(1000)
+        except Exception:
+            flows = []
+        # 副業
+        try:
+            pending_income = len(income.list_jobs("pending", 1000))
+        except Exception:
+            pending_income = 0
+        # 予定
+        try:
+            events = agenda.list_events(1000)
+        except Exception:
+            events = []
+        # 通知
+        try:
+            unread = notify.unread_count()
+        except Exception:
+            unread = 0
+        return {
+            "tasks": {"total": len(all_tasks), "by_status": task_counts,
+                      "open": task_counts.get("pending", 0) + task_counts.get("in_progress", 0)},
+            "missions": {"total": len(missions), "active": active_missions},
+            "automations": {"total": len(flows)},
+            "income": {"pending": pending_income},
+            "events": {"total": len(events), "upcoming": events[:5]},
+            "notifications": {"unread": unread},
+        }
+
+    return await loop.run_in_executor(None, _gather)
+
+
+# ── Evolve（セルフ進化：指示→提案） ──────────────────────────────
+
+@app.post("/evolve/propose")
+async def evolve_propose(req: EvolveRequest, _auth: None = Depends(require_auth)):
+    """自然言語の指示から、app/custom_ai/automation/answer の提案を返す。"""
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(None, lambda: evolve.propose(req.instruction))
+    if isinstance(result, dict) and result.get("error"):
+        return JSONResponse(status_code=503, content=result)
+    return result
+
+
+# ── Keychain（APIキー保管庫） ────────────────────────────────────
+
+@app.get("/keys")
+async def list_keys(_auth: None = Depends(require_auth)):
+    """保存済みキーを「マスク値 + 設定有無」で返す（フル値は決して返さない）。"""
+    loop = asyncio.get_event_loop()
+    return {"items": await loop.run_in_executor(None, keychain.list_keys)}
+
+
+@app.post("/keys")
+async def set_key(req: KeySetRequest, _auth: None = Depends(require_auth)):
+    """キーを保存/更新する。"""
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(None, lambda: keychain.set_key(req.name, req.value))
+    if isinstance(result, dict) and result.get("error"):
+        return JSONResponse(status_code=400, content=result)
+    return result
+
+
+@app.delete("/keys/{name}")
+async def delete_key(name: str, _auth: None = Depends(require_auth)):
+    """キーを削除する。"""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, lambda: keychain.delete_key(name))
 
 
 # ローカル実行用エントリ（uvicorn main:app --reload と同等）

@@ -33,6 +33,11 @@ import {
 export interface ChatSettings {
   name: string;
   persona: string;
+  /** edge-tts voice name for the API fallback (e.g. "ja-JP-NanamiNeural"). */
+  voice?: string;
+  /** Speech rate multiplier (1.0 = normal). Browser TTS uses it directly;
+      the API fallback converts it to a "+NN%" rate string. */
+  rate?: number;
 }
 
 interface Message {
@@ -54,9 +59,35 @@ export interface ChatProps {
 }
 
 const HISTORY_LIMIT = 12;
+const LS_CONVOS = "forge_chat_convos";
+const CONVO_LIMIT = 40;
+
+interface Convo {
+  id: string;
+  title: string;
+  messages: Message[];
+  updatedAt: number;
+}
 
 function uid(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function loadConvos(): Convo[] {
+  try {
+    const raw = localStorage.getItem(LS_CONVOS);
+    return raw ? (JSON.parse(raw) as Convo[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveConvos(convos: Convo[]): void {
+  try {
+    localStorage.setItem(LS_CONVOS, JSON.stringify(convos.slice(0, CONVO_LIMIT)));
+  } catch {
+    /* ignore quota */
+  }
 }
 
 export default function Chat({ settings, onStateChange, voiceReplies = true }: ChatProps) {
@@ -65,6 +96,62 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
   const [streaming, setStreaming] = useState(false);
   const [pendingImage, setPendingImage] = useState<{ dataUrl: string; base64: string; mime: string } | null>(null);
   const [speaking, setSpeaking] = useState(false);
+
+  // Conversation history (Gemini-style left sidebar).
+  const [convos, setConvos] = useState<Convo[]>([]);
+  const [currentId, setCurrentId] = useState<string>(() => uid());
+  const [historyOpen, setHistoryOpen] = useState(false);
+
+  useEffect(() => { setConvos(loadConvos()); }, []);
+
+  // Persist the current conversation once it has settled (not mid-stream).
+  useEffect(() => {
+    if (streaming) return;
+    const meaningful = messages.filter((m) => !m.pending && m.content.trim());
+    if (meaningful.length === 0) return;
+    setConvos((prev) => {
+      const title = (meaningful.find((m) => m.role === "user")?.content || "新しいチャット").slice(0, 30);
+      const entry: Convo = { id: currentId, title, messages, updatedAt: Date.now() };
+      const next = prev.some((c) => c.id === currentId)
+        ? prev.map((c) => (c.id === currentId ? entry : c))
+        : [entry, ...prev];
+      next.sort((a, b) => b.updatedAt - a.updatedAt);
+      saveConvos(next);
+      return next;
+    });
+  }, [messages, streaming, currentId]);
+
+  const newChat = useCallback(() => {
+    cancelRef.current?.();
+    stopSpeaking();
+    setMessages([]);
+    setInput("");
+    setPendingImage(null);
+    setCurrentId(uid());
+    setHistoryOpen(false);
+  }, []);
+
+  const loadConvo = useCallback((id: string) => {
+    const c = loadConvos().find((x) => x.id === id);
+    if (!c) return;
+    cancelRef.current?.();
+    stopSpeaking();
+    setMessages(c.messages.map((m) => ({ ...m, pending: false })));
+    setCurrentId(c.id);
+    setHistoryOpen(false);
+  }, []);
+
+  const deleteConvo = useCallback((id: string) => {
+    setConvos((prev) => {
+      const next = prev.filter((c) => c.id !== id);
+      saveConvos(next);
+      return next;
+    });
+    if (id === currentId) {
+      setMessages([]);
+      setCurrentId(uid());
+    }
+  }, [currentId]);
 
   const cancelRef = useRef<(() => void) | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -118,13 +205,16 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
     async (text: string) => {
       if (!voiceReplies || !text.trim()) return;
       setSpeaking(true);
+      const rate = settings.rate ?? 1.0;
       if (ttsSupported) {
-        speak(text, { lang: "ja-JP", onEnd: () => setSpeaking(false) });
+        speak(text, { lang: "ja-JP", rate, onEnd: () => setSpeaking(false) });
         return;
       }
-      // Fallback: ask the backend to synthesize, then play the mp3.
+      // Fallback: ask the backend to synthesize (with chosen voice + rate).
       try {
-        const audio = await tts({ text });
+        const pct = Math.round((rate - 1) * 100);
+        const rateStr = `${pct >= 0 ? "+" : ""}${pct}%`;
+        const audio = await tts({ text, voice: settings.voice, rate: rateStr });
         await playBase64Audio(audio);
       } catch {
         /* silent fallback */
@@ -132,7 +222,7 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
         setSpeaking(false);
       }
     },
-    [voiceReplies, ttsSupported],
+    [voiceReplies, ttsSupported, settings.voice, settings.rate],
   );
 
   /** Send a text turn (optionally with an attached image → /vision). */
@@ -257,7 +347,40 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
   const canSend = (input.trim().length > 0 || !!pendingImage) && !streaming;
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="grid h-full min-h-0 w-full grid-cols-1 gap-4 lg:grid-cols-[1fr_minmax(0,42rem)_1fr]">
+      {/* History rail (Gemini-style) — far-left margin on lg, drawer on mobile.
+          Lives in the left 1fr column so the conversation stays screen-centred. */}
+      <ChatHistory
+        convos={convos}
+        currentId={currentId}
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        onNew={newChat}
+        onPick={loadConvo}
+        onDelete={deleteConvo}
+      />
+
+      {/* Conversation column — centre cell (screen-centred) */}
+      <div className="flex h-full min-h-0 w-full flex-col">
+        {/* Mobile history toggle */}
+        <div className="mb-1 flex items-center gap-2 lg:hidden">
+          <button
+            type="button"
+            onClick={() => setHistoryOpen(true)}
+            className="flex items-center gap-1.5 rounded-forge border border-panel px-2.5 py-1 text-[10px] tracking-[0.14em] text-muted transition hover:text-fg-strong label-mono"
+            aria-label="Chat history"
+          >
+            ☰ 履歴
+          </button>
+          <button
+            type="button"
+            onClick={newChat}
+            className="rounded-forge border border-panel px-2.5 py-1 text-[10px] tracking-[0.14em] text-muted transition hover:text-fg-strong label-mono"
+          >
+            ＋ 新規
+          </button>
+        </div>
+
       {/* Message list */}
       <div
         ref={scrollRef}
@@ -304,7 +427,10 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
             aria-label="Attach image"
             title="Attach image"
           >
-            📷
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 8.5A2.5 2.5 0 0 1 5.5 6h1.2l1-1.6A1.5 1.5 0 0 1 9 3.7h6a1.5 1.5 0 0 1 1.3.7l1 1.6h1.2A2.5 2.5 0 0 1 21 8.5v8A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z" />
+              <circle cx="12" cy="12" r="3.2" />
+            </svg>
           </button>
           <input
             ref={fileInputRef}
@@ -320,7 +446,7 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={onKeyDown}
             rows={1}
-            placeholder={listening ? "Listening…" : "Message THE FORGE OS…"}
+            placeholder={listening ? "聞き取り中…" : "THE FORGE OS にメッセージ…"}
             className="max-h-32 min-h-[40px] flex-1 resize-none bg-transparent px-2 py-2 text-sm text-fg-strong placeholder:text-muted focus:outline-none"
             style={{ scrollbarWidth: "none" }}
           />
@@ -343,10 +469,10 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
                   animate={{ scale: [1, 1.18, 1] }}
                   transition={{ duration: 1, repeat: Infinity, ease: "easeInOut" }}
                 >
-                  🎤
+                  <MicIcon />
                 </motion.span>
               ) : (
-                "🎤"
+                <MicIcon />
               )}
             </button>
           )}
@@ -388,16 +514,126 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
             <span className="text-[10px] tracking-[0.2em] text-[var(--accent)] label-mono">LISTENING…</span>
           ) : (
             <span className="text-[10px] tracking-[0.18em] text-muted/50 label-mono">
-              {micSupported ? "ENTER TO SEND · 🎤 HANDS-FREE" : "ENTER TO SEND"}
+              {micSupported ? "ENTERで送信 · ハンズフリー対応" : "ENTERで送信"}
             </span>
           )}
         </div>
       </div>
+      </div>
+
+      {/* Right spacer cell (keeps the conversation screen-centred on lg) */}
+      <div aria-hidden className="hidden lg:block" />
     </div>
   );
 }
 
+/* ── Chat history sidebar (Gemini-style) ─────────────────────────── */
+function ChatHistory({
+  convos, currentId, open, onClose, onNew, onPick, onDelete,
+}: {
+  convos: Convo[];
+  currentId: string;
+  open: boolean;
+  onClose: () => void;
+  onNew: () => void;
+  onPick: (id: string) => void;
+  onDelete: (id: string) => void;
+}) {
+  const list = (
+    <div className="flex h-full flex-col gap-2">
+      <button
+        type="button"
+        onClick={onNew}
+        className="shrink-0 rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] py-2 text-[10px] tracking-[0.16em] text-fg-strong shadow-glow transition hover:shadow-glow-strong label-mono"
+      >
+        ＋ 新しいチャット
+      </button>
+      <div className="min-h-0 flex-1 space-y-1 overflow-y-auto pr-0.5">
+        {convos.length === 0 ? (
+          <p className="px-1 py-2 text-[10px] leading-relaxed text-muted/70">履歴はまだありません。</p>
+        ) : (
+          convos.map((c) => {
+            const active = c.id === currentId;
+            return (
+              <div
+                key={c.id}
+                className="group flex items-center gap-1 rounded-forge border px-2 py-1.5 transition"
+                style={{
+                  borderColor: active ? "var(--accent)" : "transparent",
+                  background: active ? "var(--btn-bg)" : "transparent",
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => onPick(c.id)}
+                  className="min-w-0 flex-1 truncate text-left text-[11px] text-fg"
+                  title={c.title}
+                >
+                  {c.title || "（無題）"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onDelete(c.id)}
+                  className="shrink-0 text-[10px] text-muted opacity-0 transition group-hover:opacity-100 hover:text-[#ff8888]"
+                  aria-label="Delete conversation"
+                >
+                  ✕
+                </button>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+      {/* Desktop: persistent sidebar in the far-left margin */}
+      <aside className="hidden w-56 lg:block lg:justify-self-start">
+        <div className="glass-silver h-full p-2">{list}</div>
+      </aside>
+
+      {/* Mobile: slide-in drawer */}
+      <AnimatePresence>
+        {open && (
+          <>
+            <motion.button
+              type="button"
+              aria-hidden
+              tabIndex={-1}
+              onClick={onClose}
+              className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            />
+            <motion.aside
+              className="fixed left-0 top-0 z-50 h-full w-64 p-2 lg:hidden"
+              initial={{ x: "-100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "-100%" }}
+              transition={{ type: "spring", stiffness: 320, damping: 32 }}
+            >
+              <div className="glass-silver h-full p-2">{list}</div>
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
+    </>
+  );
+}
+
 /* ------------------------------------------------------------------ */
+
+function MicIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="9" y="3" width="6" height="11" rx="3" />
+      <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+    </svg>
+  );
+}
 
 function MessageBubble({ message }: { message: Message }) {
   const isUser = message.role === "user";
@@ -463,8 +699,7 @@ function EmptyState({ name }: { name: string }) {
     >
       <p className="label-mono text-glow text-sm text-fg-strong">{`${name} ONLINE`}</p>
       <p className="mt-2 max-w-xs text-xs leading-relaxed text-muted">
-        Speak or type to begin. Attach an image to have the core analyze it, or hold a
-        hands-free conversation with the mic.
+        話しかけるか入力して始めてください。画像を添付すればコアが解析します。マイクでハンズフリー会話もできます。
       </p>
     </motion.div>
   );
