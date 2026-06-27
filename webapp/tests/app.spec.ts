@@ -100,14 +100,12 @@ test("CoreOrb is visible", async ({ page }) => {
   await expect(orb).toBeVisible();
 });
 
-test("Chat: history controls are available", async ({ page }) => {
+test("Chat: history toggle opens the panel", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
-  // Mobile viewport → history toggle is shown; open the drawer.
-  // (The desktop sidebar is also in the DOM but hidden via CSS, so target the
-  //  drawer instance with .last().)
+  // Bottom-left toggle opens the full-height history panel.
   await page.getByLabel("Chat history").click();
-  await expect(page.getByText("＋ 新しいチャット").last()).toBeVisible({ timeout: 5_000 });
+  await expect(page.getByText("＋ 新しいチャット")).toBeVisible({ timeout: 5_000 });
 });
 
 /* ── Settings ───────────────────────────────────────────────────── */
@@ -228,13 +226,16 @@ test("AUTO renders autopilot UI", async ({ page }) => {
   await expect(page.getByText("SET GOAL & DECOMPOSE")).toBeVisible();
 });
 
-test("BOARD renders automation dashboard", async ({ page }) => {
+test("BOARD renders Miro/Zapier-style automation canvas", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
   await goMode(page, "BOARD");
-  await expect(page.getByText("+ NEW AUTOMATION")).toBeVisible({ timeout: 5_000 });
-  await page.getByText("+ NEW AUTOMATION").click();
-  await expect(page.getByText("AUTOMATION NAME")).toBeVisible();
+  // Zapier-copilot hero + template chips
+  await expect(page.getByText("AUTOMATION COPILOT")).toBeVisible({ timeout: 5_000 });
+  await expect(page.getByText("何を自動化しますか？")).toBeVisible();
+  // Manual builder still reachable
+  await page.getByText(/手動ビルダー/).click();
+  await expect(page.getByText("AUTOMATION NAME")).toBeVisible({ timeout: 3_000 });
   await expect(page.getByText("+ ADD STEP")).toBeVisible();
 });
 
@@ -333,16 +334,17 @@ test("Briefing button is visible in top bar", async ({ page }) => {
 test.describe("desktop layout", () => {
   test.use({ viewport: { width: 1280, height: 800 } });
 
-  test("Chat history rail sits to the left of the conversation", async ({ page }) => {
+  test("Chat history opens as a full-height left panel", async ({ page }) => {
     await page.goto("/");
     await enterApp(page);
-    // Persistent sidebar is visible on desktop
-    const newChat = page.getByText("＋ 新しいチャット").first();
+    await page.getByLabel("Chat history").click();
+    const newChat = page.getByText("＋ 新しいチャット");
     await expect(newChat).toBeVisible({ timeout: 5_000 });
-    const railBox = await newChat.boundingBox();
+    const panelBox = await newChat.boundingBox();
     const inputBox = await page.getByPlaceholder("THE FORGE OS にメッセージ…").boundingBox();
-    // History rail is left of the conversation composer
-    expect(railBox!.x).toBeLessThan(inputBox!.x);
+    // Panel hugs the left edge (well left of the centred conversation) and is tall
+    expect(panelBox!.x).toBeLessThan(inputBox!.x);
+    expect(panelBox!.x).toBeLessThan(120);
   });
 
   test("Tasks uses a two-column layout on desktop", async ({ page }) => {

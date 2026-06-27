@@ -14,6 +14,7 @@ import {
   automationsCreate,
   automationsDelete,
   automationsRun,
+  evolvePropose,
   type Automation,
   type AutomationStep,
   type StepType,
@@ -26,11 +27,25 @@ const STEP_META: Record<StepType, { label: string; color: string; field: string;
   create_task: { label: "タスク作成", color: "#ffd060", field: "title", placeholder: "タスク名…" },
 };
 
+// Miro/Zapier-style template chips — quick-start automations.
+const TEMPLATES = [
+  "毎朝トレンドを要約してLINEに通知する",
+  "問い合わせ内容を整理してタスク化する",
+  "週次レポートを自動生成する",
+  "テーマからSNS投稿案を作る",
+  "アイデアを出して箇条書きに整理する",
+];
+
 export default function Dashboard() {
   const [flows, setFlows] = useState<Automation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+
+  // Zapier-copilot style natural-language creation
+  const [nl, setNl] = useState("");
+  const [nlBusy, setNlBusy] = useState(false);
+  const [nlNote, setNlNote] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -45,21 +60,107 @@ export default function Dashboard() {
 
   useEffect(() => { void load(); }, [load]);
 
-  return (
-    <div className="grid h-full min-h-0 gap-3 overflow-y-auto pb-2 lg:grid-cols-[26rem_1fr] lg:content-start">
-      {/* ── Left: builder ── */}
-      <div className="flex flex-col gap-3">
-        <button
-          type="button"
-          onClick={() => setShowForm((s) => !s)}
-          className="rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] py-2.5 text-[11px] tracking-[0.2em] text-fg-strong shadow-glow transition hover:shadow-glow-strong label-mono"
-        >
-          {showForm ? "▲ CLOSE BUILDER" : "+ NEW AUTOMATION"}
-        </button>
+  // Natural language → automation (via the evolve engine, with a safe fallback).
+  const createFromNL = async (text: string) => {
+    const wish = text.trim();
+    if (!wish || nlBusy) return;
+    setNlBusy(true);
+    setNlNote(null);
+    setError(null);
+    try {
+      let name = wish.slice(0, 32);
+      let steps: AutomationStep[] = [{ type: "ai_generate", name: "AI生成", params: { prompt: wish + "\n\n対象: {input}" } }];
+      try {
+        const p = await evolvePropose(wish);
+        if (p.type === "automation" && Array.isArray((p.params as { steps?: unknown }).steps)) {
+          steps = (p.params as { steps: AutomationStep[] }).steps;
+          name = String((p.params as { name?: string }).name || name);
+        }
+      } catch {
+        /* evolve unavailable → keep the single-step fallback */
+      }
+      const f = await automationsCreate(name, steps);
+      setFlows((prev) => [f, ...prev]);
+      setNl("");
+      setNlNote(`「${f.name}」を作成しました（${f.steps.length} ステップ）。`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "自動化の作成に失敗しました（バックエンド未接続の可能性）");
+    } finally {
+      setNlBusy(false);
+    }
+  };
 
+  return (
+    <div className="relative h-full min-h-0 overflow-y-auto pb-4">
+      {/* Miro-style canvas backdrop */}
+      <div aria-hidden className="forge-grid pointer-events-none absolute inset-0 opacity-50" />
+
+      <div className="relative z-10 mx-auto flex w-full max-w-5xl flex-col gap-4 pt-1">
+        {/* Zapier-copilot style creation hero */}
+        <div className="glass-silver mx-auto w-full max-w-3xl p-5 text-center">
+          <div className="mb-1 flex items-center justify-center gap-2">
+            <span className="grid h-7 w-7 place-items-center rounded-full border border-[var(--line)] text-[var(--accent)]"><SparkIcon /></span>
+            <span className="text-[10px] tracking-[0.24em] text-muted label-mono">AUTOMATION COPILOT</span>
+          </div>
+          <h2 className="label-mono text-glow text-sm text-fg-strong">何を自動化しますか？</h2>
+
+          <div className="mt-3 flex items-end gap-2 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] p-2 text-left focus-within:border-[var(--line)]">
+            <textarea
+              value={nl}
+              onChange={(e) => setNl(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void createFromNL(nl); } }}
+              rows={2}
+              placeholder="やりたいことを自然言語で…（例：毎朝ニュースを要約してLINEに送る）"
+              className="min-h-[2.5rem] flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-fg-strong placeholder:text-muted focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={() => void createFromNL(nl)}
+              disabled={nlBusy || !nl.trim()}
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-[var(--line)] bg-[var(--btn-bg)] text-fg-strong shadow-glow transition hover:shadow-glow-strong disabled:opacity-40"
+              aria-label="Create automation"
+            >
+              {nlBusy ? "…" : "↑"}
+            </button>
+          </div>
+
+          {/* Template chips (Miro-style quick starts) */}
+          <div className="mt-3 flex flex-wrap justify-center gap-1.5">
+            {TEMPLATES.map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setNl(t)}
+                className="rounded-full border border-panel px-3 py-1.5 text-[11px] text-muted transition hover:border-[var(--line)] hover:text-fg-strong"
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-3 flex items-center justify-center gap-4">
+            <button
+              type="button"
+              onClick={() => setShowForm((s) => !s)}
+              className="text-[10px] tracking-[0.16em] text-[var(--accent)] hover:underline label-mono"
+            >
+              {showForm ? "▲ ビルダーを閉じる" : "⊞ 手動ビルダーで細かく作る"}
+            </button>
+          </div>
+
+          {nlNote && <p className="mt-2 text-[11px] text-[var(--accent)] label-mono">◈ {nlNote}</p>}
+          {error && <p className="mt-2 text-[11px] text-[#ff9b9b]">⚠️ {error}</p>}
+        </div>
+
+        {/* Manual builder (Zapier step editor) */}
         <AnimatePresence>
           {showForm && (
-            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}>
+            <motion.div
+              className="mx-auto w-full max-w-3xl"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+            >
               <FlowBuilder
                 onCreated={(f) => { setFlows((p) => [f, ...p]); setShowForm(false); }}
                 onError={setError}
@@ -68,19 +169,17 @@ export default function Dashboard() {
           )}
         </AnimatePresence>
 
-        {error && <div className="panel p-3 text-xs text-[#ff9b9b]">⚠️ {error}</div>}
-      </div>
-
-      {/* ── Right: automations ── */}
-      <div className="flex min-h-0 flex-col gap-3">
+        {/* Created automations — cards on the canvas */}
         {loading ? (
-          <motion.div className="panel p-4 text-center text-[11px] tracking-[0.2em] text-muted label-mono" animate={{ opacity: [0.4, 1, 0.4] }} transition={{ duration: 1.4, repeat: Infinity }}>
+          <motion.div className="mx-auto max-w-3xl panel p-4 text-center text-[11px] tracking-[0.2em] text-muted label-mono" animate={{ opacity: [0.4, 1, 0.4] }} transition={{ duration: 1.4, repeat: Infinity }}>
             ◈ LOADING BOARD…
           </motion.div>
         ) : flows.length === 0 ? (
-          <div className="panel p-6 text-center text-[11px] tracking-[0.18em] text-muted label-mono">NO AUTOMATIONS YET</div>
+          <div className="mx-auto max-w-3xl rounded-forge border border-dashed border-panel p-6 text-center text-[11px] tracking-[0.18em] text-muted/70 label-mono">
+            まだ自動化はありません。上で作成すると、ここにカードで並びます。
+          </div>
         ) : (
-          <div className="flex flex-col gap-3">
+          <div className="grid gap-3 md:grid-cols-2">
             {flows.map((f) => (
               <FlowCard key={f.id} flow={f} onDelete={async () => { await automationsDelete(f.id); setFlows((p) => p.filter((x) => x.id !== f.id)); }} />
             ))}
@@ -88,6 +187,14 @@ export default function Dashboard() {
         )}
       </div>
     </div>
+  );
+}
+
+function SparkIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z" />
+    </svg>
   );
 }
 
