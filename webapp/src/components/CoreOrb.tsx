@@ -43,12 +43,12 @@ const STATE_STYLES: Record<CoreState, StateStyle> = {
 
 // Base spin (seconds) for each tilted ring; scaled by state.orbit.
 const ORBIT_BASE = [7, 12, 17] as const;
-// Ring diameter as a fraction of the container, with rim colour.
-// Rings extend BEYOND the core (scale > core's 0.66) for the wide-orbit look.
+// Ring diameter as a fraction of the container. The three rings sit just
+// outside the core (0.66) and are kept close in size for a balanced atom.
 const ORBIT_RINGS = [
-  { scale: 1.22, color: "rgba(205,226,255,0.6)" },
-  { scale: 1.06, color: "rgba(196,219,255,0.4)" },
-  { scale: 1.06, color: "rgba(188,212,255,0.26)" },
+  { scale: 1.04, color: "rgba(205,226,255,0.55)" },
+  { scale: 1.0, color: "rgba(196,219,255,0.4)" },
+  { scale: 1.0, color: "rgba(188,212,255,0.28)" },
 ] as const;
 
 export default function CoreOrb({ size = 140, state = "idle", className = "" }: CoreOrbProps) {

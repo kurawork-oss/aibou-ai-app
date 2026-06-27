@@ -595,3 +595,68 @@ def test_evolve_empty_instruction():
     assert r.status_code in (400, 422, 503)
     data = r.json()
     assert "error" in data or "detail" in data
+
+
+# ── /agenda（組み込みカレンダー） ──────────────────────────────────
+def test_agenda_list():
+    r = client.get("/agenda")
+    assert r.status_code == 200
+    assert "items" in r.json()
+
+
+def test_agenda_add_and_list():
+    r = client.post("/agenda", json={"title": "歯医者", "date": "2026-07-01", "time": "15:00"})
+    assert r.status_code == 200
+    ev = r.json()
+    assert "id" in ev and ev["title"] == "歯医者"
+
+    r2 = client.get("/agenda")
+    ids = [e["id"] for e in r2.json()["items"]]
+    assert ev["id"] in ids
+
+
+def test_agenda_add_empty_title():
+    r = client.post("/agenda", json={"title": ""})
+    assert r.status_code in (400, 422)
+
+
+def test_agenda_parse_without_gemini_falls_back():
+    # Gemini 無しでも、文面をタイトルとして登録できる（crashしない）
+    r = client.post("/agenda/parse", json={"text": "金曜10時 定例MTG", "today": "2026-06-27"})
+    assert r.status_code == 200
+    assert "id" in r.json()
+
+
+def test_agenda_delete():
+    r = client.post("/agenda", json={"title": "削除予定"})
+    eid = r.json()["id"]
+    r2 = client.delete(f"/agenda/{eid}")
+    assert r2.status_code == 200
+    assert r2.json()["ok"] is True
+
+
+# ── /notifications（アプリ内通知） ─────────────────────────────────
+def test_notifications_list_and_read():
+    # notify を1回呼ぶと内部ログに残る
+    client.post("/notify", json={"message": "テスト通知ログ"})
+    r = client.get("/notifications")
+    assert r.status_code == 200
+    data = r.json()
+    assert "items" in data and "unread" in data
+    assert any("テスト通知ログ" in (n.get("message") or "") for n in data["items"])
+
+    r2 = client.post("/notifications/read")
+    assert r2.status_code == 200
+    assert r2.json()["ok"] is True
+
+
+# ── /home/summary（コックピット集約） ──────────────────────────────
+def test_home_summary_aggregates():
+    r = client.get("/home/summary")
+    assert r.status_code == 200
+    data = r.json()
+    for key in ("tasks", "missions", "automations", "income", "events", "notifications"):
+        assert key in data
+    assert "open" in data["tasks"]
+    assert "active" in data["missions"]
+    assert "unread" in data["notifications"]

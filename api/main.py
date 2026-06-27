@@ -27,6 +27,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
+import agenda
 import autopilot
 import automations
 import config
@@ -136,6 +137,18 @@ class AutomationRunRequest(BaseModel):
 
 class EvolveRequest(BaseModel):
     instruction: str
+
+
+class AgendaAddRequest(BaseModel):
+    title: str
+    date: str = ""
+    time: str = ""
+    note: str = ""
+
+
+class AgendaParseRequest(BaseModel):
+    text: str
+    today: str = ""
 
 
 class MemoryAddRequest(BaseModel):
@@ -823,6 +836,113 @@ async def automations_run(flow_id: str, req: AutomationRunRequest,
     if isinstance(result, dict) and result.get("error"):
         return JSONResponse(status_code=404, content=result)
     return result
+
+
+# ── Agenda（組み込みカレンダー / 予定） ───────────────────────────
+
+@app.get("/agenda")
+async def agenda_list(_auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    return {"items": await loop.run_in_executor(None, agenda.list_events)}
+
+
+@app.post("/agenda")
+async def agenda_add(req: AgendaAddRequest, _auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    ev = await loop.run_in_executor(
+        None, lambda: agenda.add_event(req.title, req.date, req.time, req.note)
+    )
+    if isinstance(ev, dict) and ev.get("error"):
+        return JSONResponse(status_code=400, content=ev)
+    return ev
+
+
+@app.post("/agenda/parse")
+async def agenda_parse(req: AgendaParseRequest, _auth: None = Depends(require_auth)):
+    """自然言語の予定文を解釈して登録する。"""
+    loop = asyncio.get_event_loop()
+    ev = await loop.run_in_executor(None, lambda: agenda.parse_and_add(req.text, req.today))
+    if isinstance(ev, dict) and ev.get("error"):
+        return JSONResponse(status_code=400, content=ev)
+    return ev
+
+
+@app.delete("/agenda/{event_id}")
+async def agenda_delete(event_id: str, _auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, lambda: agenda.delete_event(event_id))
+
+
+# ── Notifications（アプリ内通知） ─────────────────────────────────
+
+@app.get("/notifications")
+async def notifications_list(_auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    items = await loop.run_in_executor(None, notify.list_internal)
+    unread = sum(1 for n in items if not n.get("read"))
+    return {"items": items, "unread": unread}
+
+
+@app.post("/notifications/read")
+async def notifications_read(_auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, notify.mark_all_read)
+
+
+# ── Home（コックピット集約サマリー） ──────────────────────────────
+
+@app.get("/home/summary")
+async def home_summary(_auth: None = Depends(require_auth)):
+    """ホーム画面のKPIを1回で集約して返す（各機能の進捗）。"""
+    loop = asyncio.get_event_loop()
+
+    def _gather():
+        # タスク
+        try:
+            all_tasks = tasks_module.list_tasks(None, 1000)
+        except Exception:
+            all_tasks = []
+        task_counts = {}
+        for t in all_tasks:
+            s = t.get("status") or "pending"
+            task_counts[s] = task_counts.get(s, 0) + 1
+        # ミッション
+        try:
+            missions = autopilot.list_missions(1000)
+        except Exception:
+            missions = []
+        active_missions = sum(1 for m in missions if m.get("status") == "active")
+        # 自動化
+        try:
+            flows = automations.list_flows(1000)
+        except Exception:
+            flows = []
+        # 副業
+        try:
+            pending_income = len(income.list_jobs("pending", 1000))
+        except Exception:
+            pending_income = 0
+        # 予定
+        try:
+            events = agenda.list_events(1000)
+        except Exception:
+            events = []
+        # 通知
+        try:
+            unread = notify.unread_count()
+        except Exception:
+            unread = 0
+        return {
+            "tasks": {"total": len(all_tasks), "by_status": task_counts,
+                      "open": task_counts.get("pending", 0) + task_counts.get("in_progress", 0)},
+            "missions": {"total": len(missions), "active": active_missions},
+            "automations": {"total": len(flows)},
+            "income": {"pending": pending_income},
+            "events": {"total": len(events), "upcoming": events[:5]},
+            "notifications": {"unread": unread},
+        }
+
+    return await loop.run_in_executor(None, _gather)
 
 
 # ── Evolve（セルフ進化：指示→提案） ──────────────────────────────

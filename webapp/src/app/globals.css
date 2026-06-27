@@ -266,26 +266,26 @@ a {
 
 @keyframes forge-orbit-1 {
   from {
-    transform: rotateX(74deg) rotateZ(0deg);
+    transform: rotateX(70deg) rotateZ(0deg);
   }
   to {
-    transform: rotateX(74deg) rotateZ(360deg);
+    transform: rotateX(70deg) rotateZ(360deg);
   }
 }
 @keyframes forge-orbit-2 {
   from {
-    transform: rotateZ(-50deg) rotateX(66deg) rotateZ(0deg);
+    transform: rotateZ(-58deg) rotateX(68deg) rotateZ(0deg);
   }
   to {
-    transform: rotateZ(-50deg) rotateX(66deg) rotateZ(360deg);
+    transform: rotateZ(-58deg) rotateX(68deg) rotateZ(360deg);
   }
 }
 @keyframes forge-orbit-3 {
   from {
-    transform: rotateZ(50deg) rotateX(66deg) rotateZ(0deg);
+    transform: rotateZ(58deg) rotateX(68deg) rotateZ(0deg);
   }
   to {
-    transform: rotateZ(50deg) rotateX(66deg) rotateZ(-360deg);
+    transform: rotateZ(58deg) rotateX(68deg) rotateZ(-360deg);
   }
 }
 
@@ -349,6 +349,57 @@ a {
 @keyframes forge-sweep {
   to {
     transform: rotate(360deg);
+  }
+}
+
+/* Occasional light-silver ambient bloom that slowly drifts across the
+   backdrop and fades in/out (so it appears only now and then). Sits behind
+   all content (z-index:-1 inside the relative <main>). */
+.forge-ambient {
+  position: fixed;
+  top: -25vmax;
+  left: -25vmax;
+  width: 70vmax;
+  height: 70vmax;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(214, 222, 235, 0.14),
+    rgba(196, 206, 224, 0.06) 42%,
+    transparent 68%
+  );
+  filter: blur(8px);
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: forge-ambient 34s ease-in-out infinite;
+}
+@keyframes forge-ambient {
+  0% {
+    transform: translate(0, 0) scale(0.9);
+    opacity: 0;
+  }
+  18% {
+    opacity: 0.55;
+  }
+  50% {
+    transform: translate(85vw, 40vh) scale(1.2);
+    opacity: 0.3;
+  }
+  82% {
+    opacity: 0.5;
+  }
+  100% {
+    transform: translate(20vw, 92vh) scale(0.95);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .forge-ambient {
+    animation: none;
+    opacity: 0;
   }
 }
 

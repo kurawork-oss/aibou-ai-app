@@ -331,7 +331,7 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={onKeyDown}
             rows={1}
-            placeholder={listening ? "Listening…" : "Message THE FORGE OS…"}
+            placeholder={listening ? "聞き取り中…" : "THE FORGE OS にメッセージ…"}
             className="max-h-32 min-h-[40px] flex-1 resize-none bg-transparent px-2 py-2 text-sm text-fg-strong placeholder:text-muted focus:outline-none"
             style={{ scrollbarWidth: "none" }}
           />
@@ -399,7 +399,7 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
             <span className="text-[10px] tracking-[0.2em] text-[var(--accent)] label-mono">LISTENING…</span>
           ) : (
             <span className="text-[10px] tracking-[0.18em] text-muted/50 label-mono">
-              {micSupported ? "ENTER TO SEND · HANDS-FREE" : "ENTER TO SEND"}
+              {micSupported ? "ENTERで送信 · ハンズフリー対応" : "ENTERで送信"}
             </span>
           )}
         </div>
@@ -483,8 +483,7 @@ function EmptyState({ name }: { name: string }) {
     >
       <p className="label-mono text-glow text-sm text-fg-strong">{`${name} ONLINE`}</p>
       <p className="mt-2 max-w-xs text-xs leading-relaxed text-muted">
-        Speak or type to begin. Attach an image to have the core analyze it, or hold a
-        hands-free conversation with the mic.
+        話しかけるか入力して始めてください。画像を添付すればコアが解析します。マイクでハンズフリー会話もできます。
       </p>
     </motion.div>
   );

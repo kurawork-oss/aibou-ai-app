@@ -19,6 +19,7 @@ import CoreOrb, { type CoreState } from "@/components/CoreOrb";
 import Dashboard from "@/components/Dashboard";
 import EntryGate from "@/components/EntryGate";
 import Forge from "@/components/Forge";
+import Home from "@/components/Home";
 import Income from "@/components/Income";
 import Keychain from "@/components/Keychain";
 import Studio from "@/components/Studio";
@@ -26,7 +27,7 @@ import Tasks from "@/components/Tasks";
 import Vault from "@/components/Vault";
 import { health } from "@/lib/api";
 
-type View = "chat" | "forge" | "vault" | "income" | "tasks" | "studio" | "autopilot" | "board" | "archive";
+type View = "chat" | "forge" | "vault" | "income" | "tasks" | "studio" | "autopilot" | "board" | "archive" | "home";
 
 const LS_NAME = "forge_name";
 const LS_PERSONA = "forge_persona";
@@ -71,7 +72,7 @@ function Hud() {
   const [online, setOnline] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
-  const [view, setView] = useState<View>("chat");
+  const [view, setView] = useState<View>("home");
 
   useEffect(() => {
     try {
@@ -126,6 +127,9 @@ function Hud() {
 
   return (
     <main className="relative mx-auto flex h-[100dvh] w-full max-w-2xl flex-col px-4 pb-3 pt-[max(env(safe-area-inset-top),0.75rem)]">
+      {/* Occasional drifting light-silver ambient bloom (behind everything). */}
+      <div className="forge-ambient" aria-hidden />
+
       {/* Top status row */}
       <div className="flex items-center justify-between py-1">
         <div className="flex items-center gap-2">
@@ -151,9 +155,9 @@ function Hud() {
       {/* Core + wordmark (compact when not on chat) */}
       <header
         className="flex flex-col items-center transition-all duration-300"
-        style={{ paddingBottom: view === "chat" ? "0.5rem" : "0.25rem", paddingTop: view === "chat" ? "0.25rem" : "0" }}
+        style={{ paddingBottom: view === "chat" || view === "home" ? "0.5rem" : "0.25rem", paddingTop: view === "chat" || view === "home" ? "0.25rem" : "0" }}
       >
-        <CoreOrb size={view === "chat" ? 108 : 72} state={coreState} />
+        <CoreOrb size={view === "chat" || view === "home" ? 108 : 72} state={coreState} />
         <h1 className="label-mono text-glow mt-3 text-[13px] font-normal text-fg-strong sm:text-sm">
           THE FORGE OS
         </h1>
@@ -166,6 +170,7 @@ function Hud() {
 
       {/* Active view fills remaining space */}
       <section className="min-h-0 flex-1">
+        {loaded && view === "home" && <Home settings={settings} onNavigate={setView} />}
         {loaded && view === "chat" && (
           <Chat settings={settings} voiceReplies={voiceReplies} onStateChange={setCoreState} />
         )}
@@ -208,6 +213,7 @@ function stateLabel(state: CoreState): string {
 }
 
 const NAV_ITEMS: { key: View; label: string }[] = [
+  { key: "home", label: "HOME" },
   { key: "chat", label: "CHAT" },
   { key: "forge", label: "FORGE" },
   { key: "vault", label: "VAULT" },
@@ -228,6 +234,8 @@ function NavIcon({ name }: { name: View }) {
     strokeLinecap: "round" as const, strokeLinejoin: "round" as const,
   };
   switch (name) {
+    case "home":
+      return (<svg {...p}><path d="M3 11l9-7 9 7" /><path d="M5 10v10h14V10" /><path d="M9 20v-6h6v6" /></svg>);
     case "chat":
       return (<svg {...p}><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.7A8.5 8.5 0 1 1 21 11.5z" /></svg>);
     case "forge":
@@ -264,16 +272,17 @@ function NavBar({ view, onChange }: { view: View; onChange: (v: View) => void })
             key={it.key}
             type="button"
             onClick={() => onChange(it.key)}
-            className="shrink-0 rounded-forge border py-2 px-2.5 text-[10px] tracking-[0.16em] label-mono transition"
+            className="flex shrink-0 flex-col items-center justify-center rounded-forge border py-2 text-[9px] tracking-[0.08em] label-mono transition"
             style={{
               borderColor: active ? "var(--accent)" : "var(--panel-bd)",
               color: active ? "var(--fg-strong)" : "var(--muted)",
               boxShadow: active ? "0 0 12px var(--glow)" : "none",
               background: active ? "var(--btn-bg)" : "transparent",
-              minWidth: "3.5rem",
+              width: "4.25rem",
+              height: "3.5rem",
             }}
           >
-            <span className="mx-auto mb-0.5 grid place-items-center"><NavIcon name={it.key} /></span>
+            <span className="mb-1 grid place-items-center"><NavIcon name={it.key} /></span>
             <span>{it.label}</span>
           </button>
         );

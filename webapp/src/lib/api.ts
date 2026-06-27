@@ -724,6 +724,87 @@ export async function automationsRun(id: string, input = ""): Promise<Automation
   return data;
 }
 
+/* ---------------- Home / Agenda / Notifications (personal cockpit) ---------------- */
+export interface AgendaEvent {
+  id: string;
+  title: string;
+  date?: string;
+  time?: string;
+  note?: string;
+}
+
+export interface AppNotification {
+  id: string;
+  message: string;
+  channel?: string;
+  read?: boolean;
+  created_at?: string;
+}
+
+export interface HomeSummary {
+  tasks: { total: number; by_status: Record<string, number>; open: number };
+  missions: { total: number; active: number };
+  automations: { total: number };
+  income: { pending: number };
+  events: { total: number; upcoming: AgendaEvent[] };
+  notifications: { unread: number };
+}
+
+export async function homeSummary(): Promise<HomeSummary> {
+  const res = await fetch(`${requireApiUrl()}/home/summary`, { headers: authHeaders(), cache: "no-store" });
+  if (!res.ok) throw new Error(`Home summary failed (${res.status})`);
+  return (await res.json()) as HomeSummary;
+}
+
+export async function agendaList(): Promise<AgendaEvent[]> {
+  const res = await fetch(`${requireApiUrl()}/agenda`, { headers: authHeaders(), cache: "no-store" });
+  if (!res.ok) throw new Error(`Agenda failed (${res.status})`);
+  const data = (await res.json().catch(() => ({ items: [] }))) as { items?: AgendaEvent[] };
+  return data.items ?? [];
+}
+
+export async function agendaAdd(title: string, date = "", time = "", note = ""): Promise<AgendaEvent> {
+  const res = await fetch(`${requireApiUrl()}/agenda`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ title, date, time, note }),
+  });
+  const data = (await res.json().catch(() => ({}))) as AgendaEvent & { error?: string };
+  if (!res.ok) throw new Error(data.error ?? `Add event failed (${res.status})`);
+  return data;
+}
+
+/** Natural-language → parsed event ("明日15時に歯医者"). */
+export async function agendaParse(text: string, today = ""): Promise<AgendaEvent> {
+  const res = await fetch(`${requireApiUrl()}/agenda/parse`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ text, today }),
+  });
+  const data = (await res.json().catch(() => ({}))) as AgendaEvent & { error?: string };
+  if (!res.ok) throw new Error(data.error ?? `Parse event failed (${res.status})`);
+  return data;
+}
+
+export async function agendaDelete(id: string): Promise<boolean> {
+  const res = await fetch(`${requireApiUrl()}/agenda/${encodeURIComponent(id)}`, { method: "DELETE", headers: authHeaders() });
+  const data = (await res.json().catch(() => ({ ok: false }))) as { ok?: boolean };
+  return Boolean(data.ok);
+}
+
+export async function notificationsList(): Promise<{ items: AppNotification[]; unread: number }> {
+  const res = await fetch(`${requireApiUrl()}/notifications`, { headers: authHeaders(), cache: "no-store" });
+  if (!res.ok) throw new Error(`Notifications failed (${res.status})`);
+  const data = (await res.json().catch(() => ({ items: [], unread: 0 }))) as { items?: AppNotification[]; unread?: number };
+  return { items: data.items ?? [], unread: data.unread ?? 0 };
+}
+
+export async function notificationsMarkRead(): Promise<boolean> {
+  const res = await fetch(`${requireApiUrl()}/notifications/read`, { method: "POST", headers: authHeaders() });
+  const data = (await res.json().catch(() => ({ ok: false }))) as { ok?: boolean };
+  return Boolean(data.ok);
+}
+
 /* ---------------- Evolve (self-evolution: instruction → proposal) ---------------- */
 export type EvolveType = "app" | "custom_ai" | "automation" | "answer";
 

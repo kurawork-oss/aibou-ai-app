@@ -54,10 +54,11 @@ test("HUD renders after entering offline mode", async ({ page }) => {
   await expect(page.getByRole("heading", { name: /THE FORGE OS/i }).first()).toBeVisible();
 });
 
-test("NavBar shows all 9 navigation items", async ({ page }) => {
+test("NavBar shows all 10 navigation items", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
   const nav = page.locator("nav");
+  await expect(nav.getByText("HOME")).toBeVisible();
   await expect(nav.getByText("CHAT")).toBeVisible();
   await expect(nav.getByText("FORGE")).toBeVisible();
   await expect(nav.getByText("VAULT")).toBeVisible();
@@ -67,6 +68,15 @@ test("NavBar shows all 9 navigation items", async ({ page }) => {
   await expect(nav.getByText("AUTO", { exact: true })).toBeVisible();
   await expect(nav.getByText("BOARD")).toBeVisible();
   await expect(nav.getByText("ARCHIVE")).toBeVisible();
+});
+
+test("HOME is the default view and renders the cockpit", async ({ page }) => {
+  await page.goto("/");
+  await enterApp(page);
+  // Default landing is HOME
+  await expect(page.getByText("PERSONAL COCKPIT")).toBeVisible({ timeout: 5_000 });
+  await expect(page.getByText(/QUICK ASSISTANT/i)).toBeVisible();
+  await expect(page.getByText("予定 — AGENDA")).toBeVisible();
 });
 
 test("CoreOrb is visible", async ({ page }) => {
@@ -312,7 +322,7 @@ test("No JavaScript errors on page load", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
   // Navigate through all views to ensure no crash
-  for (const nav of ["FORGE", "VAULT", "TASKS", "INCOME", "STUDIO", "AUTO", "BOARD", "ARCHIVE", "CHAT"]) {
+  for (const nav of ["FORGE", "VAULT", "TASKS", "INCOME", "STUDIO", "AUTO", "BOARD", "ARCHIVE", "CHAT", "HOME"]) {
     await page.locator("nav").getByText(nav, { exact: true }).click();
     await page.waitForTimeout(300);
   }
