@@ -16,6 +16,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useState } from "react";
 import CoreOrb from "./CoreOrb";
+import { supabase, supabaseEnabled } from "@/lib/supabase";
 
 const SS_KEY = "forge_entered";
 const GATE_PIN = process.env.NEXT_PUBLIC_GATE_PIN || "";
@@ -26,7 +27,26 @@ export default function EntryGate({ children }: { children: React.ReactNode }) {
   const [pin, setPin] = useState("");
   const [error, setError] = useState(false);
 
+  // Supabase auth (only when configured)
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
+  const [authBusy, setAuthBusy] = useState(false);
+  const [authMsg, setAuthMsg] = useState<string | null>(null);
+
   useEffect(() => {
+    if (supabaseEnabled && supabase) {
+      // Real auth: entry follows the Supabase session.
+      supabase.auth.getSession().then(({ data }) => {
+        setEntered(!!data.session);
+        setReady(true);
+      });
+      const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
+        setEntered(!!session);
+      });
+      return () => sub.subscription.unsubscribe();
+    }
+    // Soft gate: remembered per tab session.
     try {
       if (sessionStorage.getItem(SS_KEY) === "1") setEntered(true);
     } catch {
@@ -47,6 +67,31 @@ export default function EntryGate({ children }: { children: React.ReactNode }) {
     }
     setEntered(true);
   }, [pin]);
+
+  const submitAuth = useCallback(async () => {
+    if (!supabase || authBusy) return;
+    if (!email.trim() || !password.trim()) {
+      setAuthMsg("メールとパスワードを入力してください");
+      return;
+    }
+    setAuthBusy(true);
+    setAuthMsg(null);
+    try {
+      if (authMode === "signup") {
+        const { error: e } = await supabase.auth.signUp({ email: email.trim(), password });
+        if (e) setAuthMsg(e.message);
+        else setAuthMsg("確認メールを送信しました。リンクから認証後にサインインしてください。");
+      } else {
+        const { error: e } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+        if (e) setAuthMsg(e.message);
+        // success → onAuthStateChange flips `entered`
+      }
+    } catch (err) {
+      setAuthMsg(err instanceof Error ? err.message : "認証に失敗しました");
+    } finally {
+      setAuthBusy(false);
+    }
+  }, [authBusy, authMode, email, password]);
 
   // Before hydration: hold a plain dark screen (no flash of either state).
   if (!ready) return <div className="fixed inset-0" style={{ background: "var(--bg)" }} />;
@@ -98,7 +143,45 @@ export default function EntryGate({ children }: { children: React.ReactNode }) {
               </h1>
               <p className="mt-2 text-[10px] tracking-[0.32em] text-muted label-mono">PERSONAL AI CORE</p>
 
-              {GATE_PIN ? (
+              {supabaseEnabled ? (
+                <div className="mt-7 w-full space-y-2">
+                  <input
+                    value={email}
+                    onChange={(e) => { setEmail(e.target.value); setAuthMsg(null); }}
+                    type="email"
+                    autoComplete="email"
+                    placeholder="メールアドレス"
+                    className="w-full rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2.5 text-sm text-fg-strong placeholder:text-muted focus:shadow-glow focus:outline-none"
+                  />
+                  <input
+                    value={password}
+                    onChange={(e) => { setPassword(e.target.value); setAuthMsg(null); }}
+                    onKeyDown={(e) => e.key === "Enter" && void submitAuth()}
+                    type="password"
+                    autoComplete={authMode === "signup" ? "new-password" : "current-password"}
+                    placeholder="パスワード"
+                    className="w-full rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2.5 text-sm text-fg-strong placeholder:text-muted focus:shadow-glow focus:outline-none"
+                  />
+                  {authMsg && (
+                    <p className="text-[10px] leading-relaxed tracking-[0.08em] text-[#ffd07f]">{authMsg}</p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => void submitAuth()}
+                    disabled={authBusy}
+                    className="w-full rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] py-3 text-[11px] tracking-[0.3em] text-fg-strong shadow-glow transition hover:shadow-glow-strong disabled:opacity-50 label-mono"
+                  >
+                    {authBusy ? "…" : authMode === "signup" ? "▸ アカウント作成" : "▸ サインイン"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setAuthMode((m) => (m === "signup" ? "signin" : "signup")); setAuthMsg(null); }}
+                    className="w-full text-[9px] tracking-[0.18em] text-muted transition hover:text-fg-strong label-mono"
+                  >
+                    {authMode === "signup" ? "既にアカウントがある → サインイン" : "アカウントを作成する →"}
+                  </button>
+                </div>
+              ) : GATE_PIN ? (
                 <div className="mt-7 w-full">
                   <input
                     value={pin}
@@ -120,13 +203,15 @@ export default function EntryGate({ children }: { children: React.ReactNode }) {
                 </div>
               ) : null}
 
-              <button
-                type="button"
-                onClick={enter}
-                className="mt-7 w-full rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] py-3 text-[11px] tracking-[0.34em] text-fg-strong shadow-glow transition hover:shadow-glow-strong label-mono"
-              >
-                ▸ ENTER
-              </button>
+              {!supabaseEnabled && (
+                <button
+                  type="button"
+                  onClick={enter}
+                  className="mt-7 w-full rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] py-3 text-[11px] tracking-[0.34em] text-fg-strong shadow-glow transition hover:shadow-glow-strong label-mono"
+                >
+                  ▸ ENTER
+                </button>
+              )}
 
               <motion.p
                 className="mt-4 text-[9px] tracking-[0.3em] text-muted/60 label-mono"

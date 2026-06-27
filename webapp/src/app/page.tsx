@@ -26,6 +26,7 @@ import Studio from "@/components/Studio";
 import Tasks from "@/components/Tasks";
 import Vault from "@/components/Vault";
 import { health } from "@/lib/api";
+import { supabase, supabaseEnabled } from "@/lib/supabase";
 
 type View = "chat" | "forge" | "vault" | "income" | "tasks" | "studio" | "autopilot" | "board" | "archive" | "home";
 
@@ -555,7 +556,8 @@ function SettingsPanel({
               <DiagRow label="LINK STATUS" value={online ? "ACTIVE" : "OFFLINE"} ok={online} />
               <DiagRow label="FRONTEND" value="NEXT.JS 14 · VERCEL" ok={true} />
               <DiagRow label="BACKEND" value={process.env.NEXT_PUBLIC_API_URL ? "CONFIGURED" : "NOT SET"} ok={!!process.env.NEXT_PUBLIC_API_URL} />
-              <DiagRow label="AUTH" value={process.env.NEXT_PUBLIC_API_TOKEN ? "BEARER TOKEN" : "OPEN"} ok={true} />
+              <DiagRow label="AUTH" value={supabaseEnabled ? "SUPABASE" : process.env.NEXT_PUBLIC_API_TOKEN ? "BEARER TOKEN" : "OPEN"} ok={true} />
+              <DiagRow label="DATABASE" value={supabaseEnabled ? "CONNECTED" : "NOT SET"} ok={supabaseEnabled} />
               <DiagRow label="GATE PIN" value={process.env.NEXT_PUBLIC_GATE_PIN ? "ACTIVE" : "DISABLED"} ok={true} />
 
               <div className="mt-2 rounded-forge border border-panel p-3">
@@ -564,6 +566,19 @@ function SettingsPanel({
                   <p>API_URL: <span className="text-fg">{process.env.NEXT_PUBLIC_API_URL || "(not set)"}</span></p>
                 </div>
               </div>
+
+              {supabaseEnabled && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try { await supabase?.auth.signOut(); } catch { /* ignore */ }
+                    window.location.reload();
+                  }}
+                  className="rounded-forge border border-panel py-2 text-[10px] tracking-[0.18em] text-muted transition hover:text-fg-strong label-mono"
+                >
+                  サインアウト
+                </button>
+              )}
 
               <button
                 type="button"
