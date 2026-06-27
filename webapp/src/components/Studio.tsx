@@ -48,7 +48,7 @@ export default function Studio() {
   const [tab, setTab] = useState<StudioTab>("ais");
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto pb-2">
+    <div className="mx-auto flex h-full min-h-0 w-full max-w-3xl flex-col gap-3 overflow-y-auto pb-2">
       {/* Tab selector */}
       <div className="flex gap-2">
         {(["ais", "workflows", "evolve"] as StudioTab[]).map((t) => (

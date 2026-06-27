@@ -74,7 +74,9 @@ export default function Income() {
   const counts = ["pending", "approved", "rejected", "completed", "failed"] as const;
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto pb-2">
+    <div className="grid h-full min-h-0 gap-3 overflow-y-auto pb-2 lg:grid-cols-[24rem_1fr] lg:content-start">
+      {/* ── Left: KPI + enqueue ── */}
+      <div className="flex flex-col gap-3">
       {/* KPI row */}
       <div className="grid grid-cols-5 gap-2">
         {counts.map((c) => (
@@ -116,9 +118,10 @@ export default function Income() {
         )}
         {error && <p className="mt-2 text-xs text-[#ff9b9b]">⚠️ {error}</p>}
       </div>
+      </div>
 
-      {/* Queue */}
-      <div className="flex flex-col gap-2">
+      {/* ── Right: approval queue ── */}
+      <div className="flex min-h-0 flex-col gap-2">
         {loading && <div className="panel p-3 text-center text-xs text-muted">読み込み中…</div>}
         {!loading && jobs.length === 0 && (
           <div className="panel p-4 text-center text-xs text-muted">

@@ -178,7 +178,7 @@ export default function Vault() {
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto pb-2">
+    <div className="mx-auto flex h-full min-h-0 w-full max-w-3xl flex-col gap-3 overflow-y-auto pb-2">
       {/* Notebooks: list + create */}
       <div className="panel p-3">
         <label className="mb-2 block text-[10px] tracking-[0.2em] text-muted label-mono">

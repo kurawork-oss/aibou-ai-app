@@ -46,41 +46,47 @@ export default function Dashboard() {
   useEffect(() => { void load(); }, [load]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto pb-2">
-      <button
-        type="button"
-        onClick={() => setShowForm((s) => !s)}
-        className="rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] py-2.5 text-[11px] tracking-[0.2em] text-fg-strong shadow-glow transition hover:shadow-glow-strong label-mono"
-      >
-        {showForm ? "▲ CLOSE BUILDER" : "+ NEW AUTOMATION"}
-      </button>
+    <div className="grid h-full min-h-0 gap-3 overflow-y-auto pb-2 lg:grid-cols-[26rem_1fr] lg:content-start">
+      {/* ── Left: builder ── */}
+      <div className="flex flex-col gap-3">
+        <button
+          type="button"
+          onClick={() => setShowForm((s) => !s)}
+          className="rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] py-2.5 text-[11px] tracking-[0.2em] text-fg-strong shadow-glow transition hover:shadow-glow-strong label-mono"
+        >
+          {showForm ? "▲ CLOSE BUILDER" : "+ NEW AUTOMATION"}
+        </button>
 
-      <AnimatePresence>
-        {showForm && (
-          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}>
-            <FlowBuilder
-              onCreated={(f) => { setFlows((p) => [f, ...p]); setShowForm(false); }}
-              onError={setError}
-            />
+        <AnimatePresence>
+          {showForm && (
+            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}>
+              <FlowBuilder
+                onCreated={(f) => { setFlows((p) => [f, ...p]); setShowForm(false); }}
+                onError={setError}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {error && <div className="panel p-3 text-xs text-[#ff9b9b]">⚠️ {error}</div>}
+      </div>
+
+      {/* ── Right: automations ── */}
+      <div className="flex min-h-0 flex-col gap-3">
+        {loading ? (
+          <motion.div className="panel p-4 text-center text-[11px] tracking-[0.2em] text-muted label-mono" animate={{ opacity: [0.4, 1, 0.4] }} transition={{ duration: 1.4, repeat: Infinity }}>
+            ◈ LOADING BOARD…
           </motion.div>
+        ) : flows.length === 0 ? (
+          <div className="panel p-6 text-center text-[11px] tracking-[0.18em] text-muted label-mono">NO AUTOMATIONS YET</div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {flows.map((f) => (
+              <FlowCard key={f.id} flow={f} onDelete={async () => { await automationsDelete(f.id); setFlows((p) => p.filter((x) => x.id !== f.id)); }} />
+            ))}
+          </div>
         )}
-      </AnimatePresence>
-
-      {error && <div className="panel p-3 text-xs text-[#ff9b9b]">⚠️ {error}</div>}
-
-      {loading ? (
-        <motion.div className="panel p-4 text-center text-[11px] tracking-[0.2em] text-muted label-mono" animate={{ opacity: [0.4, 1, 0.4] }} transition={{ duration: 1.4, repeat: Infinity }}>
-          ◈ LOADING BOARD…
-        </motion.div>
-      ) : flows.length === 0 ? (
-        <div className="panel p-6 text-center text-[11px] tracking-[0.18em] text-muted label-mono">NO AUTOMATIONS YET</div>
-      ) : (
-        <div className="flex flex-col gap-3">
-          {flows.map((f) => (
-            <FlowCard key={f.id} flow={f} onDelete={async () => { await automationsDelete(f.id); setFlows((p) => p.filter((x) => x.id !== f.id)); }} />
-          ))}
-        </div>
-      )}
+      </div>
     </div>
   );
 }
