@@ -196,11 +196,16 @@ test("TASKS renders tasks UI", async ({ page }) => {
   await expect(page.getByText("PENDING").first()).toBeVisible();
 });
 
-test("INCOME renders income UI", async ({ page }) => {
+test("INCOME renders income UI + setup guide", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
   await goMode(page, "INCOME");
-  await expect(page.getByText(/INCOME|MISSION|AUTO/i).first()).toBeVisible({ timeout: 5_000 });
+  await expect(page.getByText("NEW THEME")).toBeVisible({ timeout: 5_000 });
+  // Setup guide ("what you need to do") is shown and collapsible
+  await expect(page.getByText(/副業自動化セットアップ/)).toBeVisible();
+  await expect(page.getByText("基盤をつなぐ（必須）")).toBeVisible();
+  await page.getByText(/副業自動化セットアップ/).click();
+  await expect(page.getByText("基盤をつなぐ（必須）")).not.toBeVisible({ timeout: 3_000 });
 });
 
 test("STUDIO renders studio UI", async ({ page }) => {
