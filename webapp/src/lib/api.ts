@@ -753,7 +753,15 @@ export interface HomeSummary {
 export async function homeSummary(): Promise<HomeSummary> {
   const res = await fetch(`${requireApiUrl()}/home/summary`, { headers: authHeaders(), cache: "no-store" });
   if (!res.ok) throw new Error(`Home summary failed (${res.status})`);
-  return (await res.json()) as HomeSummary;
+  const empty: HomeSummary = {
+    tasks: { total: 0, by_status: {}, open: 0 },
+    missions: { total: 0, active: 0 },
+    automations: { total: 0 },
+    income: { pending: 0 },
+    events: { total: 0, upcoming: [] },
+    notifications: { unread: 0 },
+  };
+  return (await res.json().catch(() => empty)) as HomeSummary;
 }
 
 export async function agendaList(): Promise<AgendaEvent[]> {

@@ -4,8 +4,11 @@
  * THE FORGE OS — main HUD.
  *
  * Flows: EntryGate → BootScreen → Hud.
- * Views: CHAT / FORGE / VAULT / INCOME / TASKS / STUDIO / ARCHIVE.
- * Horizontally scrollable NavBar for 7+ views without crowding.
+ * Views (10): HOME / CHAT / FORGE / VAULT / INCOME / TASKS / STUDIO /
+ *   AUTOPILOT / BOARD / ARCHIVE — default is CHAT.
+ * Navigation is a Google-apps-style waffle "ModeLauncher" popover (top-right),
+ * not a bottom bar. CHAT goes extra-wide with its history in the far-left
+ * margin; other modes use the full width with their own centring.
  */
 
 import { AnimatePresence, motion } from "framer-motion";

@@ -8,6 +8,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useState } from "react";
 import { getBriefing } from "@/lib/api";
+import { speak } from "@/lib/voice";
 
 export default function Briefing() {
   const [open, setOpen] = useState(false);
@@ -20,16 +21,8 @@ export default function Briefing() {
     try {
       const r = await getBriefing();
       setText(r.text || "（ブリーフィングを取得できませんでした）");
-      try {
-        if (r.text && typeof window !== "undefined" && window.speechSynthesis) {
-          const u = new SpeechSynthesisUtterance(r.text);
-          u.lang = "ja-JP";
-          window.speechSynthesis.cancel();
-          window.speechSynthesis.speak(u);
-        }
-      } catch {
-        /* 読み上げ未対応はスキップ */
-      }
+      // Read aloud via the shared helper (honours the chosen ja-JP voice).
+      if (r.text) speak(r.text, { lang: "ja-JP" });
     } catch {
       setText("ブリーフィングの取得に失敗しました。");
     } finally {
@@ -50,8 +43,16 @@ export default function Briefing() {
 
       <AnimatePresence>
         {open && (
+          <>
+            <button
+              type="button"
+              aria-hidden
+              tabIndex={-1}
+              onClick={() => setOpen(false)}
+              className="fixed inset-0 z-40 cursor-default"
+            />
           <motion.div
-            className="absolute right-0 z-30 mt-2 w-[min(80vw,320px)] panel p-3"
+            className="absolute right-0 z-50 mt-2 w-[min(80vw,320px)] panel p-3"
             initial={{ opacity: 0, y: -6 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
@@ -79,6 +80,7 @@ export default function Briefing() {
               <p className="whitespace-pre-wrap text-[12px] leading-relaxed text-fg">{text}</p>
             )}
           </motion.div>
+          </>
         )}
       </AnimatePresence>
     </div>

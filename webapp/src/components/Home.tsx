@@ -65,14 +65,17 @@ export default function Home({
 
   useEffect(() => { void refresh(); }, [refresh]);
 
-  const cards = summary
+  // tasks/missions/automations/income jump to their mode; 予定/通知 scroll to
+  // their on-page panels (they live on HOME, so navigating to "home" is a no-op).
+  const scrollTo = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  const cards: { label: string; value: number; onClick: () => void }[] = summary
     ? [
-        { label: "タスク", value: summary.tasks.open, view: "tasks" as View },
-        { label: "ミッション", value: summary.missions.active, view: "autopilot" as View },
-        { label: "自動化", value: summary.automations.total, view: "board" as View },
-        { label: "副業", value: summary.income.pending, view: "income" as View },
-        { label: "予定", value: summary.events.total, view: "home" as View },
-        { label: "通知", value: summary.notifications.unread, view: "home" as View },
+        { label: "タスク", value: summary.tasks.open, onClick: () => onNavigate("tasks") },
+        { label: "ミッション", value: summary.missions.active, onClick: () => onNavigate("autopilot") },
+        { label: "自動化", value: summary.automations.total, onClick: () => onNavigate("board") },
+        { label: "副業", value: summary.income.pending, onClick: () => onNavigate("income") },
+        { label: "予定", value: summary.events.total, onClick: () => scrollTo("home-agenda") },
+        { label: "通知", value: summary.notifications.unread, onClick: () => scrollTo("home-notifications") },
       ]
     : [];
 
@@ -98,7 +101,7 @@ export default function Home({
             <button
               key={c.label}
               type="button"
-              onClick={() => onNavigate(c.view)}
+              onClick={c.onClick}
               className="glass-silver p-2 text-center transition hover:shadow-glow"
             >
               <div className="text-[22px] font-bold text-fg-strong">{c.value}</div>
@@ -141,6 +144,9 @@ function QuickAssistant({ settings }: { settings: ChatSettings }) {
   const [reply, setReply] = useState("");
   const [busy, setBusy] = useState(false);
   const cancelRef = useRef<(() => void) | null>(null);
+
+  // Cancel any in-flight stream when this panel unmounts (e.g. navigating away).
+  useEffect(() => () => cancelRef.current?.(), []);
 
   const send = () => {
     const msg = input.trim();
@@ -212,7 +218,7 @@ function AgendaPanel({
   };
 
   return (
-    <div className="glass-silver p-3">
+    <div id="home-agenda" className="glass-silver p-3">
       <div className="mb-1.5 text-[10px] tracking-[0.2em] text-muted label-mono">予定 — AGENDA</div>
       <div className="flex gap-2">
         <input
@@ -261,7 +267,7 @@ function NotificationsPanel({
   onRead: () => void;
 }) {
   return (
-    <div className="glass-silver p-3">
+    <div id="home-notifications" className="glass-silver p-3">
       <div className="mb-1.5 flex items-center justify-between">
         <span className="text-[10px] tracking-[0.2em] text-muted label-mono">通知 — NOTIFICATIONS</span>
         {!offline && notes.some((n) => !n.read) && (
