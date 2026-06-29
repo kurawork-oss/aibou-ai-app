@@ -46,6 +46,7 @@ export default function Vault() {
   const [genDoc, setGenDoc] = useState<string | null>(null);
   const [diagBusy, setDiagBusy] = useState(false);
   const [diagCode, setDiagCode] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -418,14 +419,15 @@ export default function Vault() {
                   {diagCode}
                 </pre>
                 <div className="mt-2 flex gap-2">
-                  <a
-                    href={`https://mermaid.live/edit#base64:${typeof window !== "undefined" ? btoa(unescape(encodeURIComponent(JSON.stringify({ code: diagCode, mermaid: { theme: "dark" } })))) : ""}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <button
+                    type="button"
+                    onClick={() => {
+                      try { void navigator.clipboard?.writeText(diagCode); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* ignore */ }
+                    }}
                     className="rounded-forge border border-[var(--line)] px-3 py-1 text-[10px] tracking-[0.14em] text-[var(--accent)] label-mono"
                   >
-                    ↗ Mermaid Live で開く
-                  </a>
+                    {copied ? "✓ コピー済み" : "⧉ コードをコピー"}
+                  </button>
                   <button
                     type="button"
                     onClick={() => downloadText(`${selected.name}.mmd`, diagCode)}

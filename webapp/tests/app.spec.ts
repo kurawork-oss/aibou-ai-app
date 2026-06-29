@@ -330,6 +330,35 @@ test("Briefing button is visible in top bar", async ({ page }) => {
   await expect(page.getByText("BRIEF")).toBeVisible();
 });
 
+test("Briefing opens a panel and closes again", async ({ page }) => {
+  await page.goto("/");
+  await enterApp(page);
+  await page.getByText("BRIEF").click();
+  await expect(page.getByText("BRIEFING")).toBeVisible({ timeout: 5_000 });
+  await page.getByLabel("Close").click();
+  await expect(page.getByText("BRIEFING")).not.toBeVisible({ timeout: 3_000 });
+});
+
+/* ── Functional: Forge generate enables after typing ──────────────── */
+test("Forge: GENERATE enables once a prompt is typed", async ({ page }) => {
+  await page.goto("/");
+  await enterApp(page);
+  await goMode(page, "FORGE");
+  const genBtn = page.getByRole("button", { name: /GENERATE APP/i });
+  await expect(genBtn).toBeDisabled();
+  await page.locator("textarea").first().fill("家計簿アプリ");
+  await expect(genBtn).toBeEnabled();
+});
+
+/* ── Functional: Home cockpit panels present ──────────────────────── */
+test("HOME shows agenda + notifications panels", async ({ page }) => {
+  await page.goto("/");
+  await enterApp(page);
+  await goMode(page, "HOME");
+  await expect(page.getByText("予定 — AGENDA")).toBeVisible({ timeout: 5_000 });
+  await expect(page.getByText("通知 — NOTIFICATIONS")).toBeVisible();
+});
+
 /* ── Desktop layout (wide viewport) ─────────────────────────────── */
 test.describe("desktop layout", () => {
   test.use({ viewport: { width: 1280, height: 800 } });
