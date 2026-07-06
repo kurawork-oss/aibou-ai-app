@@ -143,6 +143,39 @@ test("Settings KEYCHAIN tab shows API key vault", async ({ page }) => {
   await expect(page.getByText("ACCESS CODE")).toBeVisible({ timeout: 5_000 });
 });
 
+test("KEYCHAIN: encrypted vault stores a key offline (ciphertext at rest)", async ({ page }) => {
+  await page.goto("/");
+  await enterApp(page);
+  await page.getByLabel("Settings").click();
+  await page.getByText("KEYCHAIN", { exact: true }).click();
+
+  // 1) Create the master passcode (setup phase) — works with no backend
+  await expect(page.getByText("SET ACCESS CODE")).toBeVisible({ timeout: 5_000 });
+  await page.getByPlaceholder("パスコード（4文字以上）").fill("test-pass");
+  await page.getByPlaceholder("確認のためもう一度").fill("test-pass");
+  await page.getByRole("button", { name: "CREATE VAULT" }).click();
+
+  // 2) Vault unlocks and shows the preset keys
+  await expect(page.getByText("ENCRYPTED VAULT · UNLOCKED")).toBeVisible({ timeout: 5_000 });
+  const geminiRow = page.locator("div.rounded-forge").filter({ hasText: "Gemini API Key" });
+  await geminiRow.getByPlaceholder("キーを貼り付け…").fill("SECRET-GEMINI-123");
+  await geminiRow.getByRole("button", { name: "SAVE" }).click();
+  await expect(page.getByText(/SET · SE••••23/)).toBeVisible({ timeout: 5_000 });
+
+  // 3) At rest it is ciphertext only — the plaintext key is NOT in localStorage
+  const raw = await page.evaluate(() => localStorage.getItem("forge_vault_v1"));
+  expect(raw).toBeTruthy();
+  expect(raw).not.toContain("SECRET-GEMINI-123");
+  expect(raw).toContain("\"ct\"");
+
+  // 4) Re-lock and unlock with the passcode restores it
+  await page.getByRole("button", { name: /LOCK/ }).click();
+  await expect(page.getByText("ENTER ACCESS CODE")).toBeVisible();
+  await page.getByPlaceholder("••••").fill("test-pass");
+  await page.getByRole("button", { name: "UNLOCK" }).click();
+  await expect(page.getByText(/SET · SE••••23/)).toBeVisible({ timeout: 5_000 });
+});
+
 test("Settings PERSONA tab shows presets", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);

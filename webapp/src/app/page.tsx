@@ -554,7 +554,8 @@ function SettingsPanel({
           {tab === "keychain" && (
             <>
               <div className="mb-3 text-[10px] leading-relaxed text-muted">
-                各APIキーをここで設定します。値はマスク表示され、フルの値は画面に出ません。
+                APIキーをこの端末内で暗号化して保管します（AES-256）。まずパスコードを作成 → 各キーを貼り付けて SAVE。
+                バックエンド未接続でも保存でき、接続後は自動でサーバーに同期されます。
               </div>
               <Keychain />
             </>
