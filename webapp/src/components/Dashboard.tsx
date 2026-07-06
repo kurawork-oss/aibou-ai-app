@@ -20,6 +20,7 @@ import {
   type StepType,
   type AutomationRunResult,
 } from "@/lib/api";
+import Tilt3D from "@/components/Tilt3D";
 
 const STEP_META: Record<StepType, { label: string; color: string; field: string; placeholder: string }> = {
   ai_generate: { label: "AI生成", color: "#00f3ff", field: "prompt", placeholder: "{input}を要約して…" },
@@ -96,8 +97,9 @@ export default function Dashboard() {
       <div aria-hidden className="forge-grid pointer-events-none absolute inset-0 opacity-50" />
 
       <div className="relative z-10 mx-auto flex w-full max-w-5xl flex-col gap-4 pt-1">
-        {/* Zapier-copilot style creation hero */}
-        <div className="glass-silver mx-auto w-full max-w-3xl p-5 text-center">
+        {/* Zapier-copilot style creation hero (subtle 3D tilt) */}
+        <Tilt3D className="mx-auto w-full max-w-3xl" max={3}>
+        <div className="glass-silver w-full p-5 text-center">
           <div className="mb-1 flex items-center justify-center gap-2">
             <span className="grid h-7 w-7 place-items-center rounded-full border border-[var(--line)] text-[var(--accent)]"><SparkIcon /></span>
             <span className="text-[10px] tracking-[0.24em] text-muted label-mono">AUTOMATION COPILOT</span>
@@ -151,6 +153,7 @@ export default function Dashboard() {
           {nlNote && <p className="mt-2 text-[11px] text-[var(--accent)] label-mono">◈ {nlNote}</p>}
           {error && <p className="mt-2 text-[11px] text-[#ff9b9b]">⚠️ {error}</p>}
         </div>
+        </Tilt3D>
 
         {/* Manual builder (Zapier step editor) */}
         <AnimatePresence>
@@ -308,6 +311,7 @@ function FlowCard({ flow, onDelete }: { flow: Automation; onDelete: () => void }
   };
 
   return (
+    <Tilt3D max={5}>
     <div className="panel p-3">
       <div className="flex items-center justify-between">
         <span className="text-sm text-fg-strong">{flow.name}</span>
@@ -358,6 +362,7 @@ function FlowCard({ flow, onDelete }: { flow: Automation; onDelete: () => void }
         </div>
       )}
     </div>
+    </Tilt3D>
   );
 }
 

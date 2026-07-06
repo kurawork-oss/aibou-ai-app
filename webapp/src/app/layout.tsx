@@ -64,7 +64,9 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="mobile-web-app-capable" content="yes" />
       </head>
-      <body className="min-h-[100dvh] bg-bg font-sans text-fg antialiased">
+      {/* No bg on <body> — backgrounds live on <html> (globals.css) so the
+          fixed z-index:-1 Backdrop3D starfield paints above them. */}
+      <body className="min-h-[100dvh] font-sans text-fg antialiased">
         {children}
       </body>
     </html>

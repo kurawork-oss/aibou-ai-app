@@ -27,6 +27,7 @@ import {
   type AppNotification,
 } from "@/lib/api";
 import type { ChatSettings } from "@/components/Chat";
+import Tilt3D from "@/components/Tilt3D";
 
 type View = "chat" | "forge" | "vault" | "income" | "tasks" | "studio" | "autopilot" | "board" | "archive" | "home";
 
@@ -98,15 +99,16 @@ export default function Home({
       {summary && (
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-6 lg:col-span-3">
           {cards.map((c) => (
-            <button
-              key={c.label}
-              type="button"
-              onClick={c.onClick}
-              className="glass-silver p-2 text-center transition hover:shadow-glow"
-            >
-              <div className="text-[22px] font-bold text-fg-strong">{c.value}</div>
-              <div className="text-[9px] tracking-[0.14em] text-muted label-mono">{c.label}</div>
-            </button>
+            <Tilt3D key={c.label} max={9}>
+              <button
+                type="button"
+                onClick={c.onClick}
+                className="glass-silver w-full p-2 text-center transition hover:shadow-glow"
+              >
+                <div className="text-[22px] font-bold text-fg-strong">{c.value}</div>
+                <div className="text-[9px] tracking-[0.14em] text-muted label-mono">{c.label}</div>
+              </button>
+            </Tilt3D>
           ))}
         </div>
       )}

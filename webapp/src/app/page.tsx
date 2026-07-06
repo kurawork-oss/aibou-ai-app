@@ -11,10 +11,11 @@
  * margin; other modes use the full width with their own centring.
  */
 
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useCallback, useEffect, useState } from "react";
 import AppArchive from "@/components/AppArchive";
 import Autopilot from "@/components/Autopilot";
+import Backdrop3D from "@/components/Backdrop3D";
 import BootScreen from "@/components/BootScreen";
 import Briefing from "@/components/Briefing";
 import Chat, { type ChatSettings } from "@/components/Chat";
@@ -64,6 +65,7 @@ export default function Page() {
   return (
     <EntryGate>
       <BootScreen>
+        <Backdrop3D />
         <Hud />
       </BootScreen>
     </EntryGate>
@@ -75,6 +77,7 @@ function Hud() {
   const [voiceReplies, setVoiceReplies] = useState(true);
   const [coreState, setCoreState] = useState<CoreState>("idle");
   const [online, setOnline] = useState(true);
+  const reduceMotion = useReducedMotion();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [view, setView] = useState<View>("chat");
@@ -183,20 +186,37 @@ function Hud() {
       </div>
 
       {/* Active view fills remaining space. Home & Forge own the full width
-          (custom layouts); the rest are centred so they don't look stretched. */}
-      <section className="min-h-0 flex-1">
-        {loaded && view === "home" && <Home settings={settings} onNavigate={setView} />}
-        {loaded && view === "chat" && (
-          <Chat settings={settings} voiceReplies={voiceReplies} onStateChange={setCoreState} />
-        )}
-        {loaded && view === "forge" && <Forge />}
-        {loaded && view === "vault" && <Centered><Vault /></Centered>}
-        {loaded && view === "income" && <Centered><Income /></Centered>}
-        {loaded && view === "tasks" && <Centered><Tasks /></Centered>}
-        {loaded && view === "studio" && <Centered><Studio /></Centered>}
-        {loaded && view === "autopilot" && <Centered><Autopilot /></Centered>}
-        {loaded && view === "board" && <Centered><Dashboard /></Centered>}
-        {loaded && view === "archive" && <Centered><AppArchive /></Centered>}
+          (custom layouts); the rest are centred so they don't look stretched.
+          Views enter from depth (3D rotateX) — except CHAT, whose fixed
+          history panel must never sit inside a transformed ancestor, so it
+          fades only. */}
+      <section className="min-h-0 flex-1" style={{ perspective: 1400 }}>
+        <motion.div
+          key={view}
+          className="h-full min-h-0"
+          initial={
+            reduceMotion
+              ? false
+              : view === "chat"
+                ? { opacity: 0 }
+                : { opacity: 0, rotateX: 5, y: 14, scale: 0.985 }
+          }
+          animate={{ opacity: 1, rotateX: 0, y: 0, scale: 1 }}
+          transition={{ type: "spring", stiffness: 320, damping: 30 }}
+        >
+          {loaded && view === "home" && <Home settings={settings} onNavigate={setView} />}
+          {loaded && view === "chat" && (
+            <Chat settings={settings} voiceReplies={voiceReplies} onStateChange={setCoreState} />
+          )}
+          {loaded && view === "forge" && <Forge />}
+          {loaded && view === "vault" && <Centered><Vault /></Centered>}
+          {loaded && view === "income" && <Centered><Income /></Centered>}
+          {loaded && view === "tasks" && <Centered><Tasks /></Centered>}
+          {loaded && view === "studio" && <Centered><Studio /></Centered>}
+          {loaded && view === "autopilot" && <Centered><Autopilot /></Centered>}
+          {loaded && view === "board" && <Centered><Dashboard /></Centered>}
+          {loaded && view === "archive" && <Centered><AppArchive /></Centered>}
+        </motion.div>
       </section>
 
       {/* Settings drawer */}
@@ -317,10 +337,11 @@ function ModeLauncher({ view, onChange }: { view: View; onChange: (v: View) => v
                 (Keeping glass-silver — which is position:relative — off the
                 positioned element avoids it overriding `absolute`.) */}
             <motion.nav
-              initial={{ opacity: 0, y: -8, scale: 0.97 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -8, scale: 0.97 }}
+              initial={{ opacity: 0, y: -8, scale: 0.97, rotateX: -16 }}
+              animate={{ opacity: 1, y: 0, scale: 1, rotateX: 0 }}
+              exit={{ opacity: 0, y: -8, scale: 0.97, rotateX: -12 }}
               transition={{ type: "spring", stiffness: 360, damping: 28 }}
+              style={{ transformPerspective: 900 }}
               className="absolute right-0 top-11 z-50 w-[17rem] origin-top-right"
             >
               <div className="glass-silver p-3">
@@ -333,7 +354,7 @@ function ModeLauncher({ view, onChange }: { view: View; onChange: (v: View) => v
                         key={it.key}
                         type="button"
                         onClick={() => { onChange(it.key); setOpen(false); }}
-                        className="flex h-[4.25rem] flex-col items-center justify-center gap-1.5 rounded-forge border text-[9px] tracking-[0.06em] label-mono transition"
+                        className="flex h-[4.25rem] flex-col items-center justify-center gap-1.5 rounded-forge border text-[9px] tracking-[0.06em] label-mono transition duration-150 hover:-translate-y-0.5 hover:scale-[1.05]"
                         style={{
                           borderColor: active ? "var(--accent)" : "var(--panel-bd)",
                           color: active ? "var(--fg-strong)" : "var(--muted)",

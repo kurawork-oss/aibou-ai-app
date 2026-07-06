@@ -38,14 +38,18 @@ body {
   margin: 0;
   padding: 0;
   min-height: 100%;
-  background-color: var(--bg);
   color: var(--fg);
   font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
-body {
+/* Backgrounds live on <html> (the root canvas) so that fixed z-index:-1
+   layers — Backdrop3D starfield/grid, .forge-ambient — paint ABOVE them.
+   (If body owned an opaque background it would cover every negative-z layer:
+   root bg → negative-z → in-flow backgrounds is the CSS painting order.) */
+html {
+  background-color: var(--bg);
   /* Subtle pale-blue vignette behind everything — the "core" bleed. */
   background-image: radial-gradient(
       1200px 700px at 50% -12%,
@@ -54,6 +58,10 @@ body {
     ),
     radial-gradient(900px 600px at 50% 120%, rgba(150, 200, 255, 0.05), transparent 55%);
   background-attachment: fixed;
+}
+
+body {
+  background: transparent;
   min-height: 100dvh;
 }
 
@@ -458,5 +466,51 @@ a {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
+  }
+}
+
+/* =====================================================================
+   3D UI layer (ui-r11) — pointer-tilt cards + holographic sheen.
+   ===================================================================== */
+
+.tilt3d {
+  --rx: 0deg;
+  --ry: 0deg;
+  --mx: 50%;
+  --my: 50%;
+  position: relative;
+  border-radius: 14px;
+  transform: perspective(900px) rotateX(var(--rx)) rotateY(var(--ry));
+  transform-style: preserve-3d;
+  transition: transform 0.18s ease-out;
+  will-change: transform;
+}
+
+/* Moving specular sheen that follows the pointer. */
+.tilt3d::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(
+    240px circle at var(--mx) var(--my),
+    rgba(190, 225, 255, 0.09),
+    transparent 62%
+  );
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+.tilt3d:hover::after {
+  opacity: 1;
+}
+
+/* Touch devices & reduced motion: flat. */
+@media (pointer: coarse), (prefers-reduced-motion: reduce) {
+  .tilt3d {
+    transform: none !important;
+  }
+  .tilt3d::after {
+    display: none;
   }
 }

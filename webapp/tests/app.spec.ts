@@ -93,11 +93,15 @@ test("CHAT is the default view; HOME shows the cockpit", async ({ page }) => {
   await expect(page.getByText("予定 — AGENDA")).toBeVisible();
 });
 
-test("CoreOrb is visible", async ({ page }) => {
+test("CoreOrb is visible and renders its 3D canvas", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
   const orb = page.getByRole("img", { name: /THE FORGE OS core/i }).first();
   await expect(orb).toBeVisible();
+  // ui-r11: the core is a true-3D canvas (particle sphere + orbit rings).
+  await expect(orb.locator("canvas")).toBeAttached();
+  // The 3D backdrop (starfield + perspective grid) is mounted behind the HUD.
+  await expect(page.locator("canvas.fixed.inset-0").first()).toBeAttached();
 });
 
 test("Chat: history toggle opens the panel", async ({ page }) => {
