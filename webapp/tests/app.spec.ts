@@ -155,8 +155,8 @@ test("KEYCHAIN: encrypted vault stores a key offline (ciphertext at rest)", asyn
   await page.getByPlaceholder("確認のためもう一度").fill("test-pass");
   await page.getByRole("button", { name: "CREATE VAULT" }).click();
 
-  // 2) Vault unlocks and shows the preset keys
-  await expect(page.getByText("ENCRYPTED VAULT · UNLOCKED")).toBeVisible({ timeout: 5_000 });
+  // 2) Vault unlocks and shows the preset keys (offline draft mode)
+  await expect(page.getByText("オフライン下書き · UNLOCKED")).toBeVisible({ timeout: 5_000 });
   const geminiRow = page.locator("div.rounded-forge").filter({ hasText: "Gemini API Key" });
   await geminiRow.getByPlaceholder("キーを貼り付け…").fill("SECRET-GEMINI-123");
   await geminiRow.getByRole("button", { name: "SAVE" }).click();

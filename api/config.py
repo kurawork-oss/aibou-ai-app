@@ -22,6 +22,11 @@ SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "").strip()
 APP_TOKEN = os.environ.get("APP_TOKEN", "").strip()          # 任意：APIをBearerで保護
 FRONTEND_ORIGIN = os.environ.get("FRONTEND_ORIGIN", "*").strip() or "*"
 
+# APIキーをSupabaseに保存する際の暗号化マスターシークレット。
+# 未設定なら SUPABASE_SERVICE_KEY → APP_TOKEN の順にフォールバックして鍵を導出する
+# （どれも無ければ暗号化なし＝メモリ運用のみ想定）。値は絶対に外へ出さない。
+KEYCHAIN_SECRET = os.environ.get("KEYCHAIN_SECRET", "").strip()
+
 # 既定モデル（必要なら環境変数で上書き可）
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash").strip() or "gemini-2.5-flash"
 

@@ -427,6 +427,57 @@ def test_keys_gemini_reconfigure_does_not_crash():
     client.delete("/keys/GEMINI_API_KEY")
 
 
+# ── keychain encryption (Supabaseに保存する値はFernet暗号化される) ──
+def _reset_fernet():
+    import keychain
+    keychain._fernet_cache = None
+    keychain._fernet_tried = False
+
+
+def test_keychain_encryption_roundtrip(monkeypatch):
+    import config
+    import keychain
+    monkeypatch.setattr(config, "KEYCHAIN_SECRET", "unit-test-master-secret")
+    _reset_fernet()
+    secret = "super-secret-value-1234567890"
+    token = keychain._encrypt(secret)
+    # 暗号文プレフィックス付き & 平文はDBに残らない
+    assert token.startswith("enc:v1:")
+    assert secret not in token
+    # 同じ鍵で復号できる
+    assert keychain._decrypt(token) == secret
+    # 旧データ（平文）は後方互換でそのまま読める
+    assert keychain._decrypt("legacy-plaintext") == "legacy-plaintext"
+    _reset_fernet()
+
+
+def test_keychain_wrong_secret_cannot_decrypt(monkeypatch):
+    import config
+    import keychain
+    monkeypatch.setattr(config, "KEYCHAIN_SECRET", "secret-A")
+    _reset_fernet()
+    token = keychain._encrypt("value-xyz")
+    assert token.startswith("enc:v1:")
+    # 別のシークレット → 別の鍵 → 復号不可（空を返す＝漏れない）
+    monkeypatch.setattr(config, "KEYCHAIN_SECRET", "secret-B")
+    _reset_fernet()
+    assert keychain._decrypt(token) == ""
+    _reset_fernet()
+
+
+def test_keychain_no_secret_passthrough(monkeypatch):
+    import config
+    import keychain
+    monkeypatch.setattr(config, "KEYCHAIN_SECRET", "")
+    monkeypatch.setattr(config, "SUPABASE_SERVICE_KEY", "")
+    monkeypatch.setattr(config, "APP_TOKEN", "")
+    _reset_fernet()
+    # シークレットが一切無ければ平文のまま（メモリ運用のみ想定 / crashしない）
+    assert keychain._encrypt("abc") == "abc"
+    assert keychain._decrypt("abc") == "abc"
+    _reset_fernet()
+
+
 # ── /tts rate（話速） ───────────────────────────────────────────────
 def test_tts_with_rate():
     r = client.post("/tts", json={"text": "テスト", "voice": "ja-JP-NanamiNeural", "rate": "+20%"})

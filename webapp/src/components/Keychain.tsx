@@ -11,8 +11,8 @@
  */
 
 import { motion } from "framer-motion";
-import { useEffect, useState } from "react";
-import { setKey as pushKey, deleteKey as pushDelete, API_URL } from "@/lib/api";
+import { useCallback, useEffect, useState } from "react";
+import { listKeys, setKey, deleteKey, API_URL, type ApiKeyInfo } from "@/lib/api";
 
 const LS_VAULT = "forge_vault_v1";
 
@@ -67,6 +67,12 @@ const maskValue = (v: string) => (v.length <= 4 ? "••••" : `${v.slice(0,
 
 /* ── component ─────────────────────────────────────────────────────── */
 export default function Keychain() {
+  // Backend connected → manage keys stored encrypted in Supabase (server-side
+  // Fernet). Offline → a local encrypted draft that can be imported later.
+  return API_URL ? <SupabaseVault /> : <OfflineVault />;
+}
+
+function OfflineVault() {
   const [phase, setPhase] = useState<Phase>("loading");
   const [pass, setPass] = useState("");           // held in memory only while unlocked
   const [passInput, setPassInput] = useState("");
@@ -78,7 +84,6 @@ export default function Keychain() {
   const [reveal, setReveal] = useState<Record<string, boolean>>({});
   const [customName, setCustomName] = useState("");
   const [customValue, setCustomValue] = useState("");
-  const [syncing, setSyncing] = useState(false);
   const [note, setNote] = useState<string | null>(null);
 
   useEffect(() => {
@@ -131,8 +136,7 @@ export default function Keychain() {
     setKeys(next);
     await persist(next, pass);
     setEdits((p) => ({ ...p, [name]: "" }));
-    if (API_URL) { try { await pushKey(name, v); setNote(`✓ ${name} を保存＋バックエンドに同期`); } catch { setNote(`✓ ${name} を暗号化保存（同期は失敗）`); } }
-    else setNote(`✓ ${name} を暗号化して端末に保存`);
+    setNote(`✓ ${name} を暗号化して端末に下書き保存`);
   };
 
   const removeKey = async (name: string) => {
@@ -140,19 +144,6 @@ export default function Keychain() {
     delete next[name];
     setKeys(next);
     await persist(next, pass);
-    if (API_URL) { try { await pushDelete(name); } catch { /* ignore */ } }
-  };
-
-  const syncAll = async () => {
-    if (!API_URL) return;
-    setSyncing(true);
-    let ok = 0, fail = 0;
-    for (const [name, value] of Object.entries(keys)) {
-      if (!value) continue;
-      try { await pushKey(name, value); ok++; } catch { fail++; }
-    }
-    setNote(`✓ ${ok}件をバックエンドに同期${fail ? ` / ${fail}件失敗` : ""}`);
-    setSyncing(false);
   };
 
   /* ── loading ── */
@@ -228,29 +219,19 @@ export default function Keychain() {
       {/* header / controls */}
       <div className="flex items-center justify-between rounded-forge border border-panel p-3">
         <div>
-          <div className="text-[10px] tracking-[0.2em] text-fg-strong label-mono">🔐 ENCRYPTED VAULT · UNLOCKED</div>
+          <div className="text-[10px] tracking-[0.2em] text-fg-strong label-mono">🔐 オフライン下書き · UNLOCKED</div>
           <div className="text-[9px] text-muted">AES-256-GCM · 端末内で暗号化 · localStorageには暗号文のみ</div>
         </div>
         <button type="button" onClick={lock} className="rounded-forge border border-[var(--line)] px-3 py-1.5 text-[10px] tracking-[0.14em] text-fg-strong label-mono">🔒 LOCK</button>
       </div>
 
-      {/* backend sync status */}
+      {/* offline notice */}
       <div className="rounded-forge border border-panel p-3">
-        <div className="flex items-center justify-between">
-          <span className="text-[10px] tracking-[0.16em] text-muted label-mono">
-            BACKEND: {API_URL ? "● LINK ACTIVE" : "○ OFFLINE"}
-          </span>
-          {API_URL && (
-            <button type="button" onClick={() => void syncAll()} disabled={syncing || Object.keys(keys).length === 0}
-              className="rounded-forge border border-[var(--line)] px-3 py-1 text-[10px] tracking-[0.14em] text-[var(--accent)] disabled:opacity-40 label-mono">
-              {syncing ? "同期中…" : "↑ 全キーを同期"}
-            </button>
-          )}
-        </div>
+        <span className="text-[10px] tracking-[0.16em] text-muted label-mono">BACKEND: ○ OFFLINE</span>
         <p className="mt-1 text-[10px] leading-relaxed text-muted">
-          {API_URL
-            ? "保存時に自動でバックエンドへ送られ、サーバー側（Gemini等）で利用されます。"
-            : "バックエンド未接続でも暗号化保管できます。接続後に「同期」でサーバーへ送れます。"}
+          いまはバックエンド未接続のため、ここで入れたキーは<b className="text-fg">この端末に暗号化して下書き保存</b>されます。
+          バックエンドを接続（DIAGNOSTICS参照）すると、KEYCHAINは<b className="text-fg">Supabaseに暗号化保存</b>する画面に切り替わり、
+          下書きの取り込みができます。
         </p>
         {note && <p className="mt-1 text-[10px] text-[#60d394]">{note}</p>}
       </div>
@@ -318,6 +299,155 @@ export default function Keychain() {
       <button type="button" onClick={destroyVault} className="self-start text-[10px] tracking-[0.14em] text-[#ff8888] hover:underline label-mono">
         ボルトを削除（全キーを消去）
       </button>
+    </div>
+  );
+}
+
+/* ── Supabase-backed vault (keys encrypted server-side, managed via UI) ── */
+function SupabaseVault() {
+  const [keys, setKeys] = useState<ApiKeyInfo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [edits, setEdits] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState<string | null>(null);
+  const [customName, setCustomName] = useState("");
+  const [customValue, setCustomValue] = useState("");
+  const [note, setNote] = useState<string | null>(null);
+  const [hasDraft, setHasDraft] = useState(false);
+
+  const refresh = useCallback(async () => {
+    try {
+      setKeys(await listKeys());
+      setError(null);
+    } catch {
+      setError("バックエンドに接続できません。DIAGNOSTICS で BACKEND を確認してください。");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    try { setHasDraft(!!localStorage.getItem(LS_VAULT)); } catch { /* ignore */ }
+  }, []);
+
+  const save = async (name: string, value: string) => {
+    const v = value.trim();
+    if (!v || !name) return;
+    setSaving(name);
+    try {
+      await setKey(name, v);
+      setEdits((p) => ({ ...p, [name]: "" }));
+      setNote(`✓ ${name} を Supabase に暗号化保存`);
+      await refresh();
+    } catch {
+      setNote(`⚠ ${name} の保存に失敗しました`);
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const remove = async (name: string) => {
+    setSaving(name);
+    try { await deleteKey(name); await refresh(); } catch { /* ignore */ } finally { setSaving(null); }
+  };
+
+  const importDraft = async () => {
+    let raw: string | null = null;
+    try { raw = localStorage.getItem(LS_VAULT); } catch { /* ignore */ }
+    if (!raw) { setHasDraft(false); return; }
+    const passcode = window.prompt("オフライン下書きのパスコードを入力してください");
+    if (!passcode) return;
+    let draft: Record<string, string>;
+    try {
+      draft = await decryptVault(JSON.parse(raw) as StoredVault, passcode);
+    } catch {
+      setNote("⚠ パスコードが違います（取り込めませんでした）");
+      return;
+    }
+    let ok = 0;
+    for (const [name, value] of Object.entries(draft)) {
+      if (!value) continue;
+      try { await setKey(name, value); ok++; } catch { /* ignore */ }
+    }
+    setNote(`✓ 下書き ${ok}件を Supabase に取り込みました`);
+    await refresh();
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="rounded-forge border border-panel p-3">
+        <div className="text-[10px] tracking-[0.2em] text-fg-strong label-mono">🔐 SUPABASE VAULT</div>
+        <div className="mt-1 text-[10px] leading-relaxed text-muted">
+          キーは<b className="text-fg">サーバー側でFernet暗号化</b>して Supabase に保存されます。DBには暗号文だけが残り、
+          画面には<b className="text-fg">マスク表示</b>のみ（フル値はAPIから返りません）。ここで追加・変更・削除できます。
+        </div>
+        {hasDraft && (
+          <button type="button" onClick={() => void importDraft()}
+            className="mt-2 text-[10px] tracking-[0.14em] text-[var(--accent)] hover:underline label-mono">
+            ↑ オフライン下書きを Supabase に取り込む
+          </button>
+        )}
+        {note && <p className="mt-1 text-[10px] text-[#60d394]">{note}</p>}
+        {error && <p className="mt-1 text-[10px] text-[#ff9b9b]">{error}</p>}
+      </div>
+
+      {loading ? (
+        <motion.div className="panel p-4 text-center text-[11px] tracking-[0.2em] text-muted label-mono" animate={{ opacity: [0.4, 1, 0.4] }} transition={{ duration: 1.4, repeat: Infinity }}>
+          ◈ LOADING KEYCHAIN…
+        </motion.div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {keys.map((k) => (
+            <div key={k.name} className="rounded-forge border border-panel p-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-[11px] tracking-[0.1em] text-fg-strong label-mono">{k.label || k.name}</div>
+                  {k.hint && <div className="text-[9px] text-muted">{k.hint}</div>}
+                </div>
+                <span className="text-[9px] tracking-[0.12em] label-mono" style={{ color: k.set ? "#60d394" : "#6a6f77" }}>
+                  {k.set ? `SET · ${k.masked}` : "NOT SET"}
+                </span>
+              </div>
+              <div className="mt-2 flex gap-2">
+                <input
+                  type="password" value={edits[k.name] ?? ""}
+                  onChange={(e) => setEdits((p) => ({ ...p, [k.name]: e.target.value }))}
+                  onKeyDown={(e) => e.key === "Enter" && void save(k.name, edits[k.name] ?? "")}
+                  placeholder={k.set ? "新しい値で上書き…" : "キーを貼り付け…"}
+                  className="min-w-0 flex-1 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-1.5 text-sm text-fg-strong focus:border-[var(--line)] focus:outline-none"
+                />
+                <button type="button" onClick={() => void save(k.name, edits[k.name] ?? "")}
+                  disabled={saving === k.name || !(edits[k.name] ?? "").trim()}
+                  className="shrink-0 rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] px-3 text-[10px] tracking-[0.14em] text-fg-strong disabled:opacity-40 label-mono">
+                  {saving === k.name ? "…" : "SAVE"}
+                </button>
+                {k.set && (
+                  <button type="button" onClick={() => void remove(k.name)} disabled={saving === k.name}
+                    className="shrink-0 rounded-forge border border-[#ff6b6b44] px-2 text-[10px] text-[#ff8888] label-mono">✕</button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* add custom key */}
+      <div className="rounded-forge border border-panel border-dashed p-3">
+        <div className="mb-2 text-[10px] tracking-[0.16em] text-muted label-mono">+ カスタムキーを追加</div>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <input value={customName} onChange={(e) => setCustomName(e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, "_"))}
+            placeholder="キー名（例：STRIPE_API_KEY）"
+            className="min-w-0 flex-1 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-1.5 text-sm text-fg-strong focus:border-[var(--line)] focus:outline-none label-mono" />
+          <input type="password" value={customValue} onChange={(e) => setCustomValue(e.target.value)}
+            placeholder="値"
+            className="min-w-0 flex-1 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-1.5 text-sm text-fg-strong focus:border-[var(--line)] focus:outline-none" />
+          <button type="button"
+            onClick={() => { if (customName && customValue.trim()) { void save(customName, customValue); setCustomName(""); setCustomValue(""); } }}
+            disabled={!customName || !customValue.trim()}
+            className="shrink-0 rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] px-4 text-[10px] tracking-[0.14em] text-fg-strong disabled:opacity-40 label-mono">追加</button>
+        </div>
+      </div>
     </div>
   );
 }

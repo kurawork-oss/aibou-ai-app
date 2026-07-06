@@ -554,8 +554,8 @@ function SettingsPanel({
           {tab === "keychain" && (
             <>
               <div className="mb-3 text-[10px] leading-relaxed text-muted">
-                APIキーをこの端末内で暗号化して保管します（AES-256）。まずパスコードを作成 → 各キーを貼り付けて SAVE。
-                バックエンド未接続でも保存でき、接続後は自動でサーバーに同期されます。
+                APIキーを暗号化して保管します。<b className="text-fg">バックエンド接続時は Supabase にサーバー側で暗号化保存</b>（Fernet・DBは暗号文のみ）。
+                未接続時は端末内に暗号化下書き（AES-256）として保存し、接続後に取り込めます。ここで追加・変更・削除できます。
               </div>
               <Keychain />
             </>

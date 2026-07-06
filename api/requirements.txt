@@ -8,3 +8,5 @@ python-dotenv
 pydantic
 # /video エンドポイントで root の renderer.py を再利用する際に必要（gTTS でナレーション生成）
 gTTS
+# APIキーをSupabaseに保存する際のFernet暗号化に使用
+cryptography
