@@ -1,0 +1,36 @@
+# render.yaml — THE FORGE OS backend (FastAPI) one-click deploy on Render.
+# =====================================================================
+# Render → New → "Blueprint" → connect this repo. Render reads this file and
+# builds the API from api/Dockerfile (build context = repo root, so renderer.py
+# is included). $PORT is injected by Render automatically.
+#
+# After it goes live you get a URL like https://aibou-brain-api.onrender.com —
+# put that in Vercel as NEXT_PUBLIC_API_URL, redeploy, then enter your Gemini
+# key in the app (Settings → KEYCHAIN). CORS is open by default.
+# =====================================================================
+services:
+  - type: web
+    name: aibou-brain-api
+    runtime: docker
+    dockerfilePath: ./api/Dockerfile
+    dockerContext: .
+    plan: free            # 無料。無操作でスリープ→初回アクセスは数十秒のコールドスタート
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      # Gemini キー。アプリの KEYCHAIN からも同期できるが、無料プランは
+      # スリープでメモリが消えるため、ここに設定しておくと確実。
+      - key: GEMINI_API_KEY
+        sync: false        # ダッシュボードで各自入力（リポジトリには保存されない）
+      # 任意：Supabase（記憶・タスク等の永続化）。未設定でもメモリ動作。
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      # CORS。既定で全許可。特定ドメインに絞るなら Vercel のURLを入れる。
+      - key: FRONTEND_ORIGIN
+        value: "*"
+      # 任意：APIをBearerトークンで保護する場合。設定したら Vercel の
+      # NEXT_PUBLIC_API_TOKEN に同じ値を入れる。
+      - key: APP_TOKEN
+        sync: false

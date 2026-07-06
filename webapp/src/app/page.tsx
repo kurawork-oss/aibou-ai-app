@@ -578,6 +578,22 @@ function SettingsPanel({
                 </div>
               </div>
 
+              {!process.env.NEXT_PUBLIC_API_URL ? (
+                <div className="rounded-forge border border-panel p-3">
+                  <div className="mb-2 text-[10px] tracking-[0.2em] label-mono" style={{ color: "#ffd060" }}>◈ バックエンド接続ガイド（3ステップ）</div>
+                  <ol className="ml-4 list-decimal space-y-1.5 text-[11px] leading-relaxed text-fg marker:text-muted">
+                    <li><b>バックエンドをデプロイ</b>：<code>api/</code> を Render（推奨・付属の <code>render.yaml</code> でほぼワンクリック）か Google Cloud Run へ。<code>api/Dockerfile</code> 同梱済み。</li>
+                    <li><b>Vercelに登録</b>：Settings → Environment Variables に <code>NEXT_PUBLIC_API_URL</code> ＝ 発行されたURL を追加 → <b>Redeploy</b>。</li>
+                    <li><b>再読込</b>：上部が <b>LINK ACTIVE</b> になったら KEYCHAIN で <b>Gemini API Key</b> を SAVE（自動でサーバーへ同期・即有効）。</li>
+                  </ol>
+                  <p className="mt-2 text-[10px] text-muted">詳細は <code>BACKEND_CONNECT.md</code>。CORSは既定で全許可、GeminiキーはKEYCHAIN同期でOK（サーバーのenv設定は不要）。</p>
+                </div>
+              ) : (
+                <div className="rounded-forge border border-panel p-3 text-[11px] leading-relaxed text-[#60d394]">
+                  ✓ バックエンド接続済み。あとは KEYCHAIN に <b>Gemini API Key</b> を入れれば各AI機能が有効になります。
+                </div>
+              )}
+
               {supabaseEnabled && (
                 <button
                   type="button"
