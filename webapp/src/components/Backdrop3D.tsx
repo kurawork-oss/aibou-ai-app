@@ -6,14 +6,62 @@
  * A depth-layered starfield (near stars drift & parallax faster than far
  * ones) over a perspective grid floor that scrolls slowly toward the viewer,
  * like a holodeck. Pointer-parallax leans the whole field so the UI reads as
- * a window into 3D space. Very low intensity by design — it must never fight
- * the content.
+ * a window into 3D space. Kept below content contrast — present but never
+ * fighting the panels.
  *
- * Pure 2D-canvas (no WebGL). Static frame under prefers-reduced-motion;
- * pauses while the tab is hidden; DPR capped at 2.
+ * Sky events: every so often a real constellation (北斗七星・カシオペヤ・
+ * オリオン・はくちょう・こと座) fades in at a random spot/rotation, holds,
+ * and dissolves; meteors (流れ星) streak across the upper sky on a random
+ * cadence — occasionally a long bright one.
+ *
+ * Pure 2D-canvas (no WebGL). Static frame under prefers-reduced-motion
+ * (one constellation shown, no meteors); pauses while the tab is hidden;
+ * DPR capped at 2.
  */
 
 import { useEffect, useRef } from "react";
+
+/* ── Constellation shapes (normalized coords + edge lists) ─────────── */
+interface ConstShape { name: string; pts: [number, number][]; edges: [number, number][] }
+
+const CONSTELLATIONS: ConstShape[] = [
+  { // 北斗七星 (Big Dipper) — handle into the bowl
+    name: "dipper",
+    pts: [[0, 0.28], [0.15, 0.2], [0.3, 0.16], [0.45, 0.2], [0.6, 0.16], [0.78, 0.22], [0.72, 0.42]],
+    edges: [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 3]],
+  },
+  { // カシオペヤ座 (Cassiopeia) — the W
+    name: "cassiopeia",
+    pts: [[0, 0.4], [0.22, 0.15], [0.45, 0.35], [0.68, 0.05], [0.95, 0.25]],
+    edges: [[0, 1], [1, 2], [2, 3], [3, 4]],
+  },
+  { // オリオン座 (Orion) — shoulders, belt, feet
+    name: "orion",
+    pts: [[0.2, 0.05], [0.75, 0.08], [0.38, 0.42], [0.5, 0.5], [0.62, 0.58], [0.15, 0.92], [0.8, 0.95]],
+    edges: [[0, 2], [2, 3], [3, 4], [4, 1], [2, 5], [4, 6]],
+  },
+  { // はくちょう座 (Cygnus) — the Northern Cross
+    name: "cygnus",
+    pts: [[0.5, 0], [0.5, 0.38], [0.5, 0.66], [0.5, 1], [0.06, 0.5], [0.94, 0.26]],
+    edges: [[0, 1], [1, 2], [2, 3], [4, 1], [1, 5]],
+  },
+  { // こと座 (Lyra) — Vega + the little parallelogram
+    name: "lyra",
+    pts: [[0.5, 0], [0.42, 0.28], [0.64, 0.34], [0.56, 0.62], [0.34, 0.56]],
+    edges: [[0, 1], [1, 2], [2, 3], [3, 4], [4, 1]],
+  },
+];
+
+interface ActiveConst {
+  shape: ConstShape;
+  x: number; y: number; scale: number; rot: number;
+  born: number; dur: number;
+}
+
+interface Meteor {
+  x: number; y: number; vx: number; vy: number;
+  born: number; life: number; len: number; big: boolean;
+}
 
 export default function Backdrop3D() {
   const ref = useRef<HTMLCanvasElement | null>(null);
@@ -61,6 +109,122 @@ export default function Backdrop3D() {
     let last = performance.now();
     let t = 0;
 
+    /* Sky events — one constellation at a time + up to 3 meteors. */
+    let activeConst: ActiveConst | null = null;
+    let lastConstIdx = -1;
+    let nextConstAt = 1.0;   // first one appears quickly
+    let meteors: Meteor[] = [];
+    let nextMeteorAt = 1.6;  // first shooting star soon after load
+
+    const spawnConstellation = () => {
+      let idx = Math.floor(Math.random() * CONSTELLATIONS.length);
+      if (idx === lastConstIdx) idx = (idx + 1) % CONSTELLATIONS.length;
+      lastConstIdx = idx;
+      const scale = Math.min(w, h) * (0.16 + Math.random() * 0.10);
+      activeConst = {
+        shape: CONSTELLATIONS[idx],
+        x: w * (0.12 + Math.random() * 0.66),
+        y: h * (0.06 + Math.random() * 0.34),
+        scale,
+        rot: (Math.random() - 0.5) * 0.7,
+        born: t,
+        dur: 8 + Math.random() * 4,
+      };
+    };
+
+    const spawnMeteor = () => {
+      const big = Math.random() < 0.18;
+      const dir = Math.random() < 0.5 ? 1 : -1; // left→right or right→left
+      const speed = (0.55 + Math.random() * 0.5) * Math.max(w, 900);
+      const angle = (24 + Math.random() * 16) * (Math.PI / 180);
+      meteors.push({
+        x: dir === 1 ? -40 + Math.random() * w * 0.4 : w * 0.6 + Math.random() * w * 0.4 + 40,
+        y: h * (0.02 + Math.random() * 0.3),
+        vx: Math.cos(angle) * speed * dir,
+        vy: Math.sin(angle) * speed,
+        born: t,
+        life: big ? 1.1 + Math.random() * 0.4 : 0.6 + Math.random() * 0.4,
+        len: big ? 150 + Math.random() * 90 : 70 + Math.random() * 60,
+        big,
+      });
+    };
+
+    const drawConstellation = () => {
+      if (!activeConst) return;
+      const c = activeConst;
+      const age = t - c.born;
+      if (age > c.dur) {
+        activeConst = null;
+        nextConstAt = t + 6 + Math.random() * 9;
+        return;
+      }
+      // Envelope: fade in 1.4s, hold, fade out 1.8s.
+      const env = Math.min(1, age / 1.4) * Math.min(1, (c.dur - age) / 1.8);
+      const cosR = Math.cos(c.rot), sinR = Math.sin(c.rot);
+      const proj = c.shape.pts.map(([nx, ny]) => {
+        const ox = (nx - 0.5) * c.scale, oy = (ny - 0.5) * c.scale;
+        return {
+          x: c.x + ox * cosR - oy * sinR - lpx * 8,
+          y: c.y + ox * sinR + oy * cosR - lpy * 5,
+        };
+      });
+      // Connecting lines.
+      ctx.strokeStyle = `rgba(175,212,255,${(0.16 * env).toFixed(3)})`;
+      ctx.lineWidth = 1;
+      for (const [a, b] of c.shape.edges) {
+        ctx.beginPath();
+        ctx.moveTo(proj[a].x, proj[a].y);
+        ctx.lineTo(proj[b].x, proj[b].y);
+        ctx.stroke();
+      }
+      // Member stars — brighter than the field, with a soft halo.
+      for (let i = 0; i < proj.length; i++) {
+        const p = proj[i];
+        const r = i === 0 ? 2.1 : 1.5; // lead star slightly larger
+        const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r * 3.4);
+        g.addColorStop(0, `rgba(235,245,255,${(0.85 * env).toFixed(3)})`);
+        g.addColorStop(0.4, `rgba(190,222,255,${(0.30 * env).toFixed(3)})`);
+        g.addColorStop(1, "rgba(190,222,255,0)");
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r * 3.4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    };
+
+    const drawMeteors = (dt: number) => {
+      meteors = meteors.filter((m) => t - m.born < m.life);
+      for (const m of meteors) {
+        m.x += m.vx * dt;
+        m.y += m.vy * dt;
+        const age = (t - m.born) / m.life;
+        // Quick flare-in, long fade-out.
+        const env = Math.min(1, age * 6) * (1 - age * age);
+        const sp = Math.hypot(m.vx, m.vy) || 1;
+        const tx = m.x - (m.vx / sp) * m.len;
+        const ty = m.y - (m.vy / sp) * m.len;
+        const grad = ctx.createLinearGradient(m.x, m.y, tx, ty);
+        grad.addColorStop(0, `rgba(240,250,255,${(0.85 * env).toFixed(3)})`);
+        grad.addColorStop(0.25, `rgba(170,215,255,${(0.4 * env).toFixed(3)})`);
+        grad.addColorStop(1, "rgba(120,180,255,0)");
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = m.big ? 2 : 1.4;
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(m.x, m.y);
+        ctx.lineTo(tx, ty);
+        ctx.stroke();
+        // Bright head.
+        const hg2 = ctx.createRadialGradient(m.x, m.y, 0, m.x, m.y, m.big ? 7 : 4.5);
+        hg2.addColorStop(0, `rgba(255,255,255,${(0.9 * env).toFixed(3)})`);
+        hg2.addColorStop(1, "rgba(200,235,255,0)");
+        ctx.fillStyle = hg2;
+        ctx.beginPath();
+        ctx.arc(m.x, m.y, m.big ? 7 : 4.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    };
+
     const draw = (now: number) => {
       const dt = Math.min((now - last) / 1000, 0.05);
       last = now;
@@ -86,6 +250,17 @@ export default function Backdrop3D() {
         ctx.arc(((sx % w) + w) % w, sy, r, 0, Math.PI * 2);
         ctx.fill();
       }
+
+      /* Sky events — constellations fade in/out; meteors streak across. */
+      if (!reduce) {
+        if (!activeConst && t >= nextConstAt) spawnConstellation();
+        if (t >= nextMeteorAt && meteors.length < 3) {
+          spawnMeteor();
+          nextMeteorAt = t + 4 + Math.random() * 7;
+        }
+      }
+      drawConstellation();
+      drawMeteors(dt);
 
       /* Perspective grid floor (bottom of the viewport). */
       const horizon = h * 0.66;
@@ -133,6 +308,9 @@ export default function Backdrop3D() {
     };
 
     if (reduce) {
+      // Static frame — include one fully-faded-in constellation, no meteors.
+      spawnConstellation();
+      if (activeConst) (activeConst as ActiveConst).born = t - 2;
       draw(last + 16);
       return () => {
         window.removeEventListener("resize", resize);
