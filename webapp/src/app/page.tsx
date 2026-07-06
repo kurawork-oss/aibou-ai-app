@@ -410,6 +410,8 @@ function SettingsPanel({
   const [voice, setVoice] = useState(initialVoice);
   const [ttsVoice, setTtsVoice] = useState(initial.voice || DEFAULT_TTS_VOICE);
   const [rate, setRate] = useState(initial.rate ?? DEFAULT_TTS_RATE);
+  const [host, setHost] = useState("");
+  useEffect(() => { try { setHost(window.location.host); } catch { /* ignore */ } }, []);
 
   return (
     <motion.div
@@ -563,6 +565,29 @@ function SettingsPanel({
 
           {tab === "diagnostics" && (
             <div className="flex flex-col gap-3">
+              {(() => {
+                const repo = process.env.NEXT_PUBLIC_GIT_REPO || "";
+                const sha = (process.env.NEXT_PUBLIC_COMMIT_SHA || "").slice(0, 7);
+                const vercelEnv = process.env.NEXT_PUBLIC_VERCEL_ENV || "";
+                const onVercel = !!vercelEnv || host.endsWith(".vercel.app");
+                const sbUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+                const sbRef = sbUrl ? sbUrl.replace(/^https?:\/\//, "").split(".")[0] : "";
+                const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+                return (
+                  <div className="rounded-forge border border-panel p-3">
+                    <div className="mb-2 text-[10px] tracking-[0.2em] text-muted label-mono">CONNECTIONS · 接続状況</div>
+                    <div className="flex flex-col gap-2">
+                      <ConnRow name="GitHub" ok={!!repo} value={repo ? `${repo}${sha ? ` @ ${sha}` : ""}` : "—"} />
+                      <ConnRow name="Vercel" ok={onVercel}
+                        value={onVercel ? `${vercelEnv ? vercelEnv.toUpperCase() : "HOSTED"}${host ? ` · ${host}` : ""}` : (host || "ローカル / 他ホスト")} />
+                      <ConnRow name="Supabase" ok={supabaseEnabled}
+                        value={sbRef ? `${sbRef}${supabaseEnabled ? "" : " · キー未設定"}` : "未設定"} />
+                      <ConnRow name="Backend API" ok={!!apiUrl} value={apiUrl || "未接続"} />
+                    </div>
+                  </div>
+                );
+              })()}
+
               <DiagRow label="BUILD" value={APP_VERSION} ok={true} />
               <DiagRow label="LINK STATUS" value={online ? "ACTIVE" : "OFFLINE"} ok={online} />
               <DiagRow label="FRONTEND" value="NEXT.JS 14 · VERCEL" ok={true} />
@@ -573,8 +598,9 @@ function SettingsPanel({
 
               <div className="mt-2 rounded-forge border border-panel p-3">
                 <div className="mb-2 text-[10px] tracking-[0.2em] text-muted label-mono">ENVIRONMENT</div>
-                <div className="text-[10px] text-muted">
+                <div className="flex flex-col gap-0.5 break-all text-[10px] text-muted">
                   <p>API_URL: <span className="text-fg">{process.env.NEXT_PUBLIC_API_URL || "(not set)"}</span></p>
+                  <p>SUPABASE_URL: <span className="text-fg">{process.env.NEXT_PUBLIC_SUPABASE_URL || "(not set)"}</span></p>
                 </div>
               </div>
 
@@ -656,6 +682,24 @@ function DiagRow({ label, value, ok }: { label: string; value: string; ok: boole
         className="text-[10px] tracking-[0.12em] label-mono"
         style={{ color: ok ? "#60d394" : "#ff6b6b" }}
       >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+/** A connection row for the CONNECTIONS panel: colored dot + name + value. */
+function ConnRow({ name, ok, value }: { name: string; ok: boolean; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <span className="flex items-center gap-2 text-[11px] text-fg-strong">
+        <span
+          className="h-2 w-2 shrink-0 rounded-full"
+          style={{ background: ok ? "#60d394" : "#5a5f66", boxShadow: ok ? "0 0 6px rgba(96,211,148,0.7)" : "none" }}
+        />
+        {name}
+      </span>
+      <span className="min-w-0 truncate text-right text-[10px] tracking-[0.04em] label-mono" style={{ color: ok ? "#c5c6c7" : "#6a6f77" }}>
         {value}
       </span>
     </div>

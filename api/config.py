@@ -17,7 +17,9 @@ load_dotenv()
 
 # ── 環境変数 ────────────────────────────────────────────────────
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip()
+# 既定のSupabaseプロジェクト（環境変数で上書き可）。URLのみ既定値を持ち、
+# service_role キーは必ず環境変数から与える（接続には両方が必要）。
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip() or "https://hwjmojipsablfevtjzln.supabase.co"
 SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "").strip()
 APP_TOKEN = os.environ.get("APP_TOKEN", "").strip()          # 任意：APIをBearerで保護
 FRONTEND_ORIGIN = os.environ.get("FRONTEND_ORIGIN", "*").strip() or "*"
