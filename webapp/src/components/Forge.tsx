@@ -19,6 +19,14 @@ const KINDS: { key: ForgeKind; label: string; hint: string; placeholder: string 
   { key: "doc", label: "DOC", hint: "文書", placeholder: "例：サービスの企画書" },
 ];
 
+/** "サイバーパンクな都市" → "サイバーパンクな都市_1201-1530" — readable, unique. */
+function slugName(prompt: string, fallback: string): string {
+  const base = (prompt.trim().slice(0, 24) || fallback).replace(/[\\/:*?"<>|\s]+/g, "_");
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${base}_${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}`;
+}
+
 function download(filename: string, content: string, mime = "text/plain") {
   const blob = new Blob([content], { type: mime });
   const url = URL.createObjectURL(blob);
@@ -41,12 +49,24 @@ export default function Forge() {
   const kind: ForgeKind = isVideo ? "app" : tab;
   const active = KINDS.find((k) => k.key === kind)!;
 
-  const generate = async (promptText: string) => {
+  // Switching kind clears stale results/errors/edit box (an image's 修正
+  // instruction must not apply to slides).
+  const switchTab = (next: ForgeKind | "video") => {
+    if (next === tab) return;
+    setTab(next);
+    setResult(null);
+    setError(null);
+    setEditInstruction("");
+  };
+
+  const generate = async (promptText: string, opts?: { keepResult?: boolean }) => {
     const p = promptText.trim();
     if (!p || busy) return;
     setBusy(true);
     setError(null);
-    setResult(null);
+    // On 修正 keep the previous artifact visible until the new one lands —
+    // a failed regenerate must not destroy work.
+    if (!opts?.keepResult) setResult(null);
     try {
       const r = await forgeGenerate(kind, p);
       if (r.error) setError(r.error);
@@ -67,11 +87,15 @@ export default function Forge() {
 
   const run = () => generate(prompt);
 
-  // Re-run with an edit instruction appended (修正 / regenerate).
+  // Re-run with the previous output + an edit instruction (真の「修正」).
   const regenerate = () => {
     if (!editInstruction.trim()) return;
     const base = prompt.trim() || "（前回の生成物）";
-    generate(`${base}\n\n【前回の生成物への修正指示】\n${editInstruction.trim()}`);
+    // Give the model the actual previous artifact so 修正 edits it rather
+    // than re-rolling from scratch.
+    const prevBody = result?.code || result?.markdown || result?.csv || "";
+    const prev = prevBody ? `\n\n【前回の生成物】\n${prevBody.slice(0, 6000)}` : "";
+    generate(`${base}${prev}\n\n【前回の生成物への修正指示】\n${editInstruction.trim()}`, { keepResult: true });
     setEditInstruction("");
   };
 
@@ -83,7 +107,7 @@ export default function Forge() {
           <button
             key={k.key}
             type="button"
-            onClick={() => setTab(k.key)}
+            onClick={() => switchTab(k.key)}
             className="rounded-forge border px-3 py-1.5 text-[10px] tracking-[0.18em] label-mono transition"
             style={{
               borderColor: tab === k.key ? "var(--accent)" : "var(--panel-bd)",
@@ -96,7 +120,7 @@ export default function Forge() {
         ))}
         <button
           type="button"
-          onClick={() => setTab("video")}
+          onClick={() => switchTab("video")}
           className="rounded-forge border px-3 py-1.5 text-[10px] tracking-[0.18em] label-mono transition"
           style={{
             borderColor: isVideo ? "var(--accent)" : "var(--panel-bd)",
@@ -141,7 +165,7 @@ export default function Forge() {
                   <input
                     value={editInstruction}
                     onChange={(e) => setEditInstruction(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && regenerate()}
+                    onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && regenerate()}
                     placeholder="例：グラフを追加して / 色を青系に / 章を1つ増やして"
                     className="min-w-0 flex-1 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2 text-sm text-fg-strong placeholder:text-muted focus:border-[var(--line)] focus:outline-none"
                   />
@@ -211,7 +235,7 @@ function ForgeResultView({ result, prompt }: { result: ForgeResult; prompt: stri
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = "forge_image.png";
+        a.download = `${slugName(prompt, "image")}.png`;
         a.click();
         URL.revokeObjectURL(url);
       } catch {
@@ -274,7 +298,7 @@ function ForgeResultView({ result, prompt }: { result: ForgeResult; prompt: stri
   if (result.kind === "sheet" && result.csv) {
     return (
       <div className="panel p-3">
-        <Toolbar onDownload={() => download("forge_sheet.csv", result.csv!, "text/csv")} label=".csv" />
+        <Toolbar onDownload={() => download(`${slugName(prompt, "sheet")}.csv`, result.csv!, "text/csv")} label=".csv" />
         <div className="mt-2 max-h-80 overflow-auto">
           <CsvTable csv={result.csv} />
         </div>
@@ -288,7 +312,7 @@ function ForgeResultView({ result, prompt }: { result: ForgeResult; prompt: stri
     return (
       <div className="panel p-3">
         <Toolbar
-          onDownload={() => download(isSlides ? "forge_slides.md" : "forge_doc.md", result.markdown!, "text/markdown")}
+          onDownload={() => download(isSlides ? `${slugName(prompt, "slides")}.md` : `${slugName(prompt, "doc")}.md`, result.markdown!, "text/markdown")}
           label=".md"
         />
         <pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap rounded-forge bg-black/30 p-3 text-[12px] leading-relaxed text-fg">

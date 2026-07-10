@@ -1,6 +1,20 @@
 -- =====================================================================
--- AIbou — Supabase テーブル定義
--- 新しいSupabaseプロジェクトを作ったら、SQL Editor でこのファイルを実行する。
+-- THE FORGE OS — Supabase テーブル定義（このファイル1つで全部そろう）
+--
+-- 使い方（新規プロジェクト初期化・約30秒）:
+--   1. Supabase ダッシュボード → 対象プロジェクト → SQL Editor
+--   2. このファイルの中身を全部コピーして貼り付け → RUN
+--   3. 「Success. No rows returned」と出れば完了
+--
+-- ・全文 IF NOT EXISTS の冪等設計 — 何度実行しても安全（既存データは消えない）
+-- ・現行アプリ(FastAPI)が使うのは: api_keys / tasks / missions / automations /
+--   events / notifications / vault_notebooks / income_jobs / studio_ais /
+--   studio_workflows / agent_memory の11テーブル
+--   （vault_data / dashboard_boards / forge_apps / core_versions /
+--     evolution_proposals / income_stats は旧Streamlit版の互換用。あっても無害）
+-- ・api_keys.value にはサーバー側でFernet暗号化された暗号文が入る（平文は不保存）
+-- ・アクセスはバックエンドの service_role キー経由のみ。RLSポリシー未設定でも
+--   anon キーからはテーブルに触れないため安全（ログインは Supabase Auth を使用）
 -- =====================================================================
 
 -- 【Phase 1 / 必須】APIキーの暗号化保存（現状アプリが使う唯一のテーブル）

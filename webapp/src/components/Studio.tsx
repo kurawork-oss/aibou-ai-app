@@ -121,6 +121,7 @@ function AIsPanel() {
   };
 
   const handleDelete = async (id: string) => {
+    if (!window.confirm("このカスタムAIを削除しますか？")) return;
     try {
       await studioDeleteAI(id);
       setAIs((prev) => prev.filter((a) => a.id !== id));
@@ -288,6 +289,7 @@ function WorkflowsPanel() {
   };
 
   const handleDelete = async (id: string) => {
+    if (!window.confirm("このワークフローを削除しますか？")) return;
     try {
       await studioDeleteWorkflow(id);
       setWorkflows((prev) => prev.filter((w) => w.id !== id));

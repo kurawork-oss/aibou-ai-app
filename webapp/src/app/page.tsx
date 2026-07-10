@@ -92,9 +92,20 @@ function Hud() {
       const rate = rateRaw ? Number(rateRaw) || DEFAULT_TTS_RATE : DEFAULT_TTS_RATE;
       setSettings({ name, persona, voice: ttsVoice, rate });
       if (voice !== null) setVoiceReplies(voice === "1");
+      // Reopen the mode you were using (PWA relaunch lands where you left off).
+      const savedView = localStorage.getItem("forge_view") as View | null;
+      if (savedView && ["chat", "forge", "vault", "income", "tasks", "studio", "autopilot", "board", "archive", "home"].includes(savedView)) {
+        setView(savedView);
+      }
     } catch { /* ignore */ }
     setLoaded(true);
   }, []);
+
+  // Persist the active mode.
+  useEffect(() => {
+    if (!loaded) return;
+    try { localStorage.setItem("forge_view", view); } catch { /* ignore */ }
+  }, [view, loaded]);
 
   useEffect(() => {
     let active = true;
@@ -657,6 +668,7 @@ function SettingsPanel({
               <button
                 type="button"
                 onClick={() => {
+                  if (!window.confirm("端末内の全データを消去します：チャット履歴・アプリアーカイブ・KEYCHAINの暗号化ボルト（オフライン保存分）・各種設定。\n本当に実行しますか？（元に戻せません）")) return;
                   try { localStorage.clear(); } catch { /* ignore */ }
                   try { sessionStorage.clear(); } catch { /* ignore */ }
                   window.location.reload();

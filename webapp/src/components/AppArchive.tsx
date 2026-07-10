@@ -76,6 +76,7 @@ export default function AppArchive() {
   }, []);
 
   const handleDelete = (id: string) => {
+    if (!window.confirm("このアプリのコードを削除しますか？（元に戻せません）")) return;
     const next = apps.filter((a) => a.id !== id);
     setApps(next);
     saveArchive(next);

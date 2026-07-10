@@ -101,6 +101,7 @@ export default function Tasks() {
   };
 
   const handleDelete = async (id: string) => {
+    if (!window.confirm("このタスクを削除しますか？（元に戻せません）")) return;
     setUpdatingId(id);
     try {
       await deleteTask(id);
@@ -146,7 +147,7 @@ export default function Tasks() {
         <input
           value={newTitle}
           onChange={(e) => setNewTitle(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && void handleCreate()}
+          onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && !e.shiftKey && void handleCreate()}
           placeholder="タスクのタイトル…"
           className="mb-2 w-full rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2 text-sm text-fg-strong placeholder:text-muted focus:border-[var(--line)] focus:outline-none"
         />

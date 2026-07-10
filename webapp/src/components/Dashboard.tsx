@@ -110,7 +110,7 @@ export default function Dashboard() {
             <textarea
               value={nl}
               onChange={(e) => setNl(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void createFromNL(nl); } }}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing && !e.shiftKey) { e.preventDefault(); void createFromNL(nl); } }}
               rows={2}
               placeholder="やりたいことを自然言語で…（例：毎朝ニュースを要約してLINEに送る）"
               className="min-h-[2.5rem] flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-fg-strong placeholder:text-muted focus:outline-none"
@@ -184,7 +184,11 @@ export default function Dashboard() {
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
             {flows.map((f) => (
-              <FlowCard key={f.id} flow={f} onDelete={async () => { await automationsDelete(f.id); setFlows((p) => p.filter((x) => x.id !== f.id)); }} />
+              <FlowCard key={f.id} flow={f} onDelete={async () => {
+                if (!window.confirm(`自動化「${f.name}」を削除しますか？`)) return;
+                try { await automationsDelete(f.id); setFlows((p) => p.filter((x) => x.id !== f.id)); }
+                catch { setError("削除に失敗しました（バックエンド未接続の可能性）"); }
+              }} />
             ))}
           </div>
         )}
@@ -243,7 +247,7 @@ function FlowBuilder({ onCreated, onError }: { onCreated: (f: Automation) => voi
       <div className="flex flex-col gap-1.5">
         {/* Trigger node (visual) */}
         <div className="rounded-forge border border-dashed border-panel px-3 py-1.5 text-center text-[10px] tracking-[0.16em] text-muted label-mono">
-          ⚡ TRIGGER（手動 / cron）
+          ⚡ TRIGGER（手動実行）
         </div>
         {steps.map((s, i) => (
           <div key={i}>

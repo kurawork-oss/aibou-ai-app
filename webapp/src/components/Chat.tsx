@@ -123,6 +123,7 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
 
   const newChat = useCallback(() => {
     cancelRef.current?.();
+    speechCancelledRef.current = true;
     stopSpeaking();
     setMessages([]);
     setInput("");
@@ -135,6 +136,7 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
     const c = loadConvos().find((x) => x.id === id);
     if (!c) return;
     cancelRef.current?.();
+    speechCancelledRef.current = true;
     stopSpeaking();
     setMessages(c.messages.map((m) => ({ ...m, pending: false })));
     setCurrentId(c.id);
@@ -142,6 +144,7 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
   }, []);
 
   const deleteConvo = useCallback((id: string) => {
+    if (!window.confirm("この履歴を削除しますか？（元に戻せません）")) return;
     setConvos((prev) => {
       const next = prev.filter((c) => c.id !== id);
       saveConvos(next);
@@ -179,10 +182,13 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
     onStateChange?.(coreState);
   }, [coreState, onStateChange]);
 
-  // Auto-scroll to the newest content.
+  // Auto-scroll to the newest content — but only when the user is already
+  // near the bottom, so scrolling up to re-read isn't yanked back per token.
   useEffect(() => {
     const el = scrollRef.current;
-    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    if (!el) return;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 160;
+    if (nearBottom) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [messages]);
 
   // Cleanup any in-flight stream / speech on unmount.
@@ -200,9 +206,14 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
       .map((m) => ({ role: m.role, content: m.content }));
   }, [messages]);
 
+  // Set when the user stops generation / switches conversations — a reply
+  // that finishes after that must not be spoken into the new context.
+  const speechCancelledRef = useRef(false);
+
   /** Speak a completed assistant reply (browser TTS → API /tts fallback). */
   const speakReply = useCallback(
     async (text: string) => {
+      if (speechCancelledRef.current) return;
       if (!voiceReplies || !text.trim()) return;
       setSpeaking(true);
       const rate = settings.rate ?? 1.0;
@@ -225,6 +236,69 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
     [voiceReplies, ttsSupported, settings.voice, settings.rate],
   );
 
+  /** Execute one assistant turn (vision or SSE stream) into the given bubble.
+      Shared by send() and regenerate(). */
+  const runTurn = useCallback(
+    async (
+      text: string,
+      image: { base64: string; mime: string } | null,
+      assistantId: string,
+      history: ChatTurn[],
+    ) => {
+      // Image path → one-shot /vision (non-streaming) for multimodal understanding.
+      if (image) {
+        try {
+          const reply = await vision({
+            prompt: text || "この画像について説明してください。",
+            imageBase64: image.base64,
+            mime: image.mime,
+          });
+          setMessages((prev) =>
+            prev.map((m) => (m.id === assistantId ? { ...m, content: reply, pending: false } : m)),
+          );
+          void speakReply(reply);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "Vision request failed.";
+          setMessages((prev) =>
+            prev.map((m) => (m.id === assistantId ? { ...m, content: msg, pending: false, error: true } : m)),
+          );
+        } finally {
+          setStreaming(false);
+        }
+        return;
+      }
+
+      // Text path → SSE streaming.
+      let acc = "";
+      const handlers = streamChat(
+        { message: text, history, persona: settings.persona || undefined, name: settings.name || undefined },
+        (token) => {
+          acc += token;
+          setMessages((prev) =>
+            prev.map((m) => (m.id === assistantId ? { ...m, content: acc, pending: false } : m)),
+          );
+        },
+        (error) => {
+          setStreaming(false);
+          cancelRef.current = null;
+          if (error && !acc) {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantId ? { ...m, content: `⚠ ${error}`, pending: false, error: true } : m,
+              ),
+            );
+            return;
+          }
+          // Mark complete and speak the final reply.
+          setMessages((prev) => prev.map((m) => (m.id === assistantId ? { ...m, pending: false } : m)));
+          if (acc.trim()) void speakReply(acc);
+        },
+      );
+      cancelRef.current = handlers.cancel;
+    },
+    [settings, speakReply],
+  );
+
   /** Send a text turn (optionally with an attached image → /vision). */
   const send = useCallback(async () => {
     const text = input.trim();
@@ -234,6 +308,7 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
     resetMic();
     stopSpeaking();
 
+    speechCancelledRef.current = false;
     const image = pendingImage;
     const userMsg: Message = {
       id: uid(),
@@ -248,60 +323,48 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
     setPendingImage(null);
     setStreaming(true);
 
-    // Image path → one-shot /vision (non-streaming) for multimodal understanding.
-    if (image) {
-      try {
-        const reply = await vision({
-          prompt: text || "この画像について説明してください。",
-          imageBase64: image.base64,
-          mime: image.mime,
-        });
-        setMessages((prev) =>
-          prev.map((m) => (m.id === assistantMsg.id ? { ...m, content: reply, pending: false } : m)),
-        );
-        void speakReply(reply);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "Vision request failed.";
-        setMessages((prev) =>
-          prev.map((m) => (m.id === assistantMsg.id ? { ...m, content: msg, pending: false, error: true } : m)),
-        );
-      } finally {
-        setStreaming(false);
-      }
-      return;
-    }
-
-    // Text path → SSE streaming.
     const history = buildHistory();
-    let acc = "";
-    const handlers = streamChat(
-      { message: text, history, persona: settings.persona || undefined, name: settings.name || undefined },
-      (token) => {
-        acc += token;
-        setMessages((prev) =>
-          prev.map((m) => (m.id === assistantMsg.id ? { ...m, content: acc, pending: false } : m)),
-        );
-      },
-      (error) => {
-        setStreaming(false);
-        cancelRef.current = null;
-        if (error && !acc) {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantMsg.id ? { ...m, content: `⚠ ${error}`, pending: false, error: true } : m,
-            ),
-          );
-          return;
-        }
-        // Mark complete and speak the final reply.
-        setMessages((prev) => prev.map((m) => (m.id === assistantMsg.id ? { ...m, pending: false } : m)));
-        if (acc.trim()) void speakReply(acc);
-      },
-    );
-    cancelRef.current = handlers.cancel;
-  }, [input, pendingImage, streaming, listening, stopMic, resetMic, buildHistory, settings, speakReply]);
+    await runTurn(text, image ? { base64: image.base64, mime: image.mime } : null, assistantMsg.id, history);
+  }, [input, pendingImage, streaming, listening, stopMic, resetMic, buildHistory, runTurn]);
+
+  /** ChatGPT-style 再生成 — re-run the latest user turn into a fresh bubble. */
+  const regenerate = useCallback(async () => {
+    if (streaming) return;
+    const lastUserIdx = messages.map((m) => m.role).lastIndexOf("user");
+    if (lastUserIdx < 0) return;
+    const userMsg = messages[lastUserIdx];
+    stopSpeaking();
+    setSpeaking(false);
+    speechCancelledRef.current = false;
+
+    const kept = messages.slice(0, lastUserIdx + 1);
+    const assistantMsg: Message = { id: uid(), role: "assistant", content: "", pending: true };
+    setMessages([...kept, assistantMsg]);
+    setStreaming(true);
+
+    // History = clean turns BEFORE the regenerated user message.
+    const history: ChatTurn[] = kept
+      .slice(0, -1)
+      .filter((m) => !m.pending && !m.error && m.content.trim())
+      .slice(-HISTORY_LIMIT)
+      .map((m) => ({ role: m.role, content: m.content }));
+
+    // Rebuild the vision payload from the stored data-URL if the turn had an image.
+    let image: { base64: string; mime: string } | null = null;
+    if (userMsg.image) {
+      const comma = userMsg.image.indexOf(",");
+      const semi = userMsg.image.indexOf(";");
+      image = {
+        base64: comma >= 0 ? userMsg.image.slice(comma + 1) : "",
+        mime: semi > 5 ? userMsg.image.slice(5, semi) : "image/jpeg",
+      };
+    }
+    const text = userMsg.content === "(image)" ? "" : userMsg.content;
+    await runTurn(text, image, assistantMsg.id, history);
+  }, [messages, streaming, runTurn]);
 
   const stopStreaming = useCallback(() => {
+    speechCancelledRef.current = true;
     cancelRef.current?.();
     cancelRef.current = null;
     setStreaming(false);
@@ -335,6 +398,8 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
 
   const onKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
+      // Never submit mid-IME composition (Japanese conversion Enter).
+      if (e.nativeEvent.isComposing) return;
       // Enter to send, Shift+Enter for newline.
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
@@ -370,8 +435,16 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
         {messages.length === 0 && <EmptyState name={settings.name} />}
 
         <AnimatePresence initial={false}>
-          {messages.map((m) => (
-            <MessageBubble key={m.id} message={m} />
+          {messages.map((m, i) => (
+            <MessageBubble
+              key={m.id}
+              message={m}
+              onRegenerate={
+                !streaming && m.role === "assistant" && !m.pending && i === messages.length - 1
+                  ? regenerate
+                  : undefined
+              }
+            />
           ))}
         </AnimatePresence>
       </div>
@@ -423,7 +496,12 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
           {/* Text input */}
           <textarea
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => {
+              setInput(e.target.value);
+              // Auto-grow up to max-h-32 (ChatGPT-style composer).
+              e.target.style.height = "auto";
+              e.target.style.height = `${Math.min(e.target.scrollHeight, 128)}px`;
+            }}
             onKeyDown={onKeyDown}
             rows={1}
             placeholder={listening ? "聞き取り中…" : "THE FORGE OS にメッセージ…"}
@@ -551,7 +629,7 @@ function ChatHistory({
                 <button
                   type="button"
                   onClick={() => onDelete(c.id)}
-                  className="shrink-0 text-[10px] text-muted opacity-0 transition group-hover:opacity-100 hover:text-[#ff8888]"
+                  className="shrink-0 text-[10px] text-muted opacity-60 transition hover:text-[#ff8888] sm:opacity-0 sm:group-hover:opacity-100"
                   aria-label="Delete conversation"
                 >
                   ✕
@@ -641,8 +719,9 @@ function MicIcon() {
   );
 }
 
-function MessageBubble({ message }: { message: Message }) {
+function MessageBubble({ message, onRegenerate }: { message: Message; onRegenerate?: () => void }) {
   const isUser = message.role === "user";
+  const settled = !isUser && !message.pending && (message.content.trim().length > 0 || message.error);
   return (
     <motion.div
       layout
@@ -651,9 +730,10 @@ function MessageBubble({ message }: { message: Message }) {
       transition={{ duration: 0.25 }}
       className={`flex ${isUser ? "justify-end" : "justify-start"}`}
     >
+      <div className={`flex max-w-[85%] flex-col sm:max-w-[78%] ${isUser ? "items-end" : "items-start"}`}>
       <div
         className={[
-          "max-w-[85%] rounded-forge border px-3.5 py-2.5 text-sm leading-relaxed sm:max-w-[78%]",
+          "rounded-forge border px-3.5 py-2.5 text-sm leading-relaxed",
           "backdrop-blur-md",
           isUser
             ? "border-panel-strong bg-[rgba(255,255,255,0.07)] text-fg-strong"
@@ -672,12 +752,52 @@ function MessageBubble({ message }: { message: Message }) {
         {message.pending && !message.content ? (
           <TypingDots />
         ) : (
-          <span className={message.role === "assistant" && message.pending ? "caret" : ""}>
+          <span className={`whitespace-pre-wrap ${message.role === "assistant" && message.pending ? "caret" : ""}`}>
             {message.content}
           </span>
         )}
       </div>
+
+      {/* Assistant message actions — copy (ChatGPT parity) + regenerate on the last turn. */}
+      {settled && (
+        <div className="mt-1 flex items-center gap-3 px-1">
+          {!message.error && <CopyButton text={message.content} />}
+          {onRegenerate && (
+            <button
+              type="button"
+              onClick={() => void onRegenerate()}
+              className="text-[10px] tracking-[0.12em] text-muted transition hover:text-fg-strong label-mono"
+              aria-label="Regenerate reply"
+              title="もう一度生成"
+            >
+              ↻ 再生成
+            </button>
+          )}
+        </div>
+      )}
+      </div>
     </motion.div>
+  );
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        try {
+          void navigator.clipboard?.writeText(text);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1400);
+        } catch { /* clipboard unavailable */ }
+      }}
+      className="text-[10px] tracking-[0.12em] text-muted transition hover:text-fg-strong label-mono"
+      aria-label="Copy reply"
+      title="コピー"
+    >
+      {copied ? "✓ コピー済み" : "⧉ コピー"}
+    </button>
   );
 }
 

@@ -60,15 +60,18 @@ Supabase保存や本格運用は後回しでOKです。
 キーやデータを **Supabaseに暗号化保存**し、再起動しても消えないようにします。
 （KEYCHAINの見出しが「🔐 SUPABASE VAULT」に変わります）
 
-### ① Supabaseプロジェクトを開く
-<https://supabase.com/dashboard/project/hwjmojipsablfevtjzln>
+### ① 自分のSupabaseプロジェクトを使う
+新規に作ったプロジェクトでOKです。**プロジェクトURL**（Settings → API の Project URL）を控えて、
+- Render（頭脳）の環境変数 **`SUPABASE_URL`** に設定
+- Vercel（画面）の環境変数 **`NEXT_PUBLIC_SUPABASE_URL`** に設定 → Redeploy
 
-> ⚠️ **開けない場合** = 別アカウントの持ち物です。自分のアカウントで新規プロジェクトを作り、
-> そのURLを Render の `SUPABASE_URL` と Vercel の `NEXT_PUBLIC_SUPABASE_URL` に設定してください
-> （どちらも既定は `hwjmojipsablfevtjzln`）。
+（未設定時の既定は `hwjmojipsablfevtjzln`。自分のプロジェクトを使う場合は上の2つを**必ず**上書き）
 
-### ② テーブルを作る（SQLを1回貼るだけ）
-Supabase → **SQL Editor** に、リポジトリの `supabase_schema.sql` の中身を貼って **Run**。
+### ② テーブルを作る（SQLを1回貼るだけ・約30秒）
+Supabase → **SQL Editor** → リポジトリの [`supabase_schema.sql`](./supabase_schema.sql) の中身を**全部**貼って **Run**。
+「Success. No rows returned」と出れば完了。全文 IF NOT EXISTS の冪等設計なので**何度実行しても安全**です。
+（現行アプリが使う11テーブル＝api_keys / tasks / missions / automations / events / notifications /
+vault_notebooks / income_jobs / studio_ais / studio_workflows / agent_memory がまとめて作成されます）
 
 ### ③ 頭脳(Render)にSupabaseの鍵を追加
 Render → 該当サービス → **Environment** に:

@@ -31,7 +31,18 @@ export default function Income() {
   const [summary, setSummary] = useState<IncomeSummary>({});
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [actingId, setActingId] = useState<string | null>(null);
+  // Remember the guide's open/closed state across visits (default open until dismissed once).
   const [guideOpen, setGuideOpen] = useState(true);
+  useEffect(() => {
+    try { setGuideOpen(localStorage.getItem("forge_income_guide") !== "closed"); } catch { /* ignore */ }
+  }, []);
+  const toggleGuide = () => {
+    setGuideOpen((v) => {
+      try { localStorage.setItem("forge_income_guide", v ? "closed" : "open"); } catch { /* ignore */ }
+      return !v;
+    });
+  };
 
   const refresh = useCallback(async () => {
     try {
@@ -68,8 +79,17 @@ export default function Income() {
   };
 
   const act = async (id: string, action: "approve" | "reject") => {
-    const ok = await incomeSetStatus(id, action);
-    if (ok) await refresh();
+    if (actingId) return; // ignore double-taps while one is in flight
+    setActingId(id);
+    try {
+      const ok = await incomeSetStatus(id, action);
+      if (ok) await refresh();
+      else setError("更新に失敗しました（バックエンド接続を確認してください）");
+    } catch {
+      setError("更新に失敗しました（バックエンド接続を確認してください）");
+    } finally {
+      setActingId(null);
+    }
   };
 
   const counts = ["pending", "approved", "rejected", "completed", "failed"] as const;
@@ -77,7 +97,7 @@ export default function Income() {
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto pb-2">
       {/* Setup guide — what YOU need to do to make the income pipeline run */}
-      <IncomeSetupGuide open={guideOpen} onToggle={() => setGuideOpen((v) => !v)} />
+      <IncomeSetupGuide open={guideOpen} onToggle={toggleGuide} />
 
       <div className="grid gap-3 lg:grid-cols-[24rem_1fr] lg:content-start">
       {/* ── Left: KPI + enqueue ── */}
@@ -99,7 +119,7 @@ export default function Income() {
           <input
             value={theme}
             onChange={(e) => setTheme(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && enqueue()}
+            onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && enqueue()}
             placeholder="例：在宅ワークの集中BGM"
             className="min-w-0 flex-1 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2 text-sm text-fg-strong placeholder:text-muted focus:border-[var(--line)] focus:shadow-glow focus:outline-none"
           />
@@ -127,6 +147,17 @@ export default function Income() {
 
       {/* ── Right: approval queue ── */}
       <div className="flex min-h-0 flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] tracking-[0.2em] text-muted label-mono">承認キュー</span>
+          <button
+            type="button"
+            onClick={() => { setLoading(true); void refresh(); }}
+            className="rounded-forge border border-panel px-2.5 py-1 text-[10px] tracking-[0.14em] text-muted transition hover:border-[var(--line)] hover:text-fg-strong label-mono"
+            aria-label="Refresh jobs"
+          >
+            ↻ 更新
+          </button>
+        </div>
         {loading && <div className="panel p-3 text-center text-xs text-muted">読み込み中…</div>}
         {!loading && jobs.length === 0 && (
           <div className="panel p-4 text-center text-xs text-muted">

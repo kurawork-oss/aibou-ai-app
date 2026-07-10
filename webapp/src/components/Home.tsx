@@ -171,7 +171,7 @@ function QuickAssistant({ settings }: { settings: ChatSettings }) {
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && send()}
+          onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && send()}
           placeholder="例：今日のおすすめの動き方を教えて"
           className="min-w-0 flex-1 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2 text-sm text-fg-strong placeholder:text-muted focus:border-[var(--line)] focus:outline-none"
         />
@@ -215,6 +215,7 @@ function AgendaPanel({
   };
 
   const remove = async (id: string) => {
+    if (!window.confirm("この予定を削除しますか？")) return;
     await agendaDelete(id);
     setEvents(events.filter((e) => e.id !== id));
   };
@@ -226,7 +227,7 @@ function AgendaPanel({
         <input
           value={text}
           onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && void add()}
+          onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && void add()}
           placeholder="例：明日15時に歯医者 / 金曜10時 定例MTG"
           disabled={offline}
           className="min-w-0 flex-1 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2 text-sm text-fg-strong placeholder:text-muted focus:border-[var(--line)] focus:outline-none disabled:opacity-50"

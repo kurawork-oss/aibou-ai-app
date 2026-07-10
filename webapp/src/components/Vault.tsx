@@ -112,14 +112,27 @@ export default function Vault() {
     setDragOver(false);
     const files = "dataTransfer" in e ? e.dataTransfer.files : (e.target as HTMLInputElement).files;
     if (!files?.length) return;
-    Array.from(files).forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const text = ev.target?.result as string;
-        setDocTitle(file.name.replace(/\.[^.]+$/, ""));
-        setDocContent(text || "");
-      };
-      reader.readAsText(file, "utf-8");
+    const list = Array.from(files);
+    // Read ALL files; a multi-drop merges into one source with per-file
+    // headers (previously only the last file survived, silently).
+    void Promise.all(
+      list.map(
+        (file) =>
+          new Promise<{ name: string; text: string }>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = (ev) => resolve({ name: file.name, text: String(ev.target?.result || "") });
+            reader.onerror = () => resolve({ name: file.name, text: "" });
+            reader.readAsText(file, "utf-8");
+          }),
+      ),
+    ).then((docs) => {
+      if (docs.length === 1) {
+        setDocTitle(docs[0].name.replace(/\.[^.]+$/, ""));
+        setDocContent(docs[0].text);
+      } else {
+        setDocTitle(`${docs[0].name.replace(/\.[^.]+$/, "")} ほか${docs.length - 1}件`);
+        setDocContent(docs.map((d) => `=== ${d.name} ===\n${d.text}`).join("\n\n"));
+      }
     });
   };
 
@@ -231,7 +244,7 @@ export default function Vault() {
           <input
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && create()}
+            onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && create()}
             placeholder="新しいノートブック名"
             className="min-w-0 flex-1 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2 text-sm text-fg-strong placeholder:text-muted focus:border-[var(--line)] focus:shadow-glow focus:outline-none"
           />
@@ -325,7 +338,7 @@ export default function Vault() {
               <input
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && ask()}
+                onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && ask()}
                 placeholder="このノートブックに質問する…"
                 className="min-w-0 flex-1 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2 text-sm text-fg-strong placeholder:text-muted focus:border-[var(--line)] focus:shadow-glow focus:outline-none"
               />
@@ -353,6 +366,15 @@ export default function Vault() {
               <div className="mt-3">
                 <div className="divider mb-3" />
                 <p className="whitespace-pre-wrap text-sm leading-relaxed text-fg">{answer}</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    try { void navigator.clipboard?.writeText(answer); setCopied(true); setTimeout(() => setCopied(false), 1400); } catch { /* ignore */ }
+                  }}
+                  className="mt-2 text-[10px] tracking-[0.12em] text-muted transition hover:text-fg-strong label-mono"
+                >
+                  {copied ? "✓ コピー済み" : "⧉ 回答をコピー"}
+                </button>
               </div>
             )}
           </div>

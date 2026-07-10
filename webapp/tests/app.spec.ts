@@ -429,6 +429,35 @@ test.describe("desktop layout", () => {
 });
 
 /* ── Accessibility / no crash checks ─────────────────────────────── */
+/* ── Quality pass (ui-r13): message actions / refresh / view persistence ── */
+test("CHAT: failed send shows error bubble with 再生成 (retry)", async ({ page }) => {
+  await page.goto("/");
+  await enterApp(page);
+  await page.locator("textarea").first().fill("テストメッセージ");
+  await page.keyboard.press("Enter");
+  // Offline → the turn fails into an error bubble; ↻ 再生成 offers retry
+  // (the typed message is preserved in the user bubble above it).
+  await expect(page.getByText("テストメッセージ").first()).toBeVisible({ timeout: 5_000 });
+  await expect(page.getByText("↻ 再生成")).toBeVisible({ timeout: 8_000 });
+});
+
+test("INCOME: queue has a manual refresh button", async ({ page }) => {
+  await page.goto("/");
+  await enterApp(page);
+  await goMode(page, "INCOME");
+  await expect(page.getByRole("button", { name: /Refresh jobs/i })).toBeVisible({ timeout: 5_000 });
+});
+
+test("Active mode persists across reload", async ({ page }) => {
+  await page.goto("/");
+  await enterApp(page);
+  await goMode(page, "TASKS");
+  await expect(page.getByText("NEW TASK")).toBeVisible({ timeout: 5_000 });
+  await page.reload();
+  await enterApp(page);
+  await expect(page.getByText("NEW TASK")).toBeVisible({ timeout: 8_000 });
+});
+
 test("No JavaScript errors navigating all modes", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (err) => errors.push(err.message));

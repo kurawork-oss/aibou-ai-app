@@ -81,19 +81,33 @@ export default function Autopilot() {
   };
 
   // Auto-run: keep stepping until the mission completes/fails (while tab open).
+  // autoRef drives the loop; autoIds mirrors it in state so buttons re-render.
+  const [autoIds, setAutoIds] = useState<Record<string, boolean>>({});
+  const [autoNote, setAutoNote] = useState<string | null>(null);
   const autoRun = async (id: string) => {
     autoRef.current[id] = true;
-    for (let i = 0; i < 12; i++) {
+    setAutoIds((p) => ({ ...p, [id]: true }));
+    setAutoNote(null);
+    let i = 0;
+    for (; i < 12; i++) {
       if (!autoRef.current[id]) break;
       const r = await runOne(id);
       if (!r || r.done || r.error || r.mission?.status !== "active") break;
     }
+    if (i >= 12 && autoRef.current[id]) {
+      setAutoNote("自動実行は12ステップで一旦停止しました。続ける場合はもう一度 ⏩ AUTO-RUN を押してください。");
+    }
     autoRef.current[id] = false;
+    setAutoIds((p) => ({ ...p, [id]: false }));
   };
 
-  const stopAuto = (id: string) => { autoRef.current[id] = false; };
+  const stopAuto = (id: string) => {
+    autoRef.current[id] = false;
+    setAutoIds((p) => ({ ...p, [id]: false }));
+  };
 
   const remove = async (id: string) => {
+    if (!window.confirm("このミッションを削除しますか？（ステップ結果も消えます）")) return;
     try {
       await autopilotDelete(id);
       setMissions((prev) => prev.filter((m) => m.id !== id));
@@ -128,6 +142,7 @@ export default function Autopilot() {
       </div>
 
       {error && <div className="panel p-3 text-xs text-[#ff9b9b]">⚠️ {error}</div>}
+      {autoNote && <div className="panel p-3 text-xs text-[#ffd060]">⏸ {autoNote}</div>}
       </div>
 
       {/* ── Right: missions list ── */}
@@ -143,7 +158,7 @@ export default function Autopilot() {
           {missions.map((m) => {
             const total = m.steps?.length || 0;
             const done = m.steps?.filter((s) => s.status === "done").length || 0;
-            const isAuto = autoRef.current[m.id];
+            const isAuto = !!autoIds[m.id];
             return (
               <div key={m.id} className="panel p-3">
                 <div className="flex items-start justify-between gap-2">
