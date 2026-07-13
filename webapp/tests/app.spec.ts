@@ -28,7 +28,7 @@ async function enterApp(page: Page) {
 /** Open the Google-apps-style mode launcher and pick a mode by label. */
 async function goMode(page: Page, label: string) {
   await page.getByLabel("Modes", { exact: true }).click();
-  await page.locator("nav").getByText(label, { exact: true }).click();
+  await page.locator("nav").filter({ hasText: "MODES" }).getByText(label, { exact: true }).click();
 }
 
 /* ── EntryGate ──────────────────────────────────────────────────── */
@@ -61,7 +61,7 @@ test("Mode launcher shows all 10 modes", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
   await page.getByLabel("Modes", { exact: true }).click();
-  const nav = page.locator("nav");
+  const nav = page.locator("nav").filter({ hasText: "MODES" });
   for (const label of ["HOME", "CHAT", "FORGE", "VAULT", "INCOME", "TASKS", "STUDIO", "BOARD", "ARCHIVE"]) {
     await expect(nav.getByText(label, { exact: true })).toBeVisible();
   }
