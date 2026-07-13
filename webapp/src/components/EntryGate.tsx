@@ -94,6 +94,14 @@ export default function EntryGate({ children }: { children: React.ReactNode }) {
     }
   }, [authBusy, authMode, email, password]);
 
+  // Renderのコールドスタート対策: ゲート表示中にバックエンドを起こしておく
+  // （ENTER時にはウォーム済み）。失敗は無視 — 純粋な先行ウォームアップ。
+  useEffect(() => {
+    const api = (process.env.NEXT_PUBLIC_API_URL || "").trim();
+    if (!api) return;
+    fetch(`${api}/health`, { cache: "no-store" }).catch(() => { /* warming only */ });
+  }, []);
+
   // Before hydration: hold a plain dark screen (no flash of either state).
   if (!ready) return <div className="fixed inset-0" style={{ background: "var(--bg)" }} />;
 

@@ -60,6 +60,17 @@ gcloud run deploy aibou-brain \
 
 ---
 
+## セキュリティ強化（推奨・任意）
+
+| 変数 | 場所 | 効果 |
+| --- | --- | --- |
+| `SUPABASE_JWT_SECRET` | Render（頭脳） | ログイン中のユーザーのJWTをAPI認証として検証（Supabase → Settings → API → JWT Secret の値） |
+| `REQUIRE_AUTH=1` | Render（頭脳） | 上記JWT（または`APP_TOKEN`）が無いリクエストを401で拒否 — URLを知られても叩かれない |
+| `BACKEND_URL` | GitHubリポジトリの Secrets | 10分ごとに/healthをpingしてRenderのスリープを防止（`backend-keepalive.yml`） |
+
+`SUPABASE_JWT_SECRET` + `REQUIRE_AUTH=1` を設定すると、フロントはログインセッションのJWTを自動で使うため、
+`NEXT_PUBLIC_API_TOKEN`（バンドルに露出する固定トークン）は不要になります。
+
 ## よくある詰まり
 
 - **CORSエラー**：既定で全許可(`FRONTEND_ORIGIN=*`)なので通常出ません。絞る場合は

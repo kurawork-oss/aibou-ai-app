@@ -24,6 +24,13 @@ SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "").strip()
 APP_TOKEN = os.environ.get("APP_TOKEN", "").strip()          # 任意：APIをBearerで保護
 FRONTEND_ORIGIN = os.environ.get("FRONTEND_ORIGIN", "*").strip() or "*"
 
+# Supabase Auth の JWT を受け付けるための署名シークレット（HS256）。
+# ダッシュボード → Settings → API → JWT Secret の値。設定するとフロントの
+# ログインセッション(access_token)がそのままAPIの認証に使える。
+SUPABASE_JWT_SECRET = os.environ.get("SUPABASE_JWT_SECRET", "").strip()
+# "1"/"true" で認証必須化（APP_TOKEN 一致 or 有効なSupabase JWTが無ければ401）。
+REQUIRE_AUTH = os.environ.get("REQUIRE_AUTH", "").strip().lower() in ("1", "true", "yes")
+
 # APIキーをSupabaseに保存する際の暗号化マスターシークレット。
 # 未設定なら SUPABASE_SERVICE_KEY → APP_TOKEN の順にフォールバックして鍵を導出する
 # （どれも無ければ暗号化なし＝メモリ運用のみ想定）。値は絶対に外へ出さない。

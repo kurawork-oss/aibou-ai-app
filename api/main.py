@@ -65,14 +65,39 @@ app.add_middleware(
 
 
 # ── 認証（任意のBearerトークン） ─────────────────────────────────
+def _verify_supabase_jwt(token: str) -> bool:
+    """Supabase Auth の access_token (HS256) を検証する。検証不可/失敗は False。"""
+    secret = config.SUPABASE_JWT_SECRET
+    if not (secret and token):
+        return False
+    try:
+        import jwt as pyjwt
+        pyjwt.decode(token, secret, algorithms=["HS256"], audience="authenticated")
+        return True
+    except Exception:
+        return False
+
+
 async def require_auth(authorization: Optional[str] = Header(default=None)) -> None:
-    """APP_TOKEN が設定されていれば Authorization: Bearer <APP_TOKEN> を要求する。
-    未設定ならオープン（誰でも叩ける）。/health はこの依存を付けない。"""
-    if not config.APP_TOKEN:
-        return  # 保護なし
-    expected = f"Bearer {config.APP_TOKEN}"
-    if not authorization or authorization.strip() != expected:
-        raise HTTPException(status_code=401, detail="Unauthorized: valid bearer token required")
+    """認証。次のいずれかで通過:
+      1) APP_TOKEN 設定時: Authorization: Bearer <APP_TOKEN> の一致
+      2) SUPABASE_JWT_SECRET 設定時: Supabase ログインの JWT（HS256）が有効
+    APP_TOKEN も REQUIRE_AUTH も無ければ従来どおりオープン。
+    REQUIRE_AUTH=1 なら上記いずれかを必須にする（バンドル埋め込みトークン不要の
+    実効的な保護は「SUPABASE_JWT_SECRET + REQUIRE_AUTH=1」の組み合わせ）。
+    /health はこの依存を付けない。"""
+    token = ""
+    if authorization and authorization.strip().lower().startswith("bearer "):
+        token = authorization.strip()[7:].strip()
+
+    if config.APP_TOKEN and token == config.APP_TOKEN:
+        return
+    if _verify_supabase_jwt(token):
+        return
+    # どの保護も構成されていなければオープン
+    if not config.APP_TOKEN and not config.REQUIRE_AUTH:
+        return
+    raise HTTPException(status_code=401, detail="Unauthorized: valid bearer token required")
 
 
 # =====================================================================

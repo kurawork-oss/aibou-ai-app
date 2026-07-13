@@ -150,7 +150,7 @@ function Hud() {
   // margin while the conversation stays centred.
   return (
     <main
-      className={`relative mx-auto flex h-[100dvh] w-full flex-col px-4 pb-3 pt-[max(env(safe-area-inset-top),0.75rem)] transition-[max-width] duration-300 ${view === "chat" ? "max-w-[1700px]" : "max-w-6xl"}`}
+      className={`relative mx-auto flex h-[100dvh] w-full flex-col px-4 pb-20 pt-[max(env(safe-area-inset-top),0.75rem)] transition-[max-width] duration-300 sm:pb-3 ${view === "chat" ? "max-w-[1700px]" : "max-w-6xl"}`}
     >
       {/* Occasional drifting light-silver ambient bloom (behind everything). */}
       <div className="forge-ambient" aria-hidden />
@@ -244,6 +244,9 @@ function Hud() {
           />
         )}
       </AnimatePresence>
+
+      {/* Mobile thumb-zone nav (hidden on ≥sm; hides while the keyboard is open) */}
+      <MobileNav view={view} onChange={setView} />
     </main>
   );
 }
@@ -323,6 +326,109 @@ function WaffleIcon() {
 }
 
 /** Google-apps-style mode launcher: a waffle button → popover grid of modes. */
+/** Bottom thumb-zone nav for phones: 4 primary modes + ⋯ (full grid sheet).
+    Slides away while the software keyboard is open (visualViewport). */
+function MobileNav({ view, onChange }: { view: View; onChange: (v: View) => void }) {
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [kbOpen, setKbOpen] = useState(false);
+
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const onResize = () => setKbOpen(window.innerHeight - vv.height > 120);
+    vv.addEventListener("resize", onResize);
+    return () => vv.removeEventListener("resize", onResize);
+  }, []);
+
+  const PRIMARY: View[] = ["home", "chat", "code", "tasks"];
+  const items = NAV_ITEMS.filter((i) => PRIMARY.includes(i.key));
+
+  return (
+    <div className="sm:hidden">
+      {/* Full-grid sheet (all modes) */}
+      <AnimatePresence>
+        {sheetOpen && (
+          <>
+            <button
+              type="button"
+              aria-hidden
+              tabIndex={-1}
+              onClick={() => setSheetOpen(false)}
+              className="fixed inset-0 z-40 bg-black/50"
+            />
+            <motion.nav
+              initial={{ y: 60, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 60, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 380, damping: 32 }}
+              className="fixed inset-x-3 bottom-20 z-50"
+              aria-label="All modes"
+            >
+              <div className="glass-silver p-3">
+                <div className="grid grid-cols-4 gap-1.5">
+                  {NAV_ITEMS.map((it) => (
+                    <button
+                      key={it.key}
+                      type="button"
+                      onClick={() => { onChange(it.key); setSheetOpen(false); }}
+                      className="flex h-16 flex-col items-center justify-center gap-1 rounded-forge border text-[8px] tracking-[0.04em] label-mono"
+                      style={{
+                        borderColor: it.key === view ? "var(--accent)" : "var(--panel-bd)",
+                        color: it.key === view ? "var(--fg-strong)" : "var(--muted)",
+                      }}
+                    >
+                      <NavIcon name={it.key} />
+                      <span>{it.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </motion.nav>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Bar */}
+      <nav
+        aria-label="Mobile navigation"
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-panel bg-[rgba(10,12,18,0.85)] backdrop-blur-md transition-transform duration-200"
+        style={{
+          paddingBottom: "env(safe-area-inset-bottom)",
+          transform: kbOpen ? "translateY(110%)" : "none",
+        }}
+      >
+        <div className="mx-auto grid max-w-md grid-cols-5">
+          {items.map((it) => {
+            const active = it.key === view;
+            return (
+              <button
+                key={it.key}
+                type="button"
+                onClick={() => onChange(it.key)}
+                className="flex min-h-[52px] flex-col items-center justify-center gap-0.5 text-[8px] tracking-[0.06em] label-mono"
+                style={{ color: active ? "var(--accent)" : "var(--muted)" }}
+                aria-current={active ? "page" : undefined}
+              >
+                <NavIcon name={it.key} />
+                <span>{it.label}</span>
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => setSheetOpen((v) => !v)}
+            className="flex min-h-[52px] flex-col items-center justify-center gap-0.5 text-[8px] tracking-[0.06em] text-muted label-mono"
+            aria-label="More modes"
+          >
+            <span className="text-base leading-none">⋯</span>
+            <span>MORE</span>
+          </button>
+        </div>
+      </nav>
+    </div>
+  );
+}
+
 function ModeLauncher({ view, onChange }: { view: View; onChange: (v: View) => void }) {
   const [open, setOpen] = useState(false);
   return (

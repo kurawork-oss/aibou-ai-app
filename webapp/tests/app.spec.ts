@@ -22,12 +22,12 @@ async function enterApp(page: Page) {
     hudH1.waitFor({ timeout: 10_000 }),
   ]);
   // HUD is ready once the Modes launcher button is present.
-  await page.getByLabel("Modes").waitFor({ timeout: 10_000 });
+  await page.getByLabel("Modes", { exact: true }).waitFor({ timeout: 10_000 });
 }
 
 /** Open the Google-apps-style mode launcher and pick a mode by label. */
 async function goMode(page: Page, label: string) {
-  await page.getByLabel("Modes").click();
+  await page.getByLabel("Modes", { exact: true }).click();
   await page.locator("nav").getByText(label, { exact: true }).click();
 }
 
@@ -60,7 +60,7 @@ test("HUD renders after entering offline mode", async ({ page }) => {
 test("Mode launcher shows all 10 modes", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
-  await page.getByLabel("Modes").click();
+  await page.getByLabel("Modes", { exact: true }).click();
   const nav = page.locator("nav");
   for (const label of ["HOME", "CHAT", "FORGE", "VAULT", "INCOME", "TASKS", "STUDIO", "BOARD", "ARCHIVE"]) {
     await expect(nav.getByText(label, { exact: true })).toBeVisible();
@@ -71,7 +71,7 @@ test("Mode launcher shows all 10 modes", async ({ page }) => {
 test("Mode panel opens downward, not upward", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
-  const btn = page.getByLabel("Modes");
+  const btn = page.getByLabel("Modes", { exact: true });
   const bb = await btn.boundingBox();
   await btn.click();
   const panel = page.locator("nav").filter({ hasText: "MODES" });
@@ -429,6 +429,21 @@ test.describe("desktop layout", () => {
 });
 
 /* ── Accessibility / no crash checks ─────────────────────────────── */
+/* ── Phase A (ui-r15): mobile thumb-zone nav ── */
+test("Mobile bottom nav switches modes and opens the MORE sheet", async ({ page }) => {
+  await page.goto("/");
+  await enterApp(page);
+  const nav = page.getByLabel("Mobile navigation");
+  await expect(nav).toBeVisible();
+  await nav.getByText("TASKS", { exact: true }).click();
+  await expect(page.getByText("NEW TASK")).toBeVisible({ timeout: 5_000 });
+  await page.getByLabel("More modes").click();
+  const sheet = page.getByLabel("All modes");
+  await expect(sheet.getByText("BOARD", { exact: true })).toBeVisible({ timeout: 3_000 });
+  await sheet.getByText("BOARD", { exact: true }).click();
+  await expect(page.getByText("AUTOMATION COPILOT")).toBeVisible({ timeout: 5_000 });
+});
+
 /* ── CODE mode (ui-r14): Claude Code-like coding agent ── */
 test("CODE mode renders start screen with templates", async ({ page }) => {
   await page.goto("/");

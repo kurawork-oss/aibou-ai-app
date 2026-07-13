@@ -478,6 +478,57 @@ def test_keychain_no_secret_passthrough(monkeypatch):
     _reset_fernet()
 
 
+# ── 認証（APP_TOKEN / Supabase JWT / REQUIRE_AUTH） ──────────────────
+def _make_jwt(secret: str, **over):
+    import time
+    import jwt as pyjwt
+    payload = {"sub": "user-1", "aud": "authenticated", "exp": int(time.time()) + 300}
+    payload.update(over)
+    return pyjwt.encode(payload, secret, algorithm="HS256")
+
+
+def test_auth_open_when_nothing_configured(monkeypatch):
+    import config
+    monkeypatch.setattr(config, "APP_TOKEN", "")
+    monkeypatch.setattr(config, "SUPABASE_JWT_SECRET", "")
+    monkeypatch.setattr(config, "REQUIRE_AUTH", False)
+    assert client.get("/keys").status_code == 200
+
+
+def test_auth_app_token_still_works(monkeypatch):
+    import config
+    monkeypatch.setattr(config, "APP_TOKEN", "tok-123")
+    monkeypatch.setattr(config, "SUPABASE_JWT_SECRET", "")
+    monkeypatch.setattr(config, "REQUIRE_AUTH", False)
+    assert client.get("/keys").status_code == 401
+    assert client.get("/keys", headers={"Authorization": "Bearer wrong"}).status_code == 401
+    assert client.get("/keys", headers={"Authorization": "Bearer tok-123"}).status_code == 200
+
+
+def test_auth_supabase_jwt_accepted(monkeypatch):
+    import config
+    monkeypatch.setattr(config, "APP_TOKEN", "")
+    monkeypatch.setattr(config, "SUPABASE_JWT_SECRET", "jwt-secret")
+    monkeypatch.setattr(config, "REQUIRE_AUTH", True)
+    # 匿名は拒否
+    assert client.get("/keys").status_code == 401
+    # 正しい署名のログインJWTは通過
+    good = _make_jwt("jwt-secret")
+    assert client.get("/keys", headers={"Authorization": f"Bearer {good}"}).status_code == 200
+    # 署名が違えば拒否
+    bad = _make_jwt("other-secret")
+    assert client.get("/keys", headers={"Authorization": f"Bearer {bad}"}).status_code == 401
+
+
+def test_auth_expired_jwt_rejected(monkeypatch):
+    import config
+    monkeypatch.setattr(config, "APP_TOKEN", "")
+    monkeypatch.setattr(config, "SUPABASE_JWT_SECRET", "jwt-secret")
+    monkeypatch.setattr(config, "REQUIRE_AUTH", True)
+    expired = _make_jwt("jwt-secret", exp=1)
+    assert client.get("/keys", headers={"Authorization": f"Bearer {expired}"}).status_code == 401
+
+
 # ── /code（AIコーディングエージェント） ─────────────────────────────
 def test_code_generate_without_gemini_returns_503():
     r = client.post("/code/generate", json={"instruction": "Webアプリを作って", "files": []})

@@ -12,6 +12,8 @@
  * Auth: if NEXT_PUBLIC_API_TOKEN is set, send `Authorization: Bearer <token>`.
  */
 
+import { getAccessToken } from "@/lib/supabase";
+
 export const API_URL: string = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/+$/, "");
 const API_TOKEN: string = process.env.NEXT_PUBLIC_API_TOKEN || "";
 
@@ -55,7 +57,10 @@ export interface IncomeSummary {
 /** Build request headers, adding the bearer token when configured. */
 function authHeaders(extra?: Record<string, string>): Record<string, string> {
   const headers: Record<string, string> = { ...(extra || {}) };
-  if (API_TOKEN) headers["Authorization"] = `Bearer ${API_TOKEN}`;
+  // ログイン中は Supabase の JWT を優先（バンドル埋め込みトークン不要の実効認証）。
+  const jwt = getAccessToken();
+  if (jwt) headers["Authorization"] = `Bearer ${jwt}`;
+  else if (API_TOKEN) headers["Authorization"] = `Bearer ${API_TOKEN}`;
   return headers;
 }
 

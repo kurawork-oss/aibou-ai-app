@@ -22,3 +22,23 @@ export const supabase: SupabaseClient | null = supabaseEnabled
       auth: { persistSession: true, autoRefreshToken: true },
     })
   : null;
+
+/**
+ * Cached Supabase access token (JWT) for synchronous consumers (api.ts
+ * authHeaders). Backend verifies it when SUPABASE_JWT_SECRET is set — this
+ * replaces shipping a static NEXT_PUBLIC_API_TOKEN in the JS bundle.
+ */
+let cachedAccessToken: string | null = null;
+
+export function getAccessToken(): string | null {
+  return cachedAccessToken;
+}
+
+if (supabase) {
+  void supabase.auth.getSession().then(({ data }) => {
+    cachedAccessToken = data.session?.access_token ?? null;
+  });
+  supabase.auth.onAuthStateChange((_event, session) => {
+    cachedAccessToken = session?.access_token ?? null;
+  });
+}

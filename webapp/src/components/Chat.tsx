@@ -83,10 +83,26 @@ function loadConvos(): Convo[] {
 }
 
 function saveConvos(convos: Convo[]): void {
-  try {
-    localStorage.setItem(LS_CONVOS, JSON.stringify(convos.slice(0, CONVO_LIMIT)));
-  } catch {
-    /* ignore quota */
+  // localStorage(≈5MB)を枯渇させない: 溢れたら古い会話の画像→古い会話ごと退避。
+  let list = convos.slice(0, CONVO_LIMIT);
+  for (let attempt = 0; attempt < 12; attempt++) {
+    try {
+      localStorage.setItem(LS_CONVOS, JSON.stringify(list));
+      return;
+    } catch {
+      const withImages = [...list].reverse().find((c) => c.messages.some((m) => m.image));
+      if (withImages) {
+        list = list.map((c) =>
+          c.id === withImages.id
+            ? { ...c, messages: c.messages.map((m) => ({ ...m, image: undefined })) }
+            : c,
+        );
+      } else if (list.length > 1) {
+        list = list.slice(0, -1); // 最古を落とす
+      } else {
+        return; // これ以上は諦める（クラッシュはしない）
+      }
+    }
   }
 }
 
@@ -388,10 +404,32 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      const dataUrl = String(reader.result || "");
-      const comma = dataUrl.indexOf(",");
-      const base64 = comma >= 0 ? dataUrl.slice(comma + 1) : "";
-      setPendingImage({ dataUrl, base64, mime: file.type || "image/jpeg" });
+      const src = String(reader.result || "");
+      // 縮小してから保持（表示・vision・localStorage 全部この小さい版を使う）。
+      // 生の写真(数MB)を data URL のまま履歴に入れると localStorage が即枯渇する。
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 640;
+        const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(img.width * scale));
+        canvas.height = Math.max(1, Math.round(img.height * scale));
+        const ctx = canvas.getContext("2d");
+        let dataUrl = src;
+        let mime = file.type || "image/jpeg";
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          dataUrl = canvas.toDataURL("image/jpeg", 0.72);
+          mime = "image/jpeg";
+        }
+        const comma = dataUrl.indexOf(",");
+        setPendingImage({ dataUrl, base64: comma >= 0 ? dataUrl.slice(comma + 1) : "", mime });
+      };
+      img.onerror = () => {
+        const comma = src.indexOf(",");
+        setPendingImage({ dataUrl: src, base64: comma >= 0 ? src.slice(comma + 1) : "", mime: file.type || "image/jpeg" });
+      };
+      img.src = src;
     };
     reader.readAsDataURL(file);
   }, []);
