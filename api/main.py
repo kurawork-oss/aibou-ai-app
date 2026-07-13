@@ -31,6 +31,7 @@ import agenda
 import autopilot
 import automations
 import config
+import code_agent
 import evolve
 import forge
 import income
@@ -170,6 +171,18 @@ class VideoRequest(BaseModel):
 class ForgeRequest(BaseModel):
     kind: str = "app"          # app | image | slides | sheet | doc
     prompt: str = ""
+
+
+class CodeFile(BaseModel):
+    path: str
+    content: str = ""
+    action: Optional[str] = None
+
+
+class CodeGenerateRequest(BaseModel):
+    instruction: str
+    files: List[CodeFile] = Field(default_factory=list)
+    history: List[ChatMessage] = Field(default_factory=list)
 
 
 class EnqueueRequest(BaseModel):
@@ -510,6 +523,29 @@ async def forge_generate(req: ForgeRequest, _auth: None = Depends(require_auth))
     if isinstance(result, dict) and result.get("error"):
         return JSONResponse(status_code=503, content=result)
     return result
+
+
+@app.post("/code/generate")
+async def code_generate(req: CodeGenerateRequest, _auth: None = Depends(require_auth)):
+    """CODE：AIコーディングエージェント。指示＋ワークスペース→変更ファイル群。"""
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(
+        None,
+        lambda: code_agent.generate(
+            req.instruction,
+            [f.model_dump() for f in req.files],
+            [h.model_dump() for h in req.history],
+        ),
+    )
+    if isinstance(result, dict) and result.get("error"):
+        return JSONResponse(status_code=503, content=result)
+    return result
+
+
+@app.get("/code/scaffold")
+async def code_scaffold(kind: str = "web", _auth: None = Depends(require_auth)):
+    """CODE：スターターワークスペース（web | python | empty）。"""
+    return code_agent.scaffold(kind)
 
 
 @app.get("/income/jobs")

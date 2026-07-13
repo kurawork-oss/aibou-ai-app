@@ -429,6 +429,32 @@ test.describe("desktop layout", () => {
 });
 
 /* ── Accessibility / no crash checks ─────────────────────────────── */
+/* ── CODE mode (ui-r14): Claude Code-like coding agent ── */
+test("CODE mode renders start screen with templates", async ({ page }) => {
+  await page.goto("/");
+  await enterApp(page);
+  await goMode(page, "CODE");
+  await expect(page.getByText("AI CODING AGENT")).toBeVisible({ timeout: 5_000 });
+  await expect(page.getByText("WEBアプリ (index.html)")).toBeVisible();
+});
+
+test("CODE: web starter creates workspace with live preview and editor", async ({ page }) => {
+  await page.goto("/");
+  await enterApp(page);
+  await goMode(page, "CODE");
+  await page.getByText("WEBアプリ (index.html)").click();
+  // Workspace opens: file tree + preview iframe (starter is HTML)
+  await expect(page.getByText("index.html").first()).toBeVisible({ timeout: 5_000 });
+  await expect(page.locator("iframe[title='preview']")).toBeAttached();
+  // Toggle to CODE view → editor textarea with the file content
+  await page.getByText("⌨ CODE", { exact: true }).click();
+  await expect(page.getByLabel("Edit index.html")).toBeVisible();
+  // Agent run offline → error turn appears in the log
+  await page.getByPlaceholder("エージェントへの指示…（Enterで実行）").fill("タイマーアプリにして");
+  await page.getByLabel("Run agent").click();
+  await expect(page.locator("text=⚠").first()).toBeVisible({ timeout: 8_000 });
+});
+
 /* ── Quality pass (ui-r13): message actions / refresh / view persistence ── */
 test("CHAT: failed send shows error bubble with 再生成 (retry)", async ({ page }) => {
   await page.goto("/");

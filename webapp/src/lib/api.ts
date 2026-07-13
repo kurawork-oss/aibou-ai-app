@@ -293,6 +293,45 @@ export async function forgeGenerate(kind: ForgeKind, prompt: string): Promise<Fo
   return data;
 }
 
+/* ---------------- Code (AI coding agent) ---------------- */
+export interface CodeFile {
+  path: string;
+  content: string;
+  action?: "create" | "update" | "delete";
+}
+
+export interface CodeGenerateResult {
+  explanation?: string;
+  files?: CodeFile[];
+  error?: string;
+}
+
+/** POST /code/generate — run the coding agent over the workspace. */
+export async function codeGenerate(
+  instruction: string,
+  files: CodeFile[],
+  history: ChatTurn[] = [],
+): Promise<CodeGenerateResult> {
+  const res = await fetch(`${requireApiUrl()}/code/generate`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ instruction, files, history }),
+  });
+  const data = (await res.json().catch(() => ({}))) as CodeGenerateResult;
+  if (!res.ok && !data.error) throw new Error(`Code failed (${res.status})`);
+  return data;
+}
+
+/** GET /code/scaffold — starter workspace (web | python | empty). */
+export async function codeScaffold(kind: "web" | "python" | "empty"): Promise<CodeFile[]> {
+  const res = await fetch(`${requireApiUrl()}/code/scaffold?kind=${kind}`, {
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  const data = (await res.json().catch(() => ({ files: [] }))) as { files?: CodeFile[] };
+  return data.files ?? [];
+}
+
 /* ---------------- Income (Mission Control) ---------------- */
 export interface IncomeJob {
   id?: string;

@@ -29,7 +29,7 @@ import {
 import type { ChatSettings } from "@/components/Chat";
 import Tilt3D from "@/components/Tilt3D";
 
-type View = "chat" | "forge" | "vault" | "income" | "tasks" | "studio" | "autopilot" | "board" | "archive" | "home";
+type View = "chat" | "forge" | "code" | "vault" | "income" | "tasks" | "studio" | "autopilot" | "board" | "archive" | "home";
 
 function greeting(): string {
   const h = new Date().getHours();

@@ -478,6 +478,32 @@ def test_keychain_no_secret_passthrough(monkeypatch):
     _reset_fernet()
 
 
+# ── /code（AIコーディングエージェント） ─────────────────────────────
+def test_code_generate_without_gemini_returns_503():
+    r = client.post("/code/generate", json={"instruction": "Webアプリを作って", "files": []})
+    assert r.status_code == 503
+    assert "error" in r.json()
+
+
+def test_code_generate_requires_instruction():
+    r = client.post("/code/generate", json={"instruction": "", "files": []})
+    assert r.status_code == 503
+    assert "error" in r.json()
+
+
+def test_code_scaffold_web():
+    r = client.get("/code/scaffold", params={"kind": "web"})
+    assert r.status_code == 200
+    files = r.json()["files"]
+    assert any(f["path"] == "index.html" for f in files)
+
+
+def test_code_scaffold_empty():
+    r = client.get("/code/scaffold", params={"kind": "empty"})
+    assert r.status_code == 200
+    assert r.json() == {"files": []}
+
+
 # ── /tts rate（話速） ───────────────────────────────────────────────
 def test_tts_with_rate():
     r = client.post("/tts", json={"text": "テスト", "voice": "ja-JP-NanamiNeural", "rate": "+20%"})
