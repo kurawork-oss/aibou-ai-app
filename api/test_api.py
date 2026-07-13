@@ -555,6 +555,23 @@ def test_code_scaffold_empty():
     assert r.json() == {"files": []}
 
 
+# ── /github（CODEモードのGitHub連携） ────────────────────────────────
+def test_github_repos_without_token_returns_503(monkeypatch):
+    import keychain
+    monkeypatch.setattr(keychain, "get_key", lambda name: "")
+    r = client.get("/github/repos")
+    assert r.status_code == 503
+    assert "GITHUB_TOKEN" in r.json()["error"]
+
+
+def test_github_import_without_token_returns_503(monkeypatch):
+    import keychain
+    monkeypatch.setattr(keychain, "get_key", lambda name: "")
+    r = client.post("/github/import", json={"repo": "o/r"})
+    assert r.status_code == 503
+    assert "error" in r.json()
+
+
 # ── /tts rate（話速） ───────────────────────────────────────────────
 def test_tts_with_rate():
     r = client.post("/tts", json={"text": "テスト", "voice": "ja-JP-NanamiNeural", "rate": "+20%"})

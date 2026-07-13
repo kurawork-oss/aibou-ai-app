@@ -337,6 +337,53 @@ export async function codeScaffold(kind: "web" | "python" | "empty"): Promise<Co
   return data.files ?? [];
 }
 
+/* ---------------- GitHub (CODE mode integration) ---------------- */
+export interface GhRepo {
+  full_name: string;
+  private: boolean;
+  default_branch: string;
+  description: string;
+  pushed_at: string;
+}
+
+/** GET /github/repos — repositories the token can access (newest first). */
+export async function ghRepos(): Promise<GhRepo[]> {
+  const res = await fetch(`${requireApiUrl()}/github/repos`, { headers: authHeaders(), cache: "no-store" });
+  const data = (await res.json().catch(() => ({}))) as { items?: GhRepo[]; error?: string };
+  if (data.error) throw new Error(data.error);
+  if (!res.ok) throw new Error(`GitHub repos failed (${res.status})`);
+  return data.items ?? [];
+}
+
+/** POST /github/import — pull a repo (or a folder of it) into a workspace. */
+export async function ghImport(repo: string, ref = "", path = ""): Promise<{ repo: string; ref: string; files: CodeFile[]; skipped: number }> {
+  const res = await fetch(`${requireApiUrl()}/github/import`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ repo, ref, path }),
+  });
+  const data = (await res.json().catch(() => ({}))) as { repo: string; ref: string; files: CodeFile[]; skipped: number; error?: string };
+  if (data.error) throw new Error(data.error);
+  if (!res.ok) throw new Error(`GitHub import failed (${res.status})`);
+  return data;
+}
+
+/** POST /github/push — push workspace files to a new branch (+ open a PR). */
+export async function ghPush(payload: {
+  repo: string; base: string; branch: string; message: string;
+  files: CodeFile[]; create_pr?: boolean; pr_title?: string;
+}): Promise<{ ok?: boolean; branch?: string; commit?: string; pr_url?: string; note?: string }> {
+  const res = await fetch(`${requireApiUrl()}/github/push`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ create_pr: true, ...payload }),
+  });
+  const data = (await res.json().catch(() => ({}))) as { ok?: boolean; branch?: string; commit?: string; pr_url?: string; note?: string; error?: string };
+  if (data.error) throw new Error(data.error);
+  if (!res.ok) throw new Error(`GitHub push failed (${res.status})`);
+  return data;
+}
+
 /* ---------------- Income (Mission Control) ---------------- */
 export interface IncomeJob {
   id?: string;

@@ -429,6 +429,18 @@ test.describe("desktop layout", () => {
 });
 
 /* ── Accessibility / no crash checks ─────────────────────────────── */
+/* ── GitHub integration (ui-r17): open a repo, code, push ── */
+test("CODE: GitHub section offers repo list and errors gracefully offline", async ({ page }) => {
+  await page.goto("/");
+  await enterApp(page);
+  await goMode(page, "CODE");
+  await expect(page.getByText("GITHUBから開く")).toBeVisible({ timeout: 5_000 });
+  await expect(page.getByText("GITHUB_TOKEN")).toBeVisible(); // setup hint
+  await page.getByRole("button", { name: "リポジトリ一覧を取得" }).click();
+  // Offline → requireApiUrl error surfaces inline, no crash
+  await expect(page.locator("text=⚠").first()).toBeVisible({ timeout: 8_000 });
+});
+
 /* ── Phase B (ui-r16): markdown rendering + mode theme colors ── */
 test("CHAT renders assistant markdown with highlighted code + copy", async ({ page }) => {
   // Seed a saved conversation whose assistant reply contains rich markdown.

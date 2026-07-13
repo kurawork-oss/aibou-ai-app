@@ -34,6 +34,7 @@ import config
 import code_agent
 import evolve
 import forge
+import gh
 import income
 import keychain
 import notify
@@ -208,6 +209,23 @@ class CodeGenerateRequest(BaseModel):
     instruction: str
     files: List[CodeFile] = Field(default_factory=list)
     history: List[ChatMessage] = Field(default_factory=list)
+
+
+class GithubImportRequest(BaseModel):
+    repo: str
+    ref: str = ""
+    path: str = ""
+
+
+class GithubPushRequest(BaseModel):
+    repo: str
+    base: str = "main"
+    branch: str = ""
+    message: str = ""
+    files: List[CodeFile] = Field(default_factory=list)
+    create_pr: bool = True
+    pr_title: str = ""
+
 
 
 class EnqueueRequest(BaseModel):
@@ -571,6 +589,42 @@ async def code_generate(req: CodeGenerateRequest, _auth: None = Depends(require_
 async def code_scaffold(kind: str = "web", _auth: None = Depends(require_auth)):
     """CODE：スターターワークスペース（web | python | empty）。"""
     return code_agent.scaffold(kind)
+
+
+@app.get("/github/repos")
+async def github_repos(_auth: None = Depends(require_auth)):
+    """CODE：アクセス可能なGitHubリポジトリ一覧（GITHUB_TOKEN必須）。"""
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(None, gh.list_repos)
+    if isinstance(result, dict) and result.get("error"):
+        return JSONResponse(status_code=503, content=result)
+    return result
+
+
+@app.post("/github/import")
+async def github_import(req: GithubImportRequest, _auth: None = Depends(require_auth)):
+    """CODE：リポジトリ（またはフォルダ）をワークスペースとして取り込む。"""
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(None, lambda: gh.import_repo(req.repo, req.ref, req.path))
+    if isinstance(result, dict) and result.get("error"):
+        return JSONResponse(status_code=503, content=result)
+    return result
+
+
+@app.post("/github/push")
+async def github_push(req: GithubPushRequest, _auth: None = Depends(require_auth)):
+    """CODE：ワークスペースを新ブランチへ1コミットでプッシュ（+PR作成）。"""
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(
+        None,
+        lambda: gh.push_files(
+            req.repo, req.base, req.branch, req.message,
+            [f.model_dump() for f in req.files], req.create_pr, req.pr_title,
+        ),
+    )
+    if isinstance(result, dict) and result.get("error"):
+        return JSONResponse(status_code=503, content=result)
+    return result
 
 
 @app.get("/income/jobs")

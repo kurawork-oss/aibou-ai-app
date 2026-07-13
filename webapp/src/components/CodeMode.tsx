@@ -12,7 +12,7 @@
 
 import { motion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { codeGenerate, API_URL, type CodeFile, type ChatTurn } from "@/lib/api";
+import { codeGenerate, ghRepos, ghImport, ghPush, API_URL, type CodeFile, type ChatTurn, type GhRepo } from "@/lib/api";
 import Markdown from "@/components/Markdown";
 
 const LS_WORKSPACES = "forge_code_workspaces";
@@ -31,6 +31,9 @@ interface Workspace {
   files: CodeFile[];
   log: LogTurn[];
   updatedAt: number;
+  /** GitHubから読み込んだ場合の連携情報（PUSH先）。 */
+  repo?: string;
+  baseRef?: string;
 }
 
 function uid(): string {
@@ -103,6 +106,89 @@ export default function CodeMode() {
   const [preview, setPreview] = useState(false);
   const [copied, setCopied] = useState(false);
   const logRef = useRef<HTMLDivElement | null>(null);
+
+  // GitHub連携（一覧→インポート / プッシュ+PR）
+  const [ghList, setGhList] = useState<GhRepo[] | null>(null);
+  const [ghBusy, setGhBusy] = useState(false);
+  const [ghError, setGhError] = useState<string | null>(null);
+  const [ghFilter, setGhFilter] = useState("");
+  const [ghPath, setGhPath] = useState("");
+  const [pushBusy, setPushBusy] = useState(false);
+
+  const loadRepos = async () => {
+    setGhBusy(true);
+    setGhError(null);
+    try {
+      setGhList(await ghRepos());
+    } catch (e) {
+      setGhError(e instanceof Error ? e.message : "リポジトリ一覧の取得に失敗しました");
+    } finally {
+      setGhBusy(false);
+    }
+  };
+
+  const importFromGithub = async (r: GhRepo) => {
+    if (ghBusy) return;
+    setGhBusy(true);
+    setGhError(null);
+    try {
+      const res = await ghImport(r.full_name, "", ghPath.trim());
+      const w: Workspace = {
+        id: uid(),
+        name: `${r.full_name.split("/")[1]}@${res.ref}`,
+        files: res.files,
+        log: [{
+          role: "assistant" as const,
+          content: `📥 **${r.full_name}** (${res.ref}) を読み込みました — ${res.files.length} ファイル${res.skipped ? `（${res.skipped}件はサイズ/形式でスキップ）` : ""}。
+指示をどうぞ（例：「READMEを整えて」「このバグを直して: …」）`,
+        }],
+        updatedAt: Date.now(),
+        repo: r.full_name,
+        baseRef: res.ref,
+      };
+      setWsList((prev) => { const next = [w, ...prev]; saveWorkspaces(next); return next; });
+      setWsId(w.id);
+      setSelected(res.files[0]?.path ?? null);
+      setChanged(new Set());
+      setUndoSnap(null);
+      setPreview(false);
+    } catch (e) {
+      setGhError(e instanceof Error ? e.message : "インポートに失敗しました");
+    } finally {
+      setGhBusy(false);
+    }
+  };
+
+  const pushToGithub = async () => {
+    if (!ws?.repo || pushBusy) return;
+    const d = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const defBranch = `forge/edit-${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}`;
+    const branch = window.prompt("プッシュ先の新ブランチ名", defBranch);
+    if (!branch?.trim()) return;
+    const lastAsk = [...ws.log].reverse().find((t) => t.role === "user")?.content ?? "";
+    const message = window.prompt("コミットメッセージ", lastAsk.slice(0, 72) || "Update via THE FORGE OS / CODE mode");
+    if (message === null) return;
+    setPushBusy(true);
+    try {
+      const r = await ghPush({
+        repo: ws.repo,
+        base: ws.baseRef || "main",
+        branch: branch.trim(),
+        message: message.trim() || "Update via THE FORGE OS / CODE mode",
+        files: ws.files,
+      });
+      const pr = r.pr_url ? `
+🔗 [PRを開く](${r.pr_url})` : (r.note ? `
+（${r.note}）` : "");
+      patchWs(ws.id, { log: [...ws.log, { role: "assistant" as const, content: `✅ **${r.branch}** にプッシュしました（${r.commit}）${pr}` }] });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "プッシュに失敗しました";
+      patchWs(ws.id, { log: [...ws.log, { role: "assistant" as const, content: `⚠ ${msg}`, error: true }] });
+    } finally {
+      setPushBusy(false);
+    }
+  };
 
   // 起動時にワークスペースを復元（無ければ空リストで開始画面）
   useEffect(() => {
@@ -312,6 +398,65 @@ export default function CodeMode() {
             </button>
           ))}
         </div>
+        {/* GitHubから開く（Claude Code スタイル） */}
+        <div className="w-full rounded-forge border border-panel p-3">
+          <div className="mb-1 flex items-center justify-between">
+            <span className="text-[10px] tracking-[0.2em] text-muted label-mono">⌥ GITHUBから開く</span>
+            <button
+              type="button"
+              onClick={() => void loadRepos()}
+              disabled={ghBusy}
+              className="rounded-forge border border-[var(--line)] px-3 py-1 text-[10px] tracking-[0.14em] text-[var(--accent)] disabled:opacity-40 label-mono"
+            >
+              {ghBusy && !ghList ? "取得中…" : "リポジトリ一覧を取得"}
+            </button>
+          </div>
+          {!ghList && !ghError && (
+            <p className="text-[10px] leading-relaxed text-muted">
+              KEYCHAIN に <code className="text-fg">GITHUB_TOKEN</code>（Fine-grained PAT・Contents/Pull requests権限）を保存すると、
+              リポジトリを選んでそのままAIコーディング → 新ブランチへプッシュ＋PR作成までできます。
+            </p>
+          )}
+          {ghError && <p className="text-[10px] leading-relaxed text-[#ff9b9b]">⚠ {ghError}</p>}
+          {ghList && (
+            <div className="mt-2 flex flex-col gap-1.5">
+              <div className="flex gap-1.5">
+                <input
+                  value={ghFilter}
+                  onChange={(e) => setGhFilter(e.target.value)}
+                  placeholder="絞り込み…"
+                  className="min-w-0 flex-1 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-2.5 py-1.5 text-[11px] text-fg-strong placeholder:text-muted focus:outline-none"
+                />
+                <input
+                  value={ghPath}
+                  onChange={(e) => setGhPath(e.target.value)}
+                  placeholder="フォルダ指定（任意 例: src）"
+                  className="min-w-0 flex-1 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-2.5 py-1.5 text-[11px] text-fg-strong placeholder:text-muted focus:outline-none"
+                />
+              </div>
+              <div className="max-h-52 overflow-y-auto rounded-forge border border-panel">
+                {ghList
+                  .filter((r) => !ghFilter.trim() || r.full_name.toLowerCase().includes(ghFilter.toLowerCase()))
+                  .map((r) => (
+                    <button
+                      key={r.full_name}
+                      type="button"
+                      onClick={() => void importFromGithub(r)}
+                      disabled={ghBusy}
+                      className="flex w-full items-center gap-2 border-b border-panel px-3 py-2 text-left transition last:border-b-0 hover:bg-white/5 disabled:opacity-40"
+                    >
+                      <span className="min-w-0 flex-1 truncate text-[12px] text-fg-strong">{r.full_name}</span>
+                      {r.private && <span className="shrink-0 rounded border border-panel px-1.5 text-[8px] tracking-[0.1em] text-muted label-mono">PRIVATE</span>}
+                      <span className="shrink-0 text-[9px] text-muted label-mono">{r.default_branch}</span>
+                    </button>
+                  ))}
+                {ghList.length === 0 && <p className="p-3 text-[10px] text-muted">アクセスできるリポジトリがありません（PATの対象リポジトリ設定を確認）</p>}
+              </div>
+              {ghBusy && <p className="text-[10px] tracking-[0.14em] text-muted label-mono">◈ IMPORTING…</p>}
+            </div>
+          )}
+        </div>
+
         {wsList.length > 0 && (
           <div className="w-full">
             <div className="mb-1 text-[10px] tracking-[0.2em] text-muted label-mono">最近のワークスペース</div>
@@ -344,6 +489,17 @@ export default function CodeMode() {
           <button type="button" onClick={renameWs} className="min-w-0 flex-1 truncate text-left text-[12px] text-fg-strong" title="名前を変更">
             {ws.name}
           </button>
+          {ws.repo && (
+            <button
+              type="button"
+              onClick={() => void pushToGithub()}
+              disabled={pushBusy}
+              className="shrink-0 rounded-forge border border-[var(--line)] px-2.5 py-1 text-[10px] tracking-[0.1em] text-[var(--accent)] disabled:opacity-40 label-mono"
+              title={`${ws.repo} へ新ブランチでプッシュ＋PR作成`}
+            >
+              {pushBusy ? "PUSHING…" : "⬆ PUSH"}
+            </button>
+          )}
           <button type="button" onClick={deleteWs} className="shrink-0 text-[10px] text-[#ff8888] label-mono" aria-label="Delete workspace">✕</button>
         </div>
 
