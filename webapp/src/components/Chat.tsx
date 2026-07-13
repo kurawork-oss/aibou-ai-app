@@ -21,6 +21,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import type { CoreState } from "./CoreOrb";
+import Markdown from "@/components/Markdown";
 import { streamChat, tts, vision, type ChatTurn } from "@/lib/api";
 import {
   isSpeechSynthesisSupported,
@@ -789,10 +790,12 @@ function MessageBubble({ message, onRegenerate }: { message: Message; onRegenera
         )}
         {message.pending && !message.content ? (
           <TypingDots />
+        ) : isUser || message.error ? (
+          <span className="whitespace-pre-wrap">{message.content}</span>
         ) : (
-          <span className={`whitespace-pre-wrap ${message.role === "assistant" && message.pending ? "caret" : ""}`}>
-            {message.content}
-          </span>
+          <div className={message.pending ? "caret" : ""}>
+            <Markdown text={message.content} />
+          </div>
         )}
       </div>
 

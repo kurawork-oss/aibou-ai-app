@@ -150,6 +150,7 @@ function Hud() {
   // margin while the conversation stays centred.
   return (
     <main
+      data-mode={view}
       className={`relative mx-auto flex h-[100dvh] w-full flex-col px-4 pb-20 pt-[max(env(safe-area-inset-top),0.75rem)] transition-[max-width] duration-300 sm:pb-3 ${view === "chat" ? "max-w-[1700px]" : "max-w-6xl"}`}
     >
       {/* Occasional drifting light-silver ambient bloom (behind everything). */}

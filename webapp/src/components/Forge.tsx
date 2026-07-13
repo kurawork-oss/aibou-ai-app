@@ -8,6 +8,7 @@
 import { motion } from "framer-motion";
 import { useState } from "react";
 import VideoPanel from "@/components/VideoPanel";
+import Markdown from "@/components/Markdown";
 import { addToArchive } from "@/components/AppArchive";
 import { forgeGenerate, type ForgeKind, type ForgeResult } from "@/lib/api";
 
@@ -315,9 +316,9 @@ function ForgeResultView({ result, prompt }: { result: ForgeResult; prompt: stri
           onDownload={() => download(isSlides ? `${slugName(prompt, "slides")}.md` : `${slugName(prompt, "doc")}.md`, result.markdown!, "text/markdown")}
           label=".md"
         />
-        <pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap rounded-forge bg-black/30 p-3 text-[12px] leading-relaxed text-fg">
-          {result.markdown}
-        </pre>
+        <div className="mt-2 max-h-80 overflow-auto rounded-forge bg-black/30 p-3">
+          <Markdown text={result.markdown} />
+        </div>
       </div>
     );
   }

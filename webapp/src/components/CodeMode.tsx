@@ -13,6 +13,7 @@
 import { motion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { codeGenerate, API_URL, type CodeFile, type ChatTurn } from "@/lib/api";
+import Markdown from "@/components/Markdown";
 
 const LS_WORKSPACES = "forge_code_workspaces";
 const WS_LIMIT = 12;
@@ -364,7 +365,7 @@ export default function CodeMode() {
                   t.error ? "border-[rgba(255,120,120,0.45)] text-[#ffb4b4]" : "",
                 ].join(" ")}
               >
-                {t.content}
+                {t.role === "assistant" && !t.error ? <Markdown text={t.content} /> : t.content}
               </div>
             </div>
           ))}

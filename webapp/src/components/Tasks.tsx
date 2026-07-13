@@ -10,7 +10,7 @@
  */
 
 import { motion, AnimatePresence } from "framer-motion";
-import { useEffect, useState, useCallback } from "react";
+import { useRef, useEffect, useState, useCallback } from "react";
 import { listTasks, createTask, updateTask, deleteTask, type Task } from "@/lib/api";
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
@@ -83,6 +83,26 @@ export default function Tasks() {
     } finally {
       setUpdatingId(null);
     }
+  };
+
+  // ワンタップ完了 ⇄ 未完了。誤タップは5秒間の「元に戻す」で救済。
+  const [undo, setUndo] = useState<{ id: string; prev: string } | null>(null);
+  const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const quickToggle = async (task: Task) => {
+    const next = task.status === "completed" ? "pending" : "completed";
+    await handleStatusChange(task.id, next);
+    if (next === "completed") {
+      setUndo({ id: task.id, prev: task.status });
+      if (undoTimer.current) clearTimeout(undoTimer.current);
+      undoTimer.current = setTimeout(() => setUndo(null), 5000);
+    } else {
+      setUndo(null);
+    }
+  };
+  const doUndo = async () => {
+    if (!undo) return;
+    await handleStatusChange(undo.id, undo.prev);
+    setUndo(null);
   };
 
   const handleResponse = async (id: string) => {
@@ -227,6 +247,20 @@ export default function Tasks() {
                   transition={{ duration: 0.2 }}
                 >
                   <div className="flex items-start justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void quickToggle(task)}
+                      disabled={updatingId === task.id}
+                      aria-label={task.status === "completed" ? "未完了に戻す" : "完了にする"}
+                      className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border transition disabled:opacity-40"
+                      style={{
+                        borderColor: task.status === "completed" ? "#60d394" : "var(--input-bd)",
+                        background: task.status === "completed" ? "rgba(96,211,148,0.18)" : "transparent",
+                        color: "#60d394",
+                      }}
+                    >
+                      {task.status === "completed" ? "✓" : ""}
+                    </button>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <span
@@ -235,7 +269,7 @@ export default function Tasks() {
                         >
                           {st.label}
                         </span>
-                        <span className="truncate text-[13px] text-fg-strong">{task.title}</span>
+                        <span className={`truncate text-[13px] ${task.status === "completed" ? "text-muted line-through" : "text-fg-strong"}`}>{task.title}</span>
                       </div>
                       {task.content && (
                         <p className="mt-1 text-[11px] leading-relaxed text-muted line-clamp-2">{task.content}</p>
@@ -321,6 +355,23 @@ export default function Tasks() {
         </div>
       )}
       </div>
+
+      {/* Undo toast — 5秒だけ表示 */}
+      <AnimatePresence>
+        {undo && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 12 }}
+            className="fixed bottom-24 left-1/2 z-50 -translate-x-1/2"
+          >
+            <div className="flex items-center gap-3 rounded-full border border-panel bg-[rgba(16,20,28,0.92)] px-4 py-2 shadow-glow backdrop-blur">
+              <span className="text-[11px] text-fg">タスクを完了にしました</span>
+              <button type="button" onClick={() => void doUndo()} className="text-[10px] tracking-[0.14em] text-[var(--accent)] label-mono">元に戻す</button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

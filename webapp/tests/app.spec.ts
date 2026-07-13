@@ -429,6 +429,48 @@ test.describe("desktop layout", () => {
 });
 
 /* ── Accessibility / no crash checks ─────────────────────────────── */
+/* ── Phase B (ui-r16): markdown rendering + mode theme colors ── */
+test("CHAT renders assistant markdown with highlighted code + copy", async ({ page }) => {
+  // Seed a saved conversation whose assistant reply contains rich markdown.
+  await page.addInitScript(() => {
+    const convo = {
+      id: "seed-1",
+      title: "markdown test",
+      updatedAt: Date.now(),
+      messages: [
+        { id: "m1", role: "user", content: "コード例を見せて" },
+        {
+          id: "m2",
+          role: "assistant",
+          content: "# 見出し\n\n- 箇条書き1\n- **太字**項目\n\n```python\nprint('hello forge')\n```",
+        },
+      ],
+    };
+    localStorage.setItem("forge_chat_convos", JSON.stringify([convo]));
+  });
+  await page.goto("/");
+  await enterApp(page);
+  await page.getByLabel("Chat history").click();
+  await page.getByText("markdown test").click();
+  // Markdown structures render as real elements (not literal symbols)
+  await expect(page.locator(".md h1", { hasText: "見出し" })).toBeVisible({ timeout: 5_000 });
+  await expect(page.locator(".md li strong", { hasText: "太字" })).toBeVisible();
+  await expect(page.locator(".md-codeblock code")).toContainText("print");
+  await expect(page.locator(".md-codebar button")).toBeVisible(); // copy button
+});
+
+test("Mode switch retints the accent (data-mode)", async ({ page }) => {
+  await page.goto("/");
+  await enterApp(page);
+  await expect(page.locator("main[data-mode='chat']")).toBeAttached();
+  await goMode(page, "FORGE");
+  await expect(page.locator("main[data-mode='forge']")).toBeAttached({ timeout: 5_000 });
+  const accent = await page.evaluate(() =>
+    getComputedStyle(document.querySelector("main")!).getPropertyValue("--accent").trim(),
+  );
+  expect(accent).toBe("#ffb454");
+});
+
 /* ── Phase A (ui-r15): mobile thumb-zone nav ── */
 test("Mobile bottom nav switches modes and opens the MORE sheet", async ({ page }) => {
   await page.goto("/");

@@ -17,6 +17,7 @@ import {
   vaultGenerateDiagram,
   type VaultNotebook,
 } from "@/lib/api";
+import Markdown from "@/components/Markdown";
 
 export default function Vault() {
   const [notebooks, setNotebooks] = useState<VaultNotebook[]>([]);
@@ -365,7 +366,7 @@ export default function Vault() {
             {answer && !asking && (
               <div className="mt-3">
                 <div className="divider mb-3" />
-                <p className="whitespace-pre-wrap text-sm leading-relaxed text-fg">{answer}</p>
+                <Markdown text={answer} />
                 <button
                   type="button"
                   onClick={() => {
