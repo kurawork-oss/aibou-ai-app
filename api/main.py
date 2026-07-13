@@ -37,6 +37,7 @@ import forge
 import gh
 import income
 import keychain
+import life
 import notify
 import proactive
 import studio
@@ -215,6 +216,16 @@ class GithubImportRequest(BaseModel):
     repo: str
     ref: str = ""
     path: str = ""
+
+
+class LifeEntryRequest(BaseModel):
+    category: str = "other"
+    content: str
+    entry_date: str = ""
+
+
+class LifeExtractRequest(BaseModel):
+    turns: List[ChatMessage] = Field(default_factory=list)
 
 
 class GithubPushRequest(BaseModel):
@@ -625,6 +636,86 @@ async def github_push(req: GithubPushRequest, _auth: None = Depends(require_auth
     if isinstance(result, dict) and result.get("error"):
         return JSONResponse(status_code=503, content=result)
     return result
+
+
+@app.get("/life/entries")
+async def life_entries(category: Optional[str] = None, _auth: None = Depends(require_auth)):
+    """ME：経験の箱の一覧（category で絞り込み可）。"""
+    loop = asyncio.get_event_loop()
+    items = await loop.run_in_executor(None, lambda: life.list_entries(category or ""))
+    return {"items": items, "categories": life.CATEGORIES}
+
+
+@app.post("/life/entries")
+async def life_add(req: LifeEntryRequest, _auth: None = Depends(require_auth)):
+    """ME：経験を1件保存。"""
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(None, lambda: life.add_entry(req.category, req.content, req.entry_date))
+    if isinstance(result, dict) and result.get("error"):
+        return JSONResponse(status_code=400, content=result)
+    return result
+
+
+@app.delete("/life/entries/{entry_id}")
+async def life_delete(entry_id: str, _auth: None = Depends(require_auth)):
+    """ME：経験を1件削除。"""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, lambda: life.delete_entry(entry_id))
+
+
+@app.post("/life/extract")
+async def life_extract(req: LifeExtractRequest, _auth: None = Depends(require_auth)):
+    """ME：直近の相談会話から「経験の箱」候補を抽出（保存はユーザー確認後）。"""
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(
+        None, lambda: life.extract_entries([t.model_dump() for t in req.turns])
+    )
+    if isinstance(result, dict) and result.get("error"):
+        return JSONResponse(status_code=503, content=result)
+    return result
+
+
+@app.post("/life/chat")
+async def life_chat(req: ChatRequest, _auth: None = Depends(require_auth)):
+    """ME：経験の箱を常に踏まえた相談チャット（SSE）。
+    通常 /chat と違いツール実行は無し — 純粋な相談相手として振る舞う。"""
+    model = config.get_gemini_model()
+    if model is None:
+        async def err_stream():
+            yield _sse({"error": "GEMINI_API_KEY is not configured on the server."})
+            yield _sse({"done": True})
+        return StreamingResponse(err_stream(), media_type="text/event-stream")
+
+    system_prompt = await asyncio.get_event_loop().run_in_executor(
+        None, lambda: life.build_life_prompt(req.name or "")
+    )
+    prompt = build_conversation(system_prompt, req.history, req.message)
+
+    async def event_stream():
+        loop = asyncio.get_event_loop()
+
+        def _next(it):
+            try:
+                return next(it)
+            except StopIteration:
+                return None
+
+        try:
+            stream = await loop.run_in_executor(None, lambda: model.generate_content(prompt, stream=True))
+            it = iter(stream)
+            while True:
+                chunk = await loop.run_in_executor(None, _next, it)
+                if chunk is None:
+                    break
+                text = getattr(chunk, "text", None) or ""
+                if text:
+                    yield _sse({"token": text})
+            yield _sse({"done": True})
+        except Exception as e:
+            yield _sse({"error": f"life chat failed: {e}"})
+            yield _sse({"done": True})
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 @app.get("/income/jobs")

@@ -9,7 +9,7 @@
 -- ・全文 IF NOT EXISTS の冪等設計 — 何度実行しても安全（既存データは消えない）
 -- ・現行アプリ(FastAPI)が使うのは: api_keys / tasks / missions / automations /
 --   events / notifications / vault_notebooks / income_jobs / studio_ais /
---   studio_workflows / agent_memory の11テーブル
+--   studio_workflows / agent_memory / life_entries の12テーブル
 --   （vault_data / dashboard_boards / forge_apps / core_versions /
 --     evolution_proposals / income_stats は旧Streamlit版の互換用。あっても無害）
 -- ・api_keys.value にはサーバー側でFernet暗号化された暗号文が入る（平文は不保存）
@@ -99,6 +99,17 @@ CREATE TABLE IF NOT EXISTS income_stats (
 -- 想起してシステムプロンプトへ注入する。単独利用向けに user_id は text（既定 'local'）。
 -- ※ 複数ユーザー/RLSで運用する場合は supabase/migrations/ の agent_memory（uuid+RLS）を使う。
 -- =====================================================================
+-- ME モード「経験の箱」— 本人の経歴/お金/人間関係/価値観などの長期プロファイル。
+-- 相談チャット(/life/chat)の system prompt に常に注入される。
+CREATE TABLE IF NOT EXISTS life_entries (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  category   text DEFAULT 'other',   -- career|money|relationships|health|values|events|other
+  content    text NOT NULL,
+  entry_date text DEFAULT '',        -- 任意の時期表記（例 "2024-04" "高校時代"）
+  created_at timestamptz DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_life_entries_cat ON life_entries(category, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS agent_memory (
   id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id    text DEFAULT 'local',

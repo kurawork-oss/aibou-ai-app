@@ -107,13 +107,14 @@ export function streamChat(
   params: StreamChatParams,
   onToken: (token: string) => void,
   onDone: (error?: string) => void,
+  path = "/chat",
 ): StreamHandlers {
   const controller = new AbortController();
 
   (async () => {
     let url: string;
     try {
-      url = `${requireApiUrl()}/chat`;
+      url = `${requireApiUrl()}${path}`;
     } catch (e) {
       onDone(e instanceof Error ? e.message : "Missing API URL");
       return;
@@ -335,6 +336,67 @@ export async function codeScaffold(kind: "web" | "python" | "empty"): Promise<Co
   });
   const data = (await res.json().catch(() => ({ files: [] }))) as { files?: CodeFile[] };
   return data.files ?? [];
+}
+
+/* ---------------- Life (ME mode — personal partner) ---------------- */
+export interface LifeEntry {
+  id: string;
+  category: string;
+  content: string;
+  entry_date?: string;
+  created_at?: string;
+}
+
+export interface LifeCategory { key: string; label: string }
+
+/** POST /life/chat — consultation stream grounded in the experience box. */
+export function streamLifeChat(
+  params: StreamChatParams,
+  onToken: (token: string) => void,
+  onDone: (error?: string) => void,
+): StreamHandlers {
+  return streamChat(params, onToken, onDone, "/life/chat");
+}
+
+/** GET /life/entries — the experience box (optionally by category). */
+export async function lifeEntries(category = ""): Promise<{ items: LifeEntry[]; categories: LifeCategory[] }> {
+  const q = category ? `?category=${encodeURIComponent(category)}` : "";
+  const res = await fetch(`${requireApiUrl()}/life/entries${q}`, { headers: authHeaders(), cache: "no-store" });
+  if (!res.ok) throw new Error(`Life entries failed (${res.status})`);
+  return (await res.json().catch(() => ({ items: [], categories: [] }))) as { items: LifeEntry[]; categories: LifeCategory[] };
+}
+
+/** POST /life/entries — save one experience. */
+export async function lifeAdd(category: string, content: string, entryDate = ""): Promise<LifeEntry> {
+  const res = await fetch(`${requireApiUrl()}/life/entries`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ category, content, entry_date: entryDate }),
+  });
+  const data = (await res.json().catch(() => ({}))) as LifeEntry & { error?: string };
+  if (!res.ok || data.error) throw new Error(data.error ?? `Life add failed (${res.status})`);
+  return data;
+}
+
+/** DELETE /life/entries/{id} */
+export async function lifeDelete(id: string): Promise<boolean> {
+  const res = await fetch(`${requireApiUrl()}/life/entries/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  return res.ok;
+}
+
+/** POST /life/extract — propose box entries from recent consultation turns. */
+export async function lifeExtract(turns: ChatTurn[]): Promise<{ category: string; content: string }[]> {
+  const res = await fetch(`${requireApiUrl()}/life/extract`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ turns }),
+  });
+  const data = (await res.json().catch(() => ({}))) as { entries?: { category: string; content: string }[]; error?: string };
+  if (data.error) throw new Error(data.error);
+  return data.entries ?? [];
 }
 
 /* ---------------- GitHub (CODE mode integration) ---------------- */

@@ -4,7 +4,7 @@
  * THE FORGE OS — main HUD.
  *
  * Flows: EntryGate → BootScreen → Hud.
- * Views (11): HOME / CHAT / FORGE / CODE / VAULT / INCOME / TASKS / STUDIO /
+ * Views (12): HOME / CHAT / ME / FORGE / CODE / VAULT / INCOME / TASKS / STUDIO /
  *   AUTOPILOT / BOARD / ARCHIVE — default is CHAT.
  * Navigation is a Google-apps-style waffle "ModeLauncher" popover (top-right),
  * not a bottom bar. CHAT goes extra-wide with its history in the far-left
@@ -27,6 +27,7 @@ import Forge from "@/components/Forge";
 import Home from "@/components/Home";
 import Income from "@/components/Income";
 import Keychain from "@/components/Keychain";
+import LifeMode from "@/components/LifeMode";
 import Studio from "@/components/Studio";
 import Tasks from "@/components/Tasks";
 import Vault from "@/components/Vault";
@@ -34,7 +35,7 @@ import { health } from "@/lib/api";
 import { supabase, supabaseEnabled } from "@/lib/supabase";
 import { APP_VERSION } from "@/lib/version";
 
-type View = "chat" | "forge" | "code" | "vault" | "income" | "tasks" | "studio" | "autopilot" | "board" | "archive" | "home";
+type View = "chat" | "me" | "forge" | "code" | "vault" | "income" | "tasks" | "studio" | "autopilot" | "board" | "archive" | "home";
 
 const LS_NAME = "forge_name";
 const LS_PERSONA = "forge_persona";
@@ -95,7 +96,7 @@ function Hud() {
       if (voice !== null) setVoiceReplies(voice === "1");
       // Reopen the mode you were using (PWA relaunch lands where you left off).
       const savedView = localStorage.getItem("forge_view") as View | null;
-      if (savedView && ["chat", "forge", "code", "vault", "income", "tasks", "studio", "autopilot", "board", "archive", "home"].includes(savedView)) {
+      if (savedView && ["chat", "me", "forge", "code", "vault", "income", "tasks", "studio", "autopilot", "board", "archive", "home"].includes(savedView)) {
         setView(savedView);
       }
     } catch { /* ignore */ }
@@ -221,6 +222,7 @@ function Hud() {
           {loaded && view === "chat" && (
             <Chat settings={settings} voiceReplies={voiceReplies} onStateChange={setCoreState} />
           )}
+          {loaded && view === "me" && <LifeMode settings={settings} />}
           {loaded && view === "forge" && <Forge />}
           {loaded && view === "code" && <CodeMode />}
           {loaded && view === "vault" && <Centered><Vault /></Centered>}
@@ -264,6 +266,7 @@ function stateLabel(state: CoreState): string {
 const NAV_ITEMS: { key: View; label: string }[] = [
   { key: "home", label: "HOME" },
   { key: "chat", label: "CHAT" },
+  { key: "me", label: "ME" },
   { key: "forge", label: "FORGE" },
   { key: "code", label: "CODE" },
   { key: "vault", label: "VAULT" },
@@ -288,6 +291,8 @@ function NavIcon({ name }: { name: View }) {
       return (<svg {...p}><path d="M3 11l9-7 9 7" /><path d="M5 10v10h14V10" /><path d="M9 20v-6h6v6" /></svg>);
     case "code":
       return (<svg {...p}><path d="M8 6l-5 6 5 6" /><path d="M16 6l5 6-5 6" /><path d="M13 4l-2 16" /></svg>);
+    case "me":
+      return (<svg {...p}><path d="M12 20s-7-4.6-9.2-8.8C1.2 8 3 5 6.2 5c2 0 3.3 1 4 2.2C11 6 12.3 5 14.3 5c3.2 0 5 3 3.4 6.2C15.5 15.4 12 20 12 20z" /></svg>);
     case "chat":
       return (<svg {...p}><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.7A8.5 8.5 0 1 1 21 11.5z" /></svg>);
     case "forge":
@@ -341,7 +346,7 @@ function MobileNav({ view, onChange }: { view: View; onChange: (v: View) => void
     return () => vv.removeEventListener("resize", onResize);
   }, []);
 
-  const PRIMARY: View[] = ["home", "chat", "code", "tasks"];
+  const PRIMARY: View[] = ["home", "chat", "me", "tasks"];
   const items = NAV_ITEMS.filter((i) => PRIMARY.includes(i.key));
 
   return (

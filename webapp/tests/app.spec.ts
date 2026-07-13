@@ -429,6 +429,29 @@ test.describe("desktop layout", () => {
 });
 
 /* ── Accessibility / no crash checks ─────────────────────────────── */
+/* ── ME mode (ui-r18): life partner with the experience box ── */
+test("ME mode renders life partner intro + experience box", async ({ page }) => {
+  await page.goto("/");
+  await enterApp(page);
+  await goMode(page, "ME");
+  await expect(page.getByText("LIFE PARTNER")).toBeVisible({ timeout: 5_000 });
+  await expect(page.getByText("📦 経験の箱")).toBeVisible();
+  // Offline → the box explains it needs the backend
+  await expect(page.getByText(/バックエンド未接続のため箱は使えません/)).toBeVisible();
+  // data-mode retint
+  await expect(page.locator("main[data-mode='me']")).toBeAttached();
+});
+
+test("ME: consultation send fails gracefully offline", async ({ page }) => {
+  await page.goto("/");
+  await enterApp(page);
+  await goMode(page, "ME");
+  await page.getByPlaceholder("人生でも、お金でも、なんでも相談してください…").fill("お金の相談をしたい");
+  await page.keyboard.press("Enter");
+  await expect(page.getByText("お金の相談をしたい")).toBeVisible({ timeout: 5_000 });
+  await expect(page.locator("text=⚠").first()).toBeVisible({ timeout: 8_000 });
+});
+
 /* ── GitHub integration (ui-r17): open a repo, code, push ── */
 test("CODE: GitHub section offers repo list and errors gracefully offline", async ({ page }) => {
   await page.goto("/");

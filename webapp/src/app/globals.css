@@ -625,3 +625,4 @@ a {
 [data-mode="autopilot"] { --accent: #4de3c2; --glow: rgba(77, 227, 194, 0.26);  --glow-strong: rgba(77, 227, 194, 0.4);   }
 [data-mode="board"]     { --accent: #e07aff; --glow: rgba(224, 122, 255, 0.24); --glow-strong: rgba(224, 122, 255, 0.38); }
 [data-mode="archive"]   { --accent: #aeb7c2; --glow: rgba(174, 183, 194, 0.22); --glow-strong: rgba(174, 183, 194, 0.34); }
+[data-mode="me"]        { --accent: #ff9db4; --glow: rgba(255, 157, 180, 0.26); --glow-strong: rgba(255, 157, 180, 0.4);  }
