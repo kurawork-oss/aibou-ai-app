@@ -731,7 +731,7 @@ function SettingsPanel({
                         value={onVercel ? `${vercelEnv ? vercelEnv.toUpperCase() : "HOSTED"}${host ? ` · ${host}` : ""}` : (host || "ローカル / 他ホスト")} />
                       <ConnRow name="Supabase" ok={supabaseEnabled}
                         value={sbRef ? `${sbRef}${supabaseEnabled ? "" : " · キー未設定"}` : "未設定"} />
-                      <ConnRow name="Backend API" ok={!!apiUrl} value={apiUrl || "未接続"} />
+                      <ConnRow name="Backend API" ok={online} value={apiUrl ? (online ? apiUrl : `応答なし · ${apiUrl}`) : "未接続"} />
                     </div>
                   </div>
                 );
@@ -753,7 +753,22 @@ function SettingsPanel({
                 </div>
               </div>
 
-              {!process.env.NEXT_PUBLIC_API_URL ? (
+              {online ? (
+                <div className="rounded-forge border border-panel p-3 text-[11px] leading-relaxed text-[#60d394]">
+                  ✓ バックエンド接続済み。あとは KEYCHAIN に <b>Gemini API Key</b> を入れれば各AI機能が有効になります。
+                </div>
+              ) : process.env.NEXT_PUBLIC_API_URL ? (
+                <div className="rounded-forge border p-3" style={{ borderColor: "#ffd06055" }}>
+                  <div className="mb-1 text-[10px] tracking-[0.2em] label-mono" style={{ color: "#ffd060" }}>⚠ バックエンドが応答していません</div>
+                  <p className="text-[11px] leading-relaxed text-fg">
+                    <code className="break-all">API_URL</code> は設定されていますが、そのURLに「頭脳（バックエンド）」がありません。
+                    <b>Vercelの画面URL（〜.vercel.app）は頭脳ではありません。</b>
+                    Render等にバックエンド(<code>api/</code>)をデプロイし、そこで発行された
+                    <b>〜.onrender.com のようなURL</b>を <code>NEXT_PUBLIC_API_URL</code> に設定して Redeploy してください。
+                  </p>
+                  <p className="mt-1.5 text-[10px] text-muted">手順は <code>START_HERE.md</code> / <code>BACKEND_CONNECT.md</code>。</p>
+                </div>
+              ) : (
                 <div className="rounded-forge border border-panel p-3">
                   <div className="mb-2 text-[10px] tracking-[0.2em] label-mono" style={{ color: "#ffd060" }}>◈ バックエンド接続ガイド（3ステップ）</div>
                   <ol className="ml-4 list-decimal space-y-1.5 text-[11px] leading-relaxed text-fg marker:text-muted">
@@ -762,10 +777,6 @@ function SettingsPanel({
                     <li><b>再読込</b>：上部が <b>LINK ACTIVE</b> になったら KEYCHAIN で <b>Gemini API Key</b> を SAVE（自動でサーバーへ同期・即有効）。</li>
                   </ol>
                   <p className="mt-2 text-[10px] text-muted">詳細は <code>BACKEND_CONNECT.md</code>。CORSは既定で全許可、GeminiキーはKEYCHAIN同期でOK（サーバーのenv設定は不要）。</p>
-                </div>
-              ) : (
-                <div className="rounded-forge border border-panel p-3 text-[11px] leading-relaxed text-[#60d394]">
-                  ✓ バックエンド接続済み。あとは KEYCHAIN に <b>Gemini API Key</b> を入れれば各AI機能が有効になります。
                 </div>
               )}
 
