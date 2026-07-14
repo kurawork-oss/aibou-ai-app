@@ -529,6 +529,37 @@ def test_auth_expired_jwt_rejected(monkeypatch):
     assert client.get("/keys", headers={"Authorization": f"Bearer {expired}"}).status_code == 401
 
 
+# ── Geminiモデルの自動選択（廃止・新規不可を回避） ─────────────────
+def test_model_resolution_picks_first_available(monkeypatch):
+    import config
+    monkeypatch.setattr(config, "_list_available_models",
+                        lambda: {"gemini-1.5-flash", "gemini-2.0-flash", "embedding-001"})
+    config._resolved_model = None
+    assert config._resolve_model() == "gemini-2.0-flash"  # 候補の優先順
+    config._resolved_model = None
+
+
+def test_model_resolution_flash_fallback(monkeypatch):
+    import config
+    # 名前付き候補が全滅でも、使える flash 系を拾う
+    monkeypatch.setattr(config, "_list_available_models", lambda: {"gemini-9-flash-exp"})
+    config._resolved_model = None
+    assert config._resolve_model() == "gemini-9-flash-exp"
+    config._resolved_model = None
+
+
+def test_model_resolution_error_fallback(monkeypatch):
+    import config
+
+    def _boom():
+        raise RuntimeError("no network / SDK")
+
+    monkeypatch.setattr(config, "_list_available_models", _boom)
+    config._resolved_model = None
+    assert config._resolve_model() == "gemini-2.0-flash"  # 候補先頭にフォールバック
+    config._resolved_model = None
+
+
 # ── /code（AIコーディングエージェント） ─────────────────────────────
 def test_code_generate_without_gemini_returns_503():
     r = client.post("/code/generate", json={"instruction": "Webアプリを作って", "files": []})
