@@ -5,6 +5,7 @@ import json
 import re
 
 import config
+import llm
 
 # ── 入出力の上限（暴走・巨大化のガード） ───────────────────────────
 MAX_INPUT_FILES = 30          # 受け取るワークスペースのファイル数
@@ -130,13 +131,11 @@ def generate(instruction: str, files: list, history: list | None = None) -> dict
     失敗: {"error": str}（絶対に raise しない）"""
     if not (instruction or "").strip():
         return {"error": "instruction is required"}
-    model = config.get_gemini_model()
-    if model is None:
-        return {"error": "GEMINI_API_KEY が未設定です。Settings → KEYCHAIN で設定してください。"}
+    if llm.active_provider() == "none":
+        return {"error": "AI未設定です。Settings → KEYCHAIN で GEMINI_API_KEY か HUGGINGFACE_TOKEN を設定してください。"}
 
     try:
-        resp = config.generate_resilient(_build_prompt(instruction, files or [], history))
-        text = getattr(resp, "text", "") or ""
+        text = llm.generate_text(_build_prompt(instruction, files or [], history)) or ""
     except Exception as e:
         return {"error": f"generation failed: {e}"}
 

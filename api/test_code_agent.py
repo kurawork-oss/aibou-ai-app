@@ -1,11 +1,12 @@
 # test_code_agent.py — CODE モード（api/code_agent.py）のユニットテスト。Gemini 不要。
 import config
 import code_agent as code_mod
+import llm
 
 
 # ── generate: 設定なし ────────────────────────────────────────────
 def test_generate_without_gemini_returns_error(monkeypatch):
-    monkeypatch.setattr(config, "get_gemini_model", lambda *a, **k: None)
+    monkeypatch.setattr(llm, "active_provider", lambda: "none")
     r = code_mod.generate("Webアプリを作って", [])
     assert "error" in r and "GEMINI_API_KEY" in r["error"]
 
@@ -101,7 +102,8 @@ def test_generate_with_fake_model(monkeypatch):
         '{"path": "../evil.sh", "content": "rm -rf /", "action": "create"},'
         '{"path": "old/util.js", "content": "", "action": "delete"}]}'
     )
-    monkeypatch.setattr(config, "get_gemini_model", lambda *a, **k: _FakeModel(payload))
+    monkeypatch.setattr(llm, "active_provider", lambda: "gemini")
+    monkeypatch.setattr(llm, "generate_text", lambda prompt: payload)
     r = code_mod.generate("直して", [{"path": "index.html", "content": "<h1>old</h1>"}])
     assert "error" not in r
     paths = [f["path"] for f in r["files"]]
@@ -113,9 +115,9 @@ def test_generate_with_fake_model(monkeypatch):
 
 
 def test_generate_model_error_is_caught(monkeypatch):
-    class _Boom:
-        def generate_content(self, prompt, **kwargs):
-            raise RuntimeError("quota")
-    monkeypatch.setattr(config, "get_gemini_model", lambda *a, **k: _Boom())
+    def _boom(prompt):
+        raise RuntimeError("quota")
+    monkeypatch.setattr(llm, "active_provider", lambda: "gemini")
+    monkeypatch.setattr(llm, "generate_text", _boom)
     r = code_mod.generate("作って", [])
     assert "error" in r and "generation failed" in r["error"]

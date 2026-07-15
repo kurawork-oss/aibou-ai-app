@@ -4,6 +4,7 @@ import re
 import urllib.parse
 
 import config
+import llm
 
 # 各タイプのシステムプロンプト（Streamlit Forge Lab と同等の方針）
 _APP = (
@@ -34,10 +35,8 @@ _IMAGE = (
 
 
 def _gen_text(system: str, prompt: str) -> str:
-    resp = config.generate_resilient(system + "\n\n【要望】\n" + (prompt or ""))
-    if resp is None:
-        raise RuntimeError("GEMINI_API_KEY is not configured")
-    return getattr(resp, "text", "") or ""
+    text = llm.generate_text(system + "\n\n【要望】\n" + (prompt or ""))
+    return text or ""
 
 
 def generate(kind: str, prompt: str) -> dict:

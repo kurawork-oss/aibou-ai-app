@@ -83,6 +83,7 @@ def _decrypt(stored: Optional[str]) -> str:
 KNOWN_KEYS: List[Dict[str, str]] = [
     {"name": "GEMINI_API_KEY", "label": "Gemini API Key", "hint": "チャット・生成の頭脳（必須）"},
     {"name": "GITHUB_TOKEN", "label": "GitHub Token", "hint": "CODEモードのリポジトリ連携（Fine-grained PAT）"},
+    {"name": "HUGGINGFACE_TOKEN", "label": "HuggingFace Token", "hint": "無料の代替AI（学習されない相談向け）。hf_で始まるトークン"},
     {"name": "LINE_NOTIFY_TOKEN", "label": "LINE Notify Token", "hint": "自動タスクの通知先"},
     {"name": "DISCORD_WEBHOOK", "label": "Discord Webhook", "hint": "ジョブ結果の通知"},
     {"name": "SLACK_WEBHOOK", "label": "Slack Webhook", "hint": "ジョブ結果の通知"},

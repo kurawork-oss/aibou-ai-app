@@ -9,6 +9,7 @@ import uuid
 from datetime import datetime, timezone
 
 import config
+import llm
 
 # カテゴリ（UIのタブと対応）
 CATEGORIES = [
@@ -175,9 +176,8 @@ def _extract_json(text: str):
 
 def extract_entries(turns: list) -> dict:
     """直近の相談会話から「経験の箱」候補を抽出する（保存はユーザー確認後）。"""
-    model = config.get_gemini_model()
-    if model is None:
-        return {"error": "GEMINI_API_KEY が未設定です。Settings → KEYCHAIN で設定してください。"}
+    if llm.active_provider() == "none":
+        return {"error": "AI未設定です。Settings → KEYCHAIN で GEMINI_API_KEY か HUGGINGFACE_TOKEN を設定してください。"}
     convo = "\n".join(
         f"{'ユーザー' if (t.get('role') == 'user') else 'AI'}: {str(t.get('content') or '')[:800]}"
         for t in (turns or [])[-12:]
@@ -192,8 +192,7 @@ def extract_entries(turns: list) -> dict:
         f"【会話】\n{convo}"
     )
     try:
-        resp = config.generate_resilient(prompt)
-        obj = _extract_json(getattr(resp, "text", "") or "")
+        obj = _extract_json(llm.generate_text(prompt) or "")
         items = (obj or {}).get("entries") or []
         out = []
         for it in items[:5]:

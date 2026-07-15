@@ -38,6 +38,7 @@ import gh
 import income
 import keychain
 import life
+import llm
 import notify
 import proactive
 import studio
@@ -345,12 +346,10 @@ async def chat(req: ChatRequest, _auth: None = Depends(require_auth)):
     2) Gemini を stream=True で呼び、トークンを data: {"token": "..."} で逐次送信
     3) 完了後 data: {"done": true} を送り、会話を agent_memory に保存（best-effort）
     """
-    model = config.get_gemini_model()
-
-    # Geminiが未設定でも crash させず、SSEでエラーを通知する。
-    if model is None:
+    # AIプロバイダ（Gemini か HuggingFace）が1つも無ければ crash させず案内。
+    if llm.active_provider() == "none":
         async def err_stream():
-            yield _sse({"error": "GEMINI_API_KEY is not configured on the server."})
+            yield _sse({"error": "AI未設定です。Settings → KEYCHAIN に GEMINI_API_KEY か HUGGINGFACE_TOKEN を保存してください。"})
             yield _sse({"done": True})
         return StreamingResponse(err_stream(), media_type="text/event-stream")
 
@@ -378,18 +377,14 @@ async def chat(req: ChatRequest, _auth: None = Depends(require_auth)):
                 return None
 
         try:
-            stream = await loop.run_in_executor(
-                None, lambda: config.generate_resilient(prompt, stream=True)
-            )
-            it = iter(stream)
+            it = llm.stream_text(prompt)
             buf = ""
             decided = None  # None=判定中 / "tool" / "normal"
 
             while True:
-                chunk = await loop.run_in_executor(None, _next, it)
-                if chunk is None:
+                text = await loop.run_in_executor(None, _next, it)
+                if text is None:
                     break
-                text = getattr(chunk, "text", None) or ""
                 if not text:
                     continue
                 if decided == "normal":
@@ -432,15 +427,11 @@ async def chat(req: ChatRequest, _auth: None = Depends(require_auth)):
                         + "\n<<<TOOL_RESULT>>> " + result
                         + "\nアシスタント（上の結果を踏まえ、ツール記法は使わず日本語で簡潔に報告）:"
                     )
-                    stream2 = await loop.run_in_executor(
-                        None, lambda: model.generate_content(followup, stream=True)
-                    )
-                    it2 = iter(stream2)
+                    it2 = llm.stream_text(followup)
                     while True:
-                        c2 = await loop.run_in_executor(None, _next, it2)
-                        if c2 is None:
+                        t2 = await loop.run_in_executor(None, _next, it2)
+                        if t2 is None:
                             break
-                        t2 = getattr(c2, "text", None)
                         if t2:
                             collected.append(t2)
                             yield _sse({"token": t2})
@@ -449,12 +440,9 @@ async def chat(req: ChatRequest, _auth: None = Depends(require_auth)):
                     yield _sse({"token": buf})
         except Exception as e:
             if config.is_zero_quota_429(e):
-                used = (getattr(model, "model_name", "") or "").replace("models/", "")
-                config.mark_model_unavailable(used)
                 yield _sse({"error": (
-                    "Gemini無料枠の上限に達しました（またはこのモデルの枠が0です）。"
-                    "使用モデルを自動で切り替えたので、少し待ってからもう一度送信してください。"
-                    f"（元エラー: 429 / {used}）"
+                    "Gemini無料枠の上限（またはこのキーの無料枠が0）に達しました。"
+                    "KEYCHAIN に HUGGINGFACE_TOKEN を入れると自動でHuggingFaceに切り替わります。"
                 )})
             else:
                 yield _sse({"error": f"generation failed: {e}"})
@@ -688,10 +676,9 @@ async def life_extract(req: LifeExtractRequest, _auth: None = Depends(require_au
 async def life_chat(req: ChatRequest, _auth: None = Depends(require_auth)):
     """ME：経験の箱を常に踏まえた相談チャット（SSE）。
     通常 /chat と違いツール実行は無し — 純粋な相談相手として振る舞う。"""
-    model = config.get_gemini_model()
-    if model is None:
+    if llm.active_provider() == "none":
         async def err_stream():
-            yield _sse({"error": "GEMINI_API_KEY is not configured on the server."})
+            yield _sse({"error": "AI未設定です。Settings → KEYCHAIN に GEMINI_API_KEY か HUGGINGFACE_TOKEN を保存してください。"})
             yield _sse({"done": True})
         return StreamingResponse(err_stream(), media_type="text/event-stream")
 
@@ -710,23 +697,19 @@ async def life_chat(req: ChatRequest, _auth: None = Depends(require_auth)):
                 return None
 
         try:
-            stream = await loop.run_in_executor(None, lambda: config.generate_resilient(prompt, stream=True))
-            it = iter(stream)
+            it = llm.stream_text(prompt)
             while True:
-                chunk = await loop.run_in_executor(None, _next, it)
-                if chunk is None:
+                text = await loop.run_in_executor(None, _next, it)
+                if text is None:
                     break
-                text = getattr(chunk, "text", None) or ""
                 if text:
                     yield _sse({"token": text})
             yield _sse({"done": True})
         except Exception as e:
             if config.is_zero_quota_429(e):
-                used = (getattr(model, "model_name", "") or "").replace("models/", "")
-                config.mark_model_unavailable(used)
                 yield _sse({"error": (
-                    "Gemini無料枠の上限に達しました。使用モデルを自動で切り替えたので、"
-                    "少し待ってからもう一度送信してください。"
+                    "Gemini無料枠の上限に達しました。KEYCHAIN に HUGGINGFACE_TOKEN を入れると"
+                    "自動でHuggingFaceに切り替わります。"
                 )})
             else:
                 yield _sse({"error": f"life chat failed: {e}"})
