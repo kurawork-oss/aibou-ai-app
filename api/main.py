@@ -211,6 +211,13 @@ class CodeGenerateRequest(BaseModel):
     instruction: str
     files: List[CodeFile] = Field(default_factory=list)
     history: List[ChatMessage] = Field(default_factory=list)
+    depth: str = "normal"      # normal | deep（計画→実装→自己レビュー）
+
+
+class AiConfigRequest(BaseModel):
+    provider: Optional[str] = None   # auto | gemini | huggingface
+    hf_model: Optional[str] = None
+    code_model: Optional[str] = None
 
 
 class GithubImportRequest(BaseModel):
@@ -578,25 +585,74 @@ async def forge_generate(req: ForgeRequest, _auth: None = Depends(require_auth))
 
 @app.post("/code/generate")
 async def code_generate(req: CodeGenerateRequest, _auth: None = Depends(require_auth)):
-    """CODE：AIコーディングエージェント。指示＋ワークスペース→変更ファイル群。"""
-    loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(
-        None,
-        lambda: code_agent.generate(
-            req.instruction,
-            [f.model_dump() for f in req.files],
-            [h.model_dump() for h in req.history],
-        ),
-    )
-    if isinstance(result, dict) and result.get("error"):
-        return JSONResponse(status_code=503, content=result)
-    return result
+    """CODE：AIコーディングエージェント（SSE）。段階進捗を data:{"phase":...} で流し、
+    最後に data:{"phase":"done", explanation, files, edits} を送る（Claude Code 風の実況）。"""
+    files = [f.model_dump() for f in req.files]
+    history = [h.model_dump() for h in req.history]
+    depth = req.depth
+
+    async def event_stream():
+        loop = asyncio.get_event_loop()
+        gen = code_agent.run_stream(req.instruction, files, history, depth)
+
+        def _next(g):
+            try:
+                return next(g)
+            except StopIteration:
+                return None
+
+        while True:
+            ev = await loop.run_in_executor(None, _next, gen)
+            if ev is None:
+                break
+            yield _sse(ev)
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 @app.get("/code/scaffold")
 async def code_scaffold(kind: str = "web", _auth: None = Depends(require_auth)):
     """CODE：スターターワークスペース（web | python | empty）。"""
     return code_agent.scaffold(kind)
+
+
+@app.get("/ai/config")
+async def ai_config_get(_auth: None = Depends(require_auth)):
+    """AIプロバイダ/モデルの現在設定と選択肢を返す（設定UI用）。"""
+    return {
+        "provider": llm._kc("LLM_PROVIDER") or "auto",
+        "hf_model": llm._kc("HF_MODEL") or llm.DEFAULT_HF_MODEL,
+        "code_model": llm._kc("CODE_MODEL") or llm.DEFAULT_CODE_MODEL,
+        "active": llm.active_provider(),
+        "gemini_ready": config.gemini_configured(),
+        "hf_ready": bool(llm._hf_token()),
+        "presets": {
+            "chat": [
+                "meta-llama/Llama-3.3-70B-Instruct",
+                "Qwen/Qwen2.5-72B-Instruct",
+                "deepseek-ai/DeepSeek-V3-0324",
+                "mistralai/Mistral-Small-24B-Instruct-2501",
+                "meta-llama/Llama-3.1-8B-Instruct",
+            ],
+            "code": [
+                "Qwen/Qwen2.5-Coder-32B-Instruct",
+                "deepseek-ai/DeepSeek-V3-0324",
+                "Qwen/Qwen2.5-Coder-7B-Instruct",
+            ],
+        },
+    }
+
+
+@app.post("/ai/config")
+async def ai_config_set(req: AiConfigRequest, _auth: None = Depends(require_auth)):
+    """AIプロバイダ/モデルを設定（KEYCHAIN経由で永続化）。"""
+    if req.provider is not None:
+        keychain.set_key("LLM_PROVIDER", req.provider.strip())
+    if req.hf_model is not None:
+        keychain.set_key("HF_MODEL", req.hf_model.strip())
+    if req.code_model is not None:
+        keychain.set_key("CODE_MODEL", req.code_model.strip())
+    return await ai_config_get()
 
 
 @app.get("/github/repos")

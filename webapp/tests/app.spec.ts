@@ -195,7 +195,9 @@ test("Settings DIAGNOSTICS tab shows connection status", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
   await page.getByLabel("Settings").click();
-  await page.getByText("DIAGNOSTICS").click();
+  // Scope to the tab button — the CORE tab's AI-provider note also mentions
+  // "DIAGNOSTICS", so a plain getByText would match two elements.
+  await page.getByRole("button", { name: "DIAGNOSTICS" }).click();
   await expect(page.getByText("LINK STATUS")).toBeVisible();
   await expect(page.getByText("FRONTEND")).toBeVisible();
 });
@@ -521,6 +523,25 @@ test("Mobile bottom nav switches modes and opens the MORE sheet", async ({ page 
   await expect(sheet.getByText("BOARD", { exact: true })).toBeVisible({ timeout: 3_000 });
   await sheet.getByText("BOARD", { exact: true }).click();
   await expect(page.getByText("AUTOMATION COPILOT")).toBeVisible({ timeout: 5_000 });
+});
+
+/* ── CODE deep mode + AI provider settings (ui-r21) ── */
+test("CODE has a 深く考える toggle", async ({ page }) => {
+  await page.goto("/");
+  await enterApp(page);
+  await goMode(page, "CODE");
+  await page.getByText("WEBアプリ (index.html)").click();
+  await expect(page.getByText("🧠 深く考える")).toBeVisible({ timeout: 5_000 });
+  await page.getByText("🧠 深く考える").click();
+  await expect(page.getByText("計画→実装→自己レビュー")).toBeVisible();
+});
+
+test("Settings CORE shows AI provider section (offline note)", async ({ page }) => {
+  await page.goto("/");
+  await enterApp(page);
+  await page.getByLabel("Settings").click();
+  // Offline → the AI provider panel explains it needs the backend
+  await expect(page.getByText(/AIプロバイダ.*モデルの選択は、バックエンド接続後/)).toBeVisible({ timeout: 5_000 });
 });
 
 /* ── CODE mode (ui-r14): Claude Code-like coding agent ── */

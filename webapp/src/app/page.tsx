@@ -13,6 +13,7 @@
 
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useCallback, useEffect, useState } from "react";
+import AiProviderSettings from "@/components/AiProviderSettings";
 import AppArchive from "@/components/AppArchive";
 import Autopilot from "@/components/Autopilot";
 import Backdrop3D from "@/components/Backdrop3D";
@@ -610,6 +611,7 @@ function SettingsPanel({
         <div className="max-h-[60vh] overflow-y-auto p-5">
           {tab === "core" && (
             <>
+              <AiProviderSettings />
               <label className="mb-1 block text-[10px] tracking-[0.2em] text-muted label-mono">ASSISTANT NAME</label>
               <input
                 value={name}

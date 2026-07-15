@@ -275,63 +275,140 @@ def _diff_files(before: dict, after: dict) -> list:
     return out[:MAX_OUTPUT_FILES]
 
 
-def generate(instruction: str, files: list, history: list = None) -> dict:
-    """AIコーディングエージェント本体（差分編集＋自動リペア）。
-    成功: {"explanation", "files":[{path,content,action}], "edits":[...]}
-    失敗: {"error"}"""
-    if not (instruction or "").strip():
-        return {"error": "instruction is required"}
-    if llm.active_provider() == "none":
-        return {"error": "AI未設定です。Settings → KEYCHAIN で GEMINI_API_KEY か HUGGINGFACE_TOKEN を設定してください。"}
+def _deep_plan_prompt(instruction, files, history) -> str:
+    ctx = _build_prompt(instruction, files, history)
+    return ctx + "\n\n【重要】この段階では**コードは書かない**。何をどのファイルでどう変えるか、実装計画だけを箇条書きで示してください（SEARCH/REPLACEは出さない）。"
 
-    before = {f["path"]: str(f.get("content") or "") for f in (files or []) if f.get("path")}
 
-    try:
-        text = llm.generate_text(
-            _build_prompt(instruction, files or [], history),
-            hf_model_override=llm.code_model(),
-            max_tokens=CODE_MAX_TOKENS,
-        )
-    except Exception as e:
-        return {"error": f"generation failed: {e}"}
+def _deep_impl_prompt(instruction, files, history, plan_text) -> str:
+    ctx = _build_prompt(instruction, files, history)
+    return ctx + "\n\n【承認済みの実装計画】\n" + (plan_text or "") + "\n\n上の計画に厳密に従い、SEARCH/REPLACE ブロックで実装してください。"
 
-    plan, edits = parse_edits(text)
 
-    # 後方互換: 旧JSON形式で返ってきた場合も受ける
-    if not edits:
-        obj = _extract_json(text)
-        if obj and isinstance(obj.get("files"), list):
-            return _from_json(obj, before)
+def _review_prompt(instruction, file_map) -> str:
+    blocks = []
+    total = 0
+    for path, content in file_map.items():
+        c = content[:MAX_FILE_CHARS]
+        if total + len(c) > MAX_TOTAL_CHARS:
+            break
+        total += len(c)
+        blocks.append(f"===== FILE: {path} =====\n{c}")
+    return (
+        _SYSTEM
+        + "\n\nあなたは厳格なコードレビュアーです。下は編集後の**現在のファイル**です。"
+        "元の指示を満たしているか、バグ・抜け・不整合・様式の乱れが無いか厳しく点検し、"
+        "**必要な修正だけ**を SEARCH/REPLACE で出してください。問題が無ければ「LGTM」とだけ書いて何も出さない。\n\n"
+        + "\n\n".join(blocks)
+        + f"\n\n【元の指示】\n{instruction}"
+    )
 
-    file_map = dict(before)
-    _, results = apply_edits(file_map, edits)
 
-    # 自動リペア（SEARCH不一致を1回だけ直す）
-    failed = [r for r in results if r["status"] == "failed" and r.get("reason", "").startswith("SEARCH")]
+def _apply_and_repair(instruction, file_map, edits, results):
+    """edits を適用し、SEARCH不一致は1回だけ自動リペア。events を生成しつつ results に追記。"""
+    _, res = apply_edits(file_map, edits)
+    results.extend(res)
+    failed = [r for r in res if r["status"] == "failed" and r.get("reason", "").startswith("SEARCH")]
     if failed:
+        yield {"phase": "repair", "detail": f"{len(failed)}件の不一致を自動修復中…"}
         try:
             text2 = llm.generate_text(
                 _repair_prompt(instruction, file_map, failed),
-                hf_model_override=llm.code_model(),
-                max_tokens=CODE_MAX_TOKENS,
+                hf_model_override=llm.code_model(), max_tokens=CODE_MAX_TOKENS,
             )
             _, edits2 = parse_edits(text2)
             if edits2:
-                _, results2 = apply_edits(file_map, edits2)
-                results += results2
+                _, res2 = apply_edits(file_map, edits2)
+                results.extend(res2)
         except Exception:
             pass
+
+
+def run_stream(instruction: str, files: list, history: list = None, depth: str = "normal"):
+    """段階進捗を逐次 yield するジェネレータ（Claude Code 風の「今何してる」表示用）。
+    最後に {"phase":"done", "explanation","files","edits"} を必ず1回 yield する。
+    depth="deep" は 計画→実装→自己レビュー の多段（高品質・トークン多め）。"""
+    if not (instruction or "").strip():
+        yield {"phase": "error", "error": "instruction is required"}
+        return
+    if llm.active_provider() == "none":
+        yield {"phase": "error", "error": "AI未設定です。Settings → KEYCHAIN で GEMINI_API_KEY か HUGGINGFACE_TOKEN を設定してください。"}
+        return
+
+    before = {f["path"]: str(f.get("content") or "") for f in (files or []) if f.get("path")}
+    file_map = dict(before)
+    prov = llm.active_provider()
+    model = llm.code_model() if prov == "huggingface" else "gemini"
+    yield {"phase": "start", "detail": f"{len(before)} ファイルを読み込み・{model} で作業開始", "provider": prov}
+
+    plan_out = ""
+    results: list = []
+    try:
+        if depth == "deep":
+            yield {"phase": "planning", "detail": "実装計画を立案中…"}
+            plan_out = llm.generate_text(_deep_plan_prompt(instruction, files or [], history),
+                                         hf_model_override=llm.code_model(), max_tokens=1600) or ""
+            yield {"phase": "plan", "plan": plan_out[:2500]}
+
+            yield {"phase": "implementing", "detail": "計画に沿って実装中…"}
+            impl = llm.generate_text(_deep_impl_prompt(instruction, files or [], history, plan_out),
+                                     hf_model_override=llm.code_model(), max_tokens=CODE_MAX_TOKENS) or ""
+            _, edits = parse_edits(impl)
+            if not edits:
+                obj = _extract_json(impl)
+                if obj and isinstance(obj.get("files"), list):
+                    final = _from_json(obj, before)
+                    yield {"phase": "done", **final}
+                    return
+            yield {"phase": "applying", "detail": f"{len(edits)} 件の編集を適用中…"}
+            yield from _apply_and_repair(instruction, file_map, edits, results)
+
+            yield {"phase": "reviewing", "detail": "自己レビュー中…（バグ・抜けを点検）"}
+            review = llm.generate_text(_review_prompt(instruction, file_map),
+                                       hf_model_override=llm.code_model(), max_tokens=CODE_MAX_TOKENS) or ""
+            _, redits = parse_edits(review)
+            if redits:
+                yield {"phase": "applying", "detail": f"レビュー指摘 {len(redits)} 件を反映中…"}
+                yield from _apply_and_repair(instruction, file_map, redits, results)
+        else:
+            yield {"phase": "editing", "detail": "変更を作成中…"}
+            text = llm.generate_text(_build_prompt(instruction, files or [], history),
+                                     hf_model_override=llm.code_model(), max_tokens=CODE_MAX_TOKENS) or ""
+            plan_out, edits = parse_edits(text)
+            if not edits:
+                obj = _extract_json(text)
+                if obj and isinstance(obj.get("files"), list):
+                    final = _from_json(obj, before)
+                    yield {"phase": "done", **final}
+                    return
+            if plan_out:
+                yield {"phase": "plan", "plan": plan_out[:2500]}
+            yield {"phase": "applying", "detail": f"{len(edits)} 件の編集を適用中…"}
+            yield from _apply_and_repair(instruction, file_map, edits, results)
+    except Exception as e:
+        yield {"phase": "error", "error": f"generation failed: {e}"}
+        return
 
     out_files = _diff_files(before, file_map)
     applied = [r for r in results if r["status"] == "applied"]
     still_failed = [r for r in results if r["status"] == "failed"]
-
     summary = f"\n\n📝 適用 {len(applied)}件"
     if still_failed:
         paths = ", ".join(sorted({r["path"] for r in still_failed if r.get("path")}))
         summary += f" / 未適用 {len(still_failed)}件（{paths[:120]} — 該当箇所が見つからず。もう一度具体的に指示すると直せます）"
-    explanation = (plan + summary).strip() if plan else ("変更を適用しました。" + summary).strip()
-    return {"explanation": explanation, "files": out_files, "edits": results}
+    explanation = (plan_out + summary).strip() if plan_out else ("変更を適用しました。" + summary).strip()
+    yield {"phase": "done", "explanation": explanation, "files": out_files, "edits": results}
+
+
+def generate(instruction: str, files: list, history: list = None, depth: str = "normal") -> dict:
+    """run_stream を回して最終結果だけ返す（非ストリーム利用・既存テスト互換）。"""
+    result = {"error": "no result"}
+    for ev in run_stream(instruction, files, history, depth):
+        if ev.get("phase") == "done":
+            result = {"explanation": ev.get("explanation", ""), "files": ev.get("files", []), "edits": ev.get("edits", [])}
+        elif ev.get("phase") == "error":
+            result = {"error": ev["error"]}
+    return result
 
 
 # ── 旧JSON形式フォールバック ──────────────────────────────────────

@@ -12,7 +12,7 @@
 
 import { motion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { codeGenerate, ghRepos, ghImport, ghPush, API_URL, type CodeFile, type ChatTurn, type GhRepo } from "@/lib/api";
+import { codeGenerateStream, ghRepos, ghImport, ghPush, API_URL, type CodeFile, type ChatTurn, type GhRepo, type CodeGenerateResult } from "@/lib/api";
 import Markdown from "@/components/Markdown";
 
 const LS_WORKSPACES = "forge_code_workspaces";
@@ -101,11 +101,15 @@ export default function CodeMode() {
   const [selected, setSelected] = useState<string | null>(null);
   const [instruction, setInstruction] = useState("");
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<string | null>(null);  // Claude Code風の実況
+  const [deep, setDeep] = useState(false);                        // 深く考えるモード
   const [changed, setChanged] = useState<Set<string>>(new Set());
   const [undoSnap, setUndoSnap] = useState<CodeFile[] | null>(null);
   const [preview, setPreview] = useState(false);
   const [copied, setCopied] = useState(false);
   const logRef = useRef<HTMLDivElement | null>(null);
+  const cancelRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => cancelRef.current?.(), []);
 
   // GitHub連携（一覧→インポート / プッシュ+PR）
   const [ghList, setGhList] = useState<GhRepo[] | null>(null);
@@ -262,54 +266,66 @@ export default function CodeMode() {
     setSelected(null);
   };
 
-  /** エージェント実行 → 変更をワークスペースに適用。 */
-  const send = async () => {
+  /** 生成結果をワークスペースへ適用（Undoスナップは呼び出し側で保持済み）。 */
+  const applyResult = (wsId: string, log: LogTurn[], baseFiles: CodeFile[], r: CodeGenerateResult) => {
+    let files = [...baseFiles];
+    const touched = new Set<string>();
+    for (const f of r.files ?? []) {
+      touched.add(f.path);
+      if (f.action === "delete") {
+        files = files.filter((x) => x.path !== f.path);
+      } else {
+        const i = files.findIndex((x) => x.path === f.path);
+        if (i >= 0) files[i] = { path: f.path, content: f.content };
+        else files.push({ path: f.path, content: f.content });
+      }
+    }
+    files.sort((a, b) => a.path.localeCompare(b.path));
+    const changeList = (r.files ?? []).map((f) => `${f.action === "delete" ? "✕" : "✎"} ${f.path}`).join(" · ") || "（なし）";
+    const summary = `${r.explanation ?? ""}\n\n変更: ${changeList}`;
+    patchWs(wsId, { files, log: [...log, { role: "assistant" as const, content: summary.trim() }] });
+    setChanged(touched);
+    const first = (r.files ?? []).find((f) => f.action !== "delete");
+    if (first) {
+      setSelected(first.path);
+      setPreview(/\.html?$/i.test(first.path));
+    }
+  };
+
+  /** エージェント実行（SSE）→ 進捗を実況しつつ、完了時に適用。 */
+  const send = () => {
     const text = instruction.trim();
     if (!text || busy || !ws) return;
+    const wsId = ws.id;
+    const baseFiles = ws.files.map((f) => ({ ...f }));
     setBusy(true);
     setInstruction("");
+    setProgress(deep ? "🧭 計画中…" : "🚀 開始…");
     const log: LogTurn[] = [...ws.log, { role: "user" as const, content: text }].slice(-LOG_LIMIT);
-    patchWs(ws.id, { log });
-    try {
-      const history: ChatTurn[] = log
-        .filter((t) => !t.error)
-        .slice(-6)
-        .map((t) => ({ role: t.role, content: t.content }));
-      const r = await codeGenerate(text, ws.files, history);
-      if (r.error) {
-        patchWs(ws.id, { log: [...log, { role: "assistant" as const, content: `⚠ ${r.error}`, error: true }] });
-        return;
-      }
-      // 適用（直前の状態を1段だけ Undo 用に保持）
-      setUndoSnap(ws.files.map((f) => ({ ...f })));
-      let files = [...ws.files];
-      const touched = new Set<string>();
-      for (const f of r.files ?? []) {
-        touched.add(f.path);
-        if (f.action === "delete") {
-          files = files.filter((x) => x.path !== f.path);
-        } else {
-          const i = files.findIndex((x) => x.path === f.path);
-          if (i >= 0) files[i] = { path: f.path, content: f.content };
-          else files.push({ path: f.path, content: f.content });
+    patchWs(wsId, { log });
+    const history: ChatTurn[] = log
+      .filter((t) => !t.error)
+      .slice(-6)
+      .map((t) => ({ role: t.role, content: t.content }));
+
+    cancelRef.current = codeGenerateStream(
+      text,
+      baseFiles,
+      history,
+      deep ? "deep" : "normal",
+      (p) => setProgress(p.detail || p.phase),
+      (r) => {
+        cancelRef.current = null;
+        setProgress(null);
+        setBusy(false);
+        if (r.error) {
+          patchWs(wsId, { log: [...log, { role: "assistant" as const, content: `⚠ ${r.error}`, error: true }] });
+          return;
         }
-      }
-      files.sort((a, b) => a.path.localeCompare(b.path));
-      const summary = `${r.explanation ?? ""}\n\n変更: ${(r.files ?? []).map((f) => `${f.action === "delete" ? "✕" : "✎"} ${f.path}`).join(" · ") || "（なし）"}`;
-      patchWs(ws.id, { files, log: [...log, { role: "assistant" as const, content: summary.trim() }] });
-      setChanged(touched);
-      // 変更されたファイルを開く（HTMLならプレビューで）
-      const first = (r.files ?? []).find((f) => f.action !== "delete");
-      if (first) {
-        setSelected(first.path);
-        setPreview(/\.html?$/i.test(first.path));
-      }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "エージェントの実行に失敗しました";
-      patchWs(ws.id, { log: [...log, { role: "assistant" as const, content: `⚠ ${msg}`, error: true }] });
-    } finally {
-      setBusy(false);
-    }
+        setUndoSnap(baseFiles);
+        applyResult(wsId, log, baseFiles, r);
+      },
+    ).cancel;
   };
 
   const undo = () => {
@@ -526,13 +542,30 @@ export default function CodeMode() {
             </div>
           ))}
           {busy && (
-            <motion.p className="px-2 text-[10px] tracking-[0.2em] text-muted label-mono" animate={{ opacity: [0.4, 1, 0.4] }} transition={{ duration: 1.2, repeat: Infinity }}>
-              ◈ AGENT WORKING…
+            <motion.p className="flex items-center gap-2 px-2 text-[11px] text-[var(--accent)] label-mono" animate={{ opacity: [0.55, 1, 0.55] }} transition={{ duration: 1.2, repeat: Infinity }}>
+              <span>◈</span>
+              <span className="tracking-[0.06em]">{progress || "AGENT WORKING…"}</span>
             </motion.p>
           )}
         </div>
 
         {/* Composer */}
+        <div className="mb-1.5 flex items-center gap-2 px-1">
+          <button
+            type="button"
+            onClick={() => setDeep((v) => !v)}
+            className="flex items-center gap-1.5 text-[10px] tracking-[0.12em] label-mono"
+            style={{ color: deep ? "var(--accent)" : "var(--muted)" }}
+            title="計画→実装→自己レビューの多段思考（高品質・少し遅い）"
+          >
+            <span className="grid h-3.5 w-3.5 place-items-center rounded-full border text-[8px]"
+              style={{ borderColor: deep ? "var(--accent)" : "var(--panel-bd)", background: deep ? "var(--accent)" : "transparent", color: deep ? "#05171a" : "transparent" }}>
+              ✓
+            </span>
+            🧠 深く考える
+          </button>
+          <span className="text-[9px] text-muted">{deep ? "計画→実装→自己レビュー" : "通常（高速）"}</span>
+        </div>
         <div className="panel flex items-end gap-1.5 p-2">
           <textarea
             value={instruction}
@@ -549,12 +582,12 @@ export default function CodeMode() {
           />
           <button
             type="button"
-            onClick={() => void send()}
-            disabled={busy || !instruction.trim()}
+            onClick={() => (busy ? cancelRef.current?.() : send())}
+            disabled={!busy && !instruction.trim()}
             className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-[var(--line)] bg-[var(--btn-bg)] text-fg-strong shadow-glow transition hover:shadow-glow-strong disabled:opacity-40"
-            aria-label="Run agent"
+            aria-label={busy ? "Stop agent" : "Run agent"}
           >
-            {busy ? "…" : "▶"}
+            {busy ? "■" : "▶"}
           </button>
         </div>
         {!API_URL && (

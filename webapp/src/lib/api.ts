@@ -212,6 +212,18 @@ interface SSEPayload {
   error?: string;
 }
 
+/** Parse one SSE event's `data:` line(s) into an arbitrary JSON object. */
+function parseSSEJson(rawEvent: string): Record<string, unknown> | null {
+  const parts: string[] = [];
+  for (const line of rawEvent.split(/\r?\n/)) {
+    const t = line.trimStart();
+    if (t.startsWith("data:")) parts.push(t.slice(5).trimStart());
+  }
+  const joined = parts.join("\n").trim();
+  if (!joined) return null;
+  try { return JSON.parse(joined) as Record<string, unknown>; } catch { return null; }
+}
+
 /** Parse the `data:` line(s) of one SSE event into JSON. */
 function parseSSEData(rawEvent: string): SSEPayload | null {
   const lines = rawEvent.split(/\r?\n/);
@@ -345,6 +357,100 @@ export async function codeScaffold(kind: "web" | "python" | "empty"): Promise<Co
   });
   const data = (await res.json().catch(() => ({ files: [] }))) as { files?: CodeFile[] };
   return data.files ?? [];
+}
+
+export interface CodeProgress {
+  phase: string;
+  detail?: string;
+  plan?: string;
+  provider?: string;
+}
+
+/** POST /code/generate (SSE) — streams live progress phases then the result. */
+export function codeGenerateStream(
+  instruction: string,
+  files: CodeFile[],
+  history: ChatTurn[],
+  depth: "normal" | "deep",
+  onProgress: (p: CodeProgress) => void,
+  onDone: (result: CodeGenerateResult) => void,
+): StreamHandlers {
+  const controller = new AbortController();
+  (async () => {
+    let url: string;
+    try { url = `${requireApiUrl()}/code/generate`; } catch (e) {
+      onDone({ error: e instanceof Error ? e.message : "Missing API URL" });
+      return;
+    }
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: authHeaders({ "Content-Type": "application/json", Accept: "text/event-stream" }),
+        body: JSON.stringify({ instruction, files, history, depth }),
+        signal: controller.signal,
+      });
+      if (!res.ok || !res.body) { onDone({ error: `Code failed (${res.status})` }); return; }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let finished = false;
+      while (!finished) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let sep: number;
+        while ((sep = indexOfEventBoundary(buffer)) !== -1) {
+          const rawEvent = buffer.slice(0, sep);
+          buffer = buffer.slice(sep).replace(/^(\r?\n)+/, "");
+          const ev = parseSSEJson(rawEvent) as (CodeProgress & CodeGenerateResult) | null;
+          if (!ev) continue;
+          if (ev.phase === "done") {
+            onDone({ explanation: ev.explanation, files: ev.files, edits: ev.edits });
+            finished = true; break;
+          } else if (ev.phase === "error") {
+            onDone({ error: ev.error });
+            finished = true; break;
+          } else {
+            onProgress(ev);
+          }
+        }
+      }
+      if (!finished) onDone({ error: "ストリームが途中で終了しました" });
+    } catch (err) {
+      if ((err as Error)?.name === "AbortError") { onDone({}); return; }
+      onDone({ error: err instanceof Error ? err.message : "Stream failed" });
+    }
+  })();
+  return { cancel: () => controller.abort() };
+}
+
+/* ---------------- AI provider / model config ---------------- */
+export interface AiConfig {
+  provider: string;
+  hf_model: string;
+  code_model: string;
+  active: string;
+  gemini_ready: boolean;
+  hf_ready: boolean;
+  presets: { chat: string[]; code: string[] };
+}
+
+/** GET /ai/config — current provider/model + options. */
+export async function aiConfigGet(): Promise<AiConfig> {
+  const res = await fetch(`${requireApiUrl()}/ai/config`, { headers: authHeaders(), cache: "no-store" });
+  if (!res.ok) throw new Error(`AI config failed (${res.status})`);
+  return (await res.json()) as AiConfig;
+}
+
+/** POST /ai/config — set provider/model. */
+export async function aiConfigSet(patch: { provider?: string; hf_model?: string; code_model?: string }): Promise<AiConfig> {
+  const res = await fetch(`${requireApiUrl()}/ai/config`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw new Error(`AI config save failed (${res.status})`);
+  return (await res.json()) as AiConfig;
 }
 
 /* ---------------- Life (ME mode — personal partner) ---------------- */

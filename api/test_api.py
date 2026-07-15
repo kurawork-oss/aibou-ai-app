@@ -560,17 +560,18 @@ def test_model_resolution_error_fallback(monkeypatch):
     config._resolved_model = None
 
 
-# ── /code（AIコーディングエージェント） ─────────────────────────────
-def test_code_generate_without_gemini_returns_503():
+# ── /code（AIコーディングエージェント・SSE） ────────────────────────
+def test_code_generate_without_gemini_streams_error():
+    # SSE：AI未設定でも 200 で error フェーズを流す（crashしない）
     r = client.post("/code/generate", json={"instruction": "Webアプリを作って", "files": []})
-    assert r.status_code == 503
-    assert "error" in r.json()
+    assert r.status_code == 200
+    assert '"phase": "error"' in r.text or "error" in r.text
 
 
 def test_code_generate_requires_instruction():
     r = client.post("/code/generate", json={"instruction": "", "files": []})
-    assert r.status_code == 503
-    assert "error" in r.json()
+    assert r.status_code == 200
+    assert "error" in r.text
 
 
 def test_code_scaffold_web():
@@ -601,6 +602,34 @@ def test_github_import_without_token_returns_503(monkeypatch):
     r = client.post("/github/import", json={"repo": "o/r"})
     assert r.status_code == 503
     assert "error" in r.json()
+
+
+# ── /ai/config（プロバイダ/モデル設定UI用） ──────────────────────────
+def test_ai_config_get():
+    r = client.get("/ai/config")
+    assert r.status_code == 200
+    d = r.json()
+    assert "provider" in d and "presets" in d
+    assert "Qwen/Qwen2.5-Coder-32B-Instruct" in d["presets"]["code"]
+
+
+def test_ai_config_set_roundtrip():
+    r = client.post("/ai/config", json={"provider": "huggingface", "code_model": "deepseek-ai/DeepSeek-V3-0324"})
+    assert r.status_code == 200
+    d = r.json()
+    assert d["provider"] == "huggingface"
+    assert d["code_model"] == "deepseek-ai/DeepSeek-V3-0324"
+    # 後片付け（他テストに影響させない）
+    import keychain
+    keychain.delete_key("LLM_PROVIDER")
+    keychain.delete_key("CODE_MODEL")
+
+
+def test_code_generate_is_sse():
+    r = client.post("/code/generate", json={"instruction": "作って", "files": []})
+    assert r.status_code == 200
+    # SSE：AI未設定でも error フェーズを流す（crashしない）
+    assert "phase" in r.text or "error" in r.text
 
 
 # ── /tts rate（話速） ───────────────────────────────────────────────

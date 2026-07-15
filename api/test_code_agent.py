@@ -149,3 +149,47 @@ def test_scaffold_python():
 
 def test_scaffold_empty():
     assert ca.scaffold("empty") == {"files": []}
+
+
+# ── run_stream: 段階進捗（Claude Code風） ──────────────────────────
+def test_run_stream_phases_normal(monkeypatch):
+    reply = "計画: タイトル変更。\n\nindex.html\n<<<<<<< SEARCH\nOld\n=======\nNew\n>>>>>>> REPLACE"
+    monkeypatch.setattr(llm, "active_provider", lambda: "huggingface")
+    monkeypatch.setattr(llm, "code_model", lambda: "Qwen/Qwen2.5-Coder-32B-Instruct")
+    monkeypatch.setattr(llm, "generate_text", lambda prompt, **k: reply)
+    events = list(ca.run_stream("直して", [{"path": "index.html", "content": "Old"}]))
+    phases = [e["phase"] for e in events]
+    assert phases[0] == "start"
+    assert "editing" in phases and "applying" in phases
+    assert phases[-1] == "done"
+    done = events[-1]
+    assert {f["path"]: f for f in done["files"]}["index.html"]["content"] == "New"
+
+
+def test_run_stream_deep_has_review(monkeypatch):
+    monkeypatch.setattr(llm, "active_provider", lambda: "huggingface")
+    monkeypatch.setattr(llm, "code_model", lambda: "coder")
+    seq = {"n": 0}
+
+    def fake(prompt, **k):
+        seq["n"] += 1
+        if seq["n"] == 1:      # plan
+            return "計画: xを2に。"
+        if seq["n"] == 2:      # implement
+            return "app.py\n<<<<<<< SEARCH\nx = 1\n=======\nx = 2\n>>>>>>> REPLACE"
+        return "LGTM"          # review: no edits
+
+    monkeypatch.setattr(llm, "generate_text", fake)
+    events = list(ca.run_stream("xを2に", [{"path": "app.py", "content": "x = 1"}], depth="deep"))
+    phases = [e["phase"] for e in events]
+    assert "planning" in phases and "implementing" in phases and "reviewing" in phases
+    assert seq["n"] == 3  # plan + implement + review
+    assert phases[-1] == "done"
+    files = {f["path"]: f for f in events[-1]["files"]}
+    assert "x = 2" in files["app.py"]["content"]
+
+
+def test_run_stream_error(monkeypatch):
+    monkeypatch.setattr(llm, "active_provider", lambda: "none")
+    events = list(ca.run_stream("作って", []))
+    assert events[-1]["phase"] == "error"
