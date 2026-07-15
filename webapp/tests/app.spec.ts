@@ -205,7 +205,9 @@ test("Settings close button works", async ({ page }) => {
   await enterApp(page);
   await page.getByLabel("Settings").click();
   await expect(page.getByText("CORE SETTINGS")).toBeVisible();
-  await page.getByLabel("Close settings").click();
+  // The backdrop fills the screen but its centre is under the panel; click a
+  // top corner so the close isn't intercepted by the modal content.
+  await page.getByLabel("Close settings").click({ position: { x: 8, y: 8 } });
   await expect(page.getByText("CORE SETTINGS")).not.toBeVisible({ timeout: 3_000 });
 });
 
