@@ -61,7 +61,7 @@ def test_stream_falls_back_gemini_to_hf(monkeypatch):
 def test_generate_text_uses_hf(monkeypatch):
     monkeypatch.setattr(keychain, "get_key", lambda name: "hf_x" if name == "HUGGINGFACE_TOKEN" else "")
     monkeypatch.setattr(config, "gemini_configured", lambda: False)
-    monkeypatch.setattr(llm, "_gen_hf", lambda prompt: "HF回答")
+    monkeypatch.setattr(llm, "_gen_hf", lambda prompt, **k: "HF回答")
     assert llm.generate_text("q") == "HF回答"
 
 

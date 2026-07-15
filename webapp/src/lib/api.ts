@@ -306,9 +306,18 @@ export interface CodeFile {
   action?: "create" | "update" | "delete";
 }
 
+export interface CodeEdit {
+  path?: string;
+  status?: "applied" | "failed";
+  action?: string;
+  reason?: string;
+}
+
 export interface CodeGenerateResult {
   explanation?: string;
   files?: CodeFile[];
+  /** Per-edit results from the SEARCH/REPLACE diff engine. */
+  edits?: CodeEdit[];
   error?: string;
 }
 

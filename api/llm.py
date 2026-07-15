@@ -18,6 +18,8 @@ import keychain
 
 HF_ROUTER = "https://router.huggingface.co/v1/chat/completions"
 DEFAULT_HF_MODEL = "meta-llama/Llama-3.3-70B-Instruct"
+# CODEモード用のコーディング特化モデル（HF）。KEYCHAIN/env の CODE_MODEL で上書き可。
+DEFAULT_CODE_MODEL = "Qwen/Qwen2.5-Coder-32B-Instruct"
 
 
 def _kc(name: str) -> str:
@@ -37,6 +39,11 @@ def _hf_token() -> str:
 
 def hf_model() -> str:
     return _kc("HF_MODEL") or DEFAULT_HF_MODEL
+
+
+def code_model() -> str:
+    """CODEモード用モデル（HF時）。CODE_MODEL 指定 → HF_MODEL → コーディング既定。"""
+    return _kc("CODE_MODEL") or _kc("HF_MODEL") or DEFAULT_CODE_MODEL
 
 
 def _provider_pref() -> str:
@@ -117,15 +124,15 @@ def _stream_hf(prompt):
             continue
 
 
-def _gen_hf(prompt) -> str:
+def _gen_hf(prompt, model=None, max_tokens=2200) -> str:
     token = _hf_token()
     if not token:
         raise RuntimeError("HUGGINGFACE_TOKEN not set")
     r = requests.post(
         HF_ROUTER,
         headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-        json={"model": hf_model(), "messages": _hf_messages(prompt), "max_tokens": 2200},
-        timeout=120,
+        json={"model": model or hf_model(), "messages": _hf_messages(prompt), "max_tokens": max_tokens},
+        timeout=180,
     )
     if r.status_code >= 400:
         raise RuntimeError(f"HuggingFace {r.status_code}: {r.text[:300]}")
@@ -156,15 +163,18 @@ def stream_text(prompt):
     raise last_err or RuntimeError("全プロバイダで生成に失敗しました")
 
 
-def generate_text(prompt) -> str:
-    """非ストリームでテキストを1回生成（フォールバック付き）。"""
+def generate_text(prompt, hf_model_override=None, max_tokens=2200) -> str:
+    """非ストリームでテキストを1回生成（フォールバック付き）。
+    hf_model_override: HF使用時に使うモデル（CODEモードのコーディング特化等）。"""
     order = providers_in_order()
     if not order:
         raise RuntimeError("AIプロバイダ未設定（GEMINI_API_KEY か HUGGINGFACE_TOKEN を設定してください）")
     last_err = None
     for prov in order:
         try:
-            return _gen_gemini(prompt) if prov == "gemini" else _gen_hf(prompt)
+            if prov == "gemini":
+                return _gen_gemini(prompt)
+            return _gen_hf(prompt, model=hf_model_override, max_tokens=max_tokens)
         except Exception as e:
             last_err = e
             continue
