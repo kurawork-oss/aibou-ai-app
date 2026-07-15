@@ -135,7 +135,7 @@ def generate(instruction: str, files: list, history: list | None = None) -> dict
         return {"error": "GEMINI_API_KEY が未設定です。Settings → KEYCHAIN で設定してください。"}
 
     try:
-        resp = model.generate_content(_build_prompt(instruction, files or [], history))
+        resp = config.generate_resilient(_build_prompt(instruction, files or [], history))
         text = getattr(resp, "text", "") or ""
     except Exception as e:
         return {"error": f"generation failed: {e}"}

@@ -556,7 +556,7 @@ def test_model_resolution_error_fallback(monkeypatch):
 
     monkeypatch.setattr(config, "_list_available_models", _boom)
     config._resolved_model = None
-    assert config._resolve_model() == "gemini-2.0-flash"  # 候補先頭にフォールバック
+    assert config._resolve_model() == "gemini-flash-latest"  # 候補先頭にフォールバック
     config._resolved_model = None
 
 

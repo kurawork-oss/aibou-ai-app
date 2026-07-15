@@ -89,7 +89,7 @@ class _FakeModel:
     def __init__(self, text):
         self._text = text
 
-    def generate_content(self, prompt):
+    def generate_content(self, prompt, **kwargs):
         assert "指示" in prompt  # プロンプトが組めていること
         return _FakeResp(self._text)
 
@@ -114,7 +114,7 @@ def test_generate_with_fake_model(monkeypatch):
 
 def test_generate_model_error_is_caught(monkeypatch):
     class _Boom:
-        def generate_content(self, prompt):
+        def generate_content(self, prompt, **kwargs):
             raise RuntimeError("quota")
     monkeypatch.setattr(config, "get_gemini_model", lambda *a, **k: _Boom())
     r = code_mod.generate("作って", [])

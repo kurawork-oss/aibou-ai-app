@@ -34,10 +34,9 @@ _IMAGE = (
 
 
 def _gen_text(system: str, prompt: str) -> str:
-    model = config.get_gemini_model()
-    if model is None:
+    resp = config.generate_resilient(system + "\n\n【要望】\n" + (prompt or ""))
+    if resp is None:
         raise RuntimeError("GEMINI_API_KEY is not configured")
-    resp = model.generate_content(system + "\n\n【要望】\n" + (prompt or ""))
     return getattr(resp, "text", "") or ""
 
 

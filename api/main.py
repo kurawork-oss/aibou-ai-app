@@ -379,7 +379,7 @@ async def chat(req: ChatRequest, _auth: None = Depends(require_auth)):
 
         try:
             stream = await loop.run_in_executor(
-                None, lambda: model.generate_content(prompt, stream=True)
+                None, lambda: config.generate_resilient(prompt, stream=True)
             )
             it = iter(stream)
             buf = ""
@@ -448,7 +448,16 @@ async def chat(req: ChatRequest, _auth: None = Depends(require_auth)):
                     collected.append(buf)
                     yield _sse({"token": buf})
         except Exception as e:
-            yield _sse({"error": f"generation failed: {e}"})
+            if config.is_zero_quota_429(e):
+                used = (getattr(model, "model_name", "") or "").replace("models/", "")
+                config.mark_model_unavailable(used)
+                yield _sse({"error": (
+                    "Gemini無料枠の上限に達しました（またはこのモデルの枠が0です）。"
+                    "使用モデルを自動で切り替えたので、少し待ってからもう一度送信してください。"
+                    f"（元エラー: 429 / {used}）"
+                )})
+            else:
+                yield _sse({"error": f"generation failed: {e}"})
 
         yield _sse({"done": True})
 
@@ -701,7 +710,7 @@ async def life_chat(req: ChatRequest, _auth: None = Depends(require_auth)):
                 return None
 
         try:
-            stream = await loop.run_in_executor(None, lambda: model.generate_content(prompt, stream=True))
+            stream = await loop.run_in_executor(None, lambda: config.generate_resilient(prompt, stream=True))
             it = iter(stream)
             while True:
                 chunk = await loop.run_in_executor(None, _next, it)
@@ -712,7 +721,15 @@ async def life_chat(req: ChatRequest, _auth: None = Depends(require_auth)):
                     yield _sse({"token": text})
             yield _sse({"done": True})
         except Exception as e:
-            yield _sse({"error": f"life chat failed: {e}"})
+            if config.is_zero_quota_429(e):
+                used = (getattr(model, "model_name", "") or "").replace("models/", "")
+                config.mark_model_unavailable(used)
+                yield _sse({"error": (
+                    "Gemini無料枠の上限に達しました。使用モデルを自動で切り替えたので、"
+                    "少し待ってからもう一度送信してください。"
+                )})
+            else:
+                yield _sse({"error": f"life chat failed: {e}"})
             yield _sse({"done": True})
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")

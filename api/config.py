@@ -42,16 +42,35 @@ KEYCHAIN_SECRET = os.environ.get("KEYCHAIN_SECRET", "").strip()
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "").strip()
 
 # 使いたい順の候補（上から順に、利用可能な最初のものを採用）。
+# 新規キーは「最新世代しか無料枠が無い」(古い世代は limit:0 の429) ため最新優先。
 _MODEL_CANDIDATES = [
     m for m in [
-        GEMINI_MODEL,          # 明示指定があれば最優先
-        "gemini-2.0-flash",
-        "gemini-flash-latest",
+        GEMINI_MODEL,             # 明示指定があれば最優先
+        "gemini-flash-latest",    # Googleが維持する「現行flash」エイリアス
+        "gemini-flash-lite-latest",
         "gemini-2.5-flash",
-        "gemini-2.0-flash-001",
+        "gemini-2.5-flash-lite",
+        "gemini-2.0-flash",
         "gemini-1.5-flash",
     ] if m
 ]
+
+# quota 0 (429 limit: 0) と判明したモデル。以後の解決から除外する。
+_model_blacklist: set = set()
+
+
+def is_zero_quota_429(err) -> bool:
+    """「無料枠が0 / 使い切り」の429かどうか（この時はモデル切替が有効）。"""
+    s = str(err)
+    return "429" in s and ("limit: 0" in s or "free_tier" in s or "quota" in s.lower())
+
+
+def mark_model_unavailable(name: str) -> None:
+    """quota 0 だったモデルを除外し、次回から別モデルを解決させる。"""
+    global _resolved_model
+    if name:
+        _model_blacklist.add(name)
+    _resolved_model = None
 
 # 既定の音声（edge-tts）
 DEFAULT_TTS_VOICE = os.environ.get("DEFAULT_TTS_VOICE", "ja-JP-KeitaNeural").strip() or "ja-JP-KeitaNeural"
@@ -113,19 +132,30 @@ def _resolve_model() -> str:
     global _resolved_model
     if _resolved_model:
         return _resolved_model
-    fallback = _MODEL_CANDIDATES[0] if _MODEL_CANDIDATES else "gemini-2.0-flash"
+    usable_candidates = [c for c in _MODEL_CANDIDATES if c not in _model_blacklist]
+    fallback = usable_candidates[0] if usable_candidates else "gemini-flash-latest"
     try:
-        available = _list_available_models()
+        available = _list_available_models() - _model_blacklist
         # 候補を優先順に、利用可能なら採用
-        for cand in _MODEL_CANDIDATES:
+        for cand in usable_candidates:
             if cand in available:
                 _resolved_model = cand
                 return cand
-        # 候補が全滅でも、使える flash 系があればそれを使う
-        for name in sorted(available):
-            if "flash" in name and "vision" not in name:
-                _resolved_model = name
-                return name
+        # 候補が全滅でも、使える flash 系のうち「一番新しい世代」を選ぶ
+        # （例: gemini-3-flash > gemini-2.5-flash。将来の新モデルも自動で拾う）
+        import re
+        best = None
+        best_ver = -1.0
+        for name in available:
+            m = re.match(r"gemini-(\d+(?:\.\d+)?)-flash", name)
+            if m and "vision" not in name and "8b" not in name:
+                ver = float(m.group(1))
+                # 同バージョンなら短い名前（無印flash）を優先
+                if ver > best_ver or (ver == best_ver and best and len(name) < len(best)):
+                    best, best_ver = name, ver
+        if best:
+            _resolved_model = best
+            return best
         if available:
             _resolved_model = sorted(available)[0]
             return _resolved_model
@@ -145,6 +175,26 @@ def get_gemini_model(model_name: str | None = None):
         return genai.GenerativeModel(model_name or _resolve_model())
     except Exception:
         return None
+
+
+def generate_resilient(prompt, stream: bool = False, model_name: str | None = None):
+    """generate_content の quota-0 429 に強いラッパー。
+    使えないモデル（無料枠0）に当たったらブラックリスト→次候補で1度だけ再試行する。
+    Gemini未設定なら None。その他の例外はそのまま raise（呼び出し元の整形を維持）。"""
+    model = get_gemini_model(model_name)
+    if model is None:
+        return None
+    try:
+        return model.generate_content(prompt, stream=stream)
+    except Exception as e:
+        if not is_zero_quota_429(e):
+            raise
+        used = (getattr(model, "model_name", "") or "").replace("models/", "")
+        mark_model_unavailable(used)
+        model2 = get_gemini_model(model_name)
+        if model2 is None:
+            raise
+        return model2.generate_content(prompt, stream=stream)
 
 
 # ── Supabase クライアント（遅延・1度だけ） ───────────────────────

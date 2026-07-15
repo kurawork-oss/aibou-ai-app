@@ -192,7 +192,7 @@ def extract_entries(turns: list) -> dict:
         f"【会話】\n{convo}"
     )
     try:
-        resp = model.generate_content(prompt)
+        resp = config.generate_resilient(prompt)
         obj = _extract_json(getattr(resp, "text", "") or "")
         items = (obj or {}).get("entries") or []
         out = []
