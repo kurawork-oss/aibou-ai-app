@@ -26,6 +26,9 @@ COPY api/ /app/
 # main.py は親ディレクトリ(=/) を sys.path に追加して import renderer する。
 COPY renderer.py /renderer.py
 
+# 自動マイグレーション（migrate.py）が読むスキーマを同梱する。
+COPY supabase_schema.sql /app/supabase_schema.sql
+
 ENV PORT=8080
 EXPOSE 8080
 

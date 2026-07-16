@@ -96,6 +96,9 @@ KNOWN_KEYS: List[Dict[str, str]] = [
     {"name": "SHUTTERSTOCK_FTP", "label": "Shutterstock FTP", "hint": "素材自動アップロード（任意）"},
     {"name": "SUPABASE_URL", "label": "Supabase URL", "hint": "永続ストレージ（任意）"},
     {"name": "SUPABASE_SERVICE_KEY", "label": "Supabase Service Key", "hint": "永続ストレージ（任意）"},
+    {"name": "SUPABASE_DB_URL", "label": "Supabase DB接続URL", "hint": "テーブル自動作成に使う postgresql://… 接続文字列"},
+    {"name": "GOOGLE_CLIENT_ID", "label": "Google Client ID", "hint": "Google連携（スプレッドシート/ドキュメント）"},
+    {"name": "GOOGLE_CLIENT_SECRET", "label": "Google Client Secret", "hint": "Google連携（OAuth）"},
 ]
 
 # プロセス内フォールバック（Supabase 未設定時）

@@ -60,6 +60,11 @@ TOOLS_DOC = (
     '- create_spreadsheet: 表データからCSVスプレッドシートを生成して保存（ダウンロード可）。'
     'rowsは1行目を見出しにした二次元配列 '
     '/ params: { "title": "表の名前", "rows": [["名前","金額"],["家賃","80000"]] }\n'
+    '- google_sheet: Googleスプレッドシートを新規作成してrowsを書き込む（Google連携が必要）。'
+    'クラウドで共有・編集したい表に使う '
+    '/ params: { "title": "表の名前", "rows": [["名前","金額"],["家賃","80000"]] }\n'
+    '- google_doc: Googleドキュメントを新規作成して本文を書く（Google連携が必要） '
+    '/ params: { "title": "見出し", "content": "本文" }\n'
     '- notion_add: Notionのページ/データベースにメモ（新規ページ）を追記する '
     '/ params: { "title": "メモの見出し", "content": "本文" }\n'
     '- create_automation: ノーコード自動化フロー（Zapier風）を作る。stepsのtypeは '
@@ -395,6 +400,38 @@ def _do_create_spreadsheet(params: dict) -> str:
     return f"スプレッドシート「{art.get('title')}」を作成しました（{n}行・CSV）。HOMEの『生成物』からダウンロードできます。"
 
 
+def _do_google_sheet(params: dict) -> str:
+    """Google スプレッドシートを作成して rows を書き込み、共有URLを返す。"""
+    title = (params.get("title") or "").strip()
+    rows = params.get("rows")
+    if not (isinstance(rows, list) and rows):
+        return "スプレッドシートの行データ（rows）が空です。"
+    try:
+        import gservice
+        res = gservice.create_sheet(title or "スプレッドシート", rows)
+    except Exception as e:
+        return f"Googleスプレッドシートの作成に失敗しました：{e}"
+    if not res.get("ok"):
+        return f"Googleスプレッドシートを作成できませんでした：{res.get('error')}"
+    return f"Googleスプレッドシート「{title or '無題'}」を作成しました：{res.get('url')}"
+
+
+def _do_google_doc(params: dict) -> str:
+    """Google ドキュメントを作成して本文を挿入し、共有URLを返す。"""
+    title = (params.get("title") or "").strip()
+    content = (params.get("content") or "").strip()
+    if not content:
+        return "ドキュメントの本文が空です。"
+    try:
+        import gservice
+        res = gservice.create_doc(title or "ドキュメント", content)
+    except Exception as e:
+        return f"Googleドキュメントの作成に失敗しました：{e}"
+    if not res.get("ok"):
+        return f"Googleドキュメントを作成できませんでした：{res.get('error')}"
+    return f"Googleドキュメント「{title or '無題'}」を作成しました：{res.get('url')}"
+
+
 def _notion_blocks(content: str) -> list:
     """本文を Notion の paragraph ブロック配列に変換する（行=段落）。"""
     blocks = []
@@ -534,6 +571,8 @@ _DISPATCH = {
     "list_state": _do_list_state,
     "create_document": _do_create_document,
     "create_spreadsheet": _do_create_spreadsheet,
+    "google_sheet": _do_google_sheet,
+    "google_doc": _do_google_doc,
     "notion_add": _do_notion_add,
     "create_automation": _do_create_automation,
     "run_automation": _do_run_automation,

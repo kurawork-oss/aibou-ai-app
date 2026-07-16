@@ -545,6 +545,29 @@ test("Settings CORE shows AI provider section (offline note)", async ({ page }) 
   await expect(page.getByText(/AIプロバイダ.*モデルの選択は、バックエンド接続後/)).toBeVisible({ timeout: 5_000 });
 });
 
+/* ── Google + DB integrations (ui-r24) ── */
+test("Settings CORE shows Google/DB integration note (offline)", async ({ page }) => {
+  await page.goto("/");
+  await enterApp(page);
+  await page.getByLabel("Settings").click();
+  await expect(page.getByText(/Google連携・DB永続化は、バックエンド接続後/)).toBeVisible({ timeout: 5_000 });
+});
+
+test("KEYCHAIN includes a Google key with its issuance guide", async ({ page }) => {
+  await page.goto("/");
+  await enterApp(page);
+  await page.getByLabel("Settings").click();
+  await page.getByText("KEYCHAIN", { exact: true }).click();
+  await expect(page.getByText("SET ACCESS CODE")).toBeVisible({ timeout: 5_000 });
+  await page.getByPlaceholder("パスコード（4文字以上）").fill("test-pass");
+  await page.getByPlaceholder("確認のためもう一度").fill("test-pass");
+  await page.getByRole("button", { name: "CREATE VAULT" }).click();
+  await expect(page.getByText("オフライン下書き · UNLOCKED")).toBeVisible({ timeout: 5_000 });
+  const gRow = page.locator("div.rounded-forge").filter({ hasText: "Google Client ID" });
+  await gRow.getByLabel("発行手順").first().click();
+  await expect(page.getByRole("link", { name: /Google Cloud/ })).toBeVisible({ timeout: 5_000 });
+});
+
 /* ── HOME cockpit: agent console + instrument cluster (ui-r22) ── */
 test("HOME agent console renders with action suggestions", async ({ page }) => {
   await page.goto("/");

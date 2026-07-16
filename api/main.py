@@ -20,11 +20,12 @@ import asyncio
 import base64
 import os
 import sys
+from contextlib import asynccontextmanager
 from typing import List, Optional
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 import agenda
@@ -37,10 +38,12 @@ import code_agent
 import evolve
 import forge
 import gh
+import gservice
 import income
 import keychain
 import life
 import llm
+import migrate
 import notify
 import proactive
 import studio
@@ -49,10 +52,24 @@ import tools
 import vault
 from memory_store import mem_add, mem_recall, mem_recent
 
+@asynccontextmanager
+async def _lifespan(_app: "FastAPI"):
+    """起動時：SUPABASE_DB_URL があればテーブルを自動作成（冪等・best-effort）。
+    未設定なら何もしない（in-memory 動作のまま）。絶対に起動を止めない。"""
+    try:
+        if migrate.db_url():
+            res = await asyncio.get_event_loop().run_in_executor(None, migrate.run_migrations)
+            print(f"[migrate] startup: {res}")
+    except Exception as e:  # pragma: no cover
+        print(f"[migrate] startup error: {e}")
+    yield
+
+
 app = FastAPI(
     title="AIbou Brain API",
     description="JARVIS的パーソナルAIアシスタントのバックエンド（chat / vision / tts / memory / income / video）",
     version="1.0.0",
+    lifespan=_lifespan,
 )
 
 # ── CORS ─────────────────────────────────────────────────────────
@@ -1225,6 +1242,79 @@ async def artifacts_get(artifact_id: str, _auth: None = Depends(require_auth)):
 async def artifacts_delete(artifact_id: str, _auth: None = Depends(require_auth)):
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(None, lambda: artifacts.delete(artifact_id))
+
+
+# ── Admin：DB永続化（テーブル自動作成） ──────────────────────────────
+
+@app.get("/admin/db/status")
+async def admin_db_status(_auth: None = Depends(require_auth)):
+    """必要テーブルの存在状況（永続化の可否を判断するUI用）。"""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, migrate.table_status)
+
+
+@app.post("/admin/migrate")
+async def admin_migrate(_auth: None = Depends(require_auth)):
+    """SUPABASE_DB_URL を使って supabase_schema.sql を実行（テーブル自動作成）。"""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, migrate.run_migrations)
+
+
+# ── Google 連携（OAuth：スプレッドシート / ドキュメント） ──────────────
+# start / callback はブラウザ遷移 & Google からのリダイレクトなので認証を付けない
+# （OAuth 自体が本人確認になる）。status は認証必須。
+
+def _google_redirect(request: Request) -> str:
+    """明示設定を最優先。無ければリクエストから callback URL を組み立てる。"""
+    base = str(request.base_url).rstrip("/")
+    # プロキシ(Render/Vercel)越しは https を強制（localhost は除く）。
+    if base.startswith("http://") and "localhost" not in base and "127.0.0.1" not in base:
+        base = "https://" + base[len("http://"):]
+    return gservice.redirect_uri(default=f"{base}/google/auth/callback")
+
+
+@app.get("/google/status")
+async def google_status(_auth: None = Depends(require_auth)):
+    """Google連携の状態（設定済み / 接続済み）を返す。"""
+    return gservice.status()
+
+
+@app.get("/google/auth/start")
+async def google_auth_start(request: Request):
+    """Googleの同意画面へリダイレクト（KEYCHAINにCLIENT_ID/SECRETが必要）。"""
+    if not gservice.configured():
+        return HTMLResponse(
+            "<h3>Google未設定です</h3><p>Settings → KEYCHAIN で "
+            "GOOGLE_CLIENT_ID と GOOGLE_CLIENT_SECRET を設定してください。</p>",
+            status_code=400,
+        )
+    return RedirectResponse(gservice.auth_url(_google_redirect(request)))
+
+
+@app.get("/google/auth/callback")
+async def google_auth_callback(request: Request, code: str = "", error: str = ""):
+    """Googleからのコールバック。コードを refresh_token に交換して保存する。"""
+    if error:
+        return HTMLResponse(f"<h3>接続に失敗しました</h3><p>{error}</p>")
+    redirect = _google_redirect(request)
+    res = await asyncio.get_event_loop().run_in_executor(None, lambda: gservice.exchange_code(code, redirect))
+    if res.get("ok"):
+        return HTMLResponse(
+            "<div style='font-family:sans-serif;text-align:center;margin-top:15%'>"
+            "<h2>✓ Google連携が完了しました</h2>"
+            "<p>このタブを閉じて、アプリに戻ってください。</p></div>"
+        )
+    return HTMLResponse(
+        "<div style='font-family:sans-serif;text-align:center;margin-top:12%'>"
+        f"<h3>接続に失敗しました</h3><p>{res.get('error')}</p>"
+        f"<p style='color:#888;font-size:13px'>Google Cloud の『承認済みのリダイレクトURI』が<br>"
+        f"<code>{redirect}</code><br>と完全一致しているか確認してください。</p></div>"
+    )
+
+
+@app.post("/google/disconnect")
+async def google_disconnect(_auth: None = Depends(require_auth)):
+    return gservice.disconnect()
 
 
 # ── Home（コックピット集約サマリー） ──────────────────────────────

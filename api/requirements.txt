@@ -10,3 +10,5 @@ pydantic
 gTTS
 # APIキーをSupabaseに保存する際のFernet暗号化に使用
 cryptography
+# 任意：SUPABASE_DB_URL を設定した時のテーブル自動作成（migrate.py）に使用
+psycopg2-binary

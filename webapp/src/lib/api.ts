@@ -493,6 +493,50 @@ export function agentActStream(
   return { cancel: () => controller.abort() };
 }
 
+/* ---------------- Google integration (Sheets / Docs) ---------------- */
+export interface GoogleStatus { configured: boolean; connected: boolean }
+
+/** GET /google/status — whether Google is configured + connected. */
+export async function googleStatus(): Promise<GoogleStatus> {
+  const res = await fetch(`${requireApiUrl()}/google/status`, { headers: authHeaders(), cache: "no-store" });
+  if (!res.ok) throw new Error(`Google status failed (${res.status})`);
+  return (await res.json()) as GoogleStatus;
+}
+
+/** URL that starts the Google OAuth consent flow (open in a new tab). */
+export function googleAuthStartUrl(): string {
+  return `${requireApiUrl()}/google/auth/start`;
+}
+
+/** POST /google/disconnect — forget the stored refresh token. */
+export async function googleDisconnect(): Promise<boolean> {
+  const res = await fetch(`${requireApiUrl()}/google/disconnect`, { method: "POST", headers: authHeaders() });
+  const data = (await res.json().catch(() => ({ ok: false }))) as { ok?: boolean };
+  return Boolean(data.ok);
+}
+
+/* ---------------- DB persistence (auto-migration) ---------------- */
+export interface DbStatus {
+  connected: boolean;
+  db_url_set: boolean;
+  present: string[];
+  missing: string[];
+  error?: string;
+}
+
+/** GET /admin/db/status — which tables exist (persistence readiness). */
+export async function dbStatus(): Promise<DbStatus> {
+  const res = await fetch(`${requireApiUrl()}/admin/db/status`, { headers: authHeaders(), cache: "no-store" });
+  if (!res.ok) throw new Error(`DB status failed (${res.status})`);
+  return (await res.json()) as DbStatus;
+}
+
+/** POST /admin/migrate — create missing tables via SUPABASE_DB_URL. */
+export async function dbMigrate(): Promise<{ ok: boolean; error?: string; skipped?: boolean; reason?: string }> {
+  const res = await fetch(`${requireApiUrl()}/admin/migrate`, { method: "POST", headers: authHeaders() });
+  return (await res.json().catch(() => ({ ok: false }))) as { ok: boolean; error?: string; skipped?: boolean; reason?: string };
+}
+
 /* ---------------- AI provider / model config ---------------- */
 export interface AiConfig {
   provider: string;

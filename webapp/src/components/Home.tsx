@@ -221,6 +221,8 @@ const TOOL_LABELS: Record<string, string> = {
   list_state: "現在の状況を確認",
   create_document: "ドキュメントを作成",
   create_spreadsheet: "スプレッドシートを作成",
+  google_sheet: "Googleスプレッドシート作成",
+  google_doc: "Googleドキュメント作成",
   notion_add: "Notionに追記",
   create_automation: "自動化フローを作成",
   run_automation: "自動化を実行",
