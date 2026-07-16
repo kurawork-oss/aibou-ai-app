@@ -10,9 +10,10 @@
  * - バックエンド接続時は「同期」でサーバーへ送り、サーバー側で実利用（Gemini等）。
  */
 
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useState } from "react";
 import { listKeys, setKey, deleteKey, API_URL, type ApiKeyInfo } from "@/lib/api";
+import { keyGuide } from "@/lib/keyGuides";
 
 const LS_VAULT = "forge_vault_v1";
 
@@ -85,6 +86,7 @@ function OfflineVault() {
   const [customName, setCustomName] = useState("");
   const [customValue, setCustomValue] = useState("");
   const [note, setNote] = useState<string | null>(null);
+  const [openGuide, setOpenGuide] = useState<string | null>(null);
 
   useEffect(() => {
     try {
@@ -245,7 +247,10 @@ function OfflineVault() {
             <div key={k.name} className="rounded-forge border border-panel p-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-[11px] tracking-[0.1em] text-fg-strong label-mono">{k.label}</div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] tracking-[0.1em] text-fg-strong label-mono">{k.label}</span>
+                    <InfoBtn open={openGuide === k.name} onClick={() => setOpenGuide(openGuide === k.name ? null : k.name)} />
+                  </div>
                   <div className="text-[9px] text-muted">{k.hint}</div>
                 </div>
                 <span className="text-[9px] tracking-[0.12em] label-mono" style={{ color: set ? "#60d394" : "#6a6f77" }}>
@@ -275,6 +280,7 @@ function OfflineVault() {
                   </>
                 )}
               </div>
+              <AnimatePresence>{openGuide === k.name && <GuidePanel name={k.name} />}</AnimatePresence>
             </div>
           );
         })}
@@ -315,6 +321,7 @@ function SupabaseVault() {
   const [customValue, setCustomValue] = useState("");
   const [note, setNote] = useState<string | null>(null);
   const [hasDraft, setHasDraft] = useState(false);
+  const [openGuide, setOpenGuide] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -404,7 +411,10 @@ function SupabaseVault() {
             <div key={k.name} className="rounded-forge border border-panel p-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-[11px] tracking-[0.1em] text-fg-strong label-mono">{k.label || k.name}</div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] tracking-[0.1em] text-fg-strong label-mono">{k.label || k.name}</span>
+                    <InfoBtn open={openGuide === k.name} onClick={() => setOpenGuide(openGuide === k.name ? null : k.name)} />
+                  </div>
                   {k.hint && <div className="text-[9px] text-muted">{k.hint}</div>}
                 </div>
                 <span className="text-[9px] tracking-[0.12em] label-mono" style={{ color: k.set ? "#60d394" : "#6a6f77" }}>
@@ -429,6 +439,7 @@ function SupabaseVault() {
                     className="shrink-0 rounded-forge border border-[#ff6b6b44] px-2 text-[10px] text-[#ff8888] label-mono">✕</button>
                 )}
               </div>
+              <AnimatePresence>{openGuide === k.name && <GuidePanel name={k.name} />}</AnimatePresence>
             </div>
           ))}
         </div>
@@ -451,6 +462,67 @@ function SupabaseVault() {
         </div>
       </div>
     </div>
+  );
+}
+
+/* ── Per-key issuance guide ("?" → step-by-step panel) ─────────────── */
+function InfoBtn({ open, onClick }: { open: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label="発行手順"
+      title="発行手順を見る"
+      className="grid h-5 w-5 shrink-0 place-items-center rounded-full border text-[10px] font-bold transition"
+      style={{
+        borderColor: open ? "var(--accent)" : "var(--panel-bd)",
+        color: open ? "var(--accent)" : "var(--muted)",
+      }}
+    >
+      ?
+    </button>
+  );
+}
+
+/** The expandable instructions panel for one key. Returns null if no guide. */
+function GuidePanel({ name }: { name: string }) {
+  const g = keyGuide(name);
+  if (!g) {
+    return (
+      <div className="mt-2 rounded-forge border border-panel bg-[rgba(255,255,255,0.02)] p-2.5 text-[10px] leading-relaxed text-muted">
+        このキーの発行手順は未登録です。提供元の公式サイトで発行してください。
+      </div>
+    );
+  }
+  return (
+    <motion.div
+      initial={{ opacity: 0, height: 0 }}
+      animate={{ opacity: 1, height: "auto" }}
+      exit={{ opacity: 0, height: 0 }}
+      className="overflow-hidden"
+    >
+      <div className="mt-2 rounded-forge border border-[var(--line)] bg-[rgba(0,243,255,0.04)] p-3">
+        <div className="mb-1 flex items-center gap-2">
+          <span className="text-[10px] tracking-[0.16em] text-[var(--accent)] label-mono">発行手順</span>
+          {g.free && <span className="rounded-full border border-panel px-1.5 py-0.5 text-[8px] tracking-[0.1em] text-[#60d394] label-mono">FREE</span>}
+        </div>
+        <p className="mb-2 text-[10px] leading-relaxed text-muted">{g.purpose}</p>
+        <ol className="ml-4 list-decimal space-y-1 text-[11px] leading-relaxed text-fg marker:text-muted">
+          {g.steps.map((s, i) => <li key={i}>{s}</li>)}
+        </ol>
+        {g.url && (
+          <a
+            href={g.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-2 inline-flex items-center gap-1 rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] px-2.5 py-1 text-[10px] tracking-[0.1em] text-fg-strong transition hover:shadow-glow label-mono"
+          >
+            {g.urlLabel || "発行ページを開く"} ↗
+          </a>
+        )}
+        {g.note && <p className="mt-2 text-[10px] leading-relaxed text-[#ffd060]">{g.note}</p>}
+      </div>
+    </motion.div>
   );
 }
 

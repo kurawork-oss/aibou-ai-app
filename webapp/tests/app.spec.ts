@@ -89,7 +89,8 @@ test("CHAT is the default view; HOME shows the cockpit", async ({ page }) => {
   // Navigating to HOME renders the cockpit
   await goMode(page, "HOME");
   await expect(page.getByText("PERSONAL COCKPIT")).toBeVisible({ timeout: 5_000 });
-  await expect(page.getByText(/QUICK ASSISTANT/i)).toBeVisible();
+  await expect(page.getByText(/AGENT CONSOLE/i)).toBeVisible();
+  await expect(page.getByText("INSTRUMENT CLUSTER")).toBeVisible();
   await expect(page.getByText("予定 — AGENDA")).toBeVisible();
 });
 
@@ -542,6 +543,48 @@ test("Settings CORE shows AI provider section (offline note)", async ({ page }) 
   await page.getByLabel("Settings").click();
   // Offline → the AI provider panel explains it needs the backend
   await expect(page.getByText(/AIプロバイダ.*モデルの選択は、バックエンド接続後/)).toBeVisible({ timeout: 5_000 });
+});
+
+/* ── HOME cockpit: agent console + instrument cluster (ui-r22) ── */
+test("HOME agent console renders with action suggestions", async ({ page }) => {
+  await page.goto("/");
+  await enterApp(page);
+  await goMode(page, "HOME");
+  await expect(page.getByText("AGENT CONSOLE · 手足となって動く")).toBeVisible({ timeout: 5_000 });
+  // Suggestion chips are visible (they drive the agent when connected)
+  await expect(page.getByText("今の状況を整理して報告して")).toBeVisible();
+});
+
+/* ── Fullscreen (focus) mode for any view ── */
+test("Fullscreen toggle hides the CORE header and restores it", async ({ page }) => {
+  await page.goto("/");
+  await enterApp(page);
+  const orb = page.getByRole("img", { name: /THE FORGE OS core/i }).first();
+  await expect(orb).toBeVisible();
+  await page.getByLabel("Fullscreen").click();
+  await expect(orb).toBeHidden();
+  // The control now offers restore; clicking it brings the core back.
+  await page.getByLabel("Restore").click();
+  await expect(orb).toBeVisible();
+});
+
+/* ── KEYCHAIN per-key issuance guide ── */
+test("KEYCHAIN: a key's ? button reveals its issuance guide", async ({ page }) => {
+  await page.goto("/");
+  await enterApp(page);
+  await page.getByLabel("Settings").click();
+  await page.getByText("KEYCHAIN", { exact: true }).click();
+  // Create the offline vault so the preset key rows render.
+  await expect(page.getByText("SET ACCESS CODE")).toBeVisible({ timeout: 5_000 });
+  await page.getByPlaceholder("パスコード（4文字以上）").fill("test-pass");
+  await page.getByPlaceholder("確認のためもう一度").fill("test-pass");
+  await page.getByRole("button", { name: "CREATE VAULT" }).click();
+  await expect(page.getByText("オフライン下書き · UNLOCKED")).toBeVisible({ timeout: 5_000 });
+  // Open the Gemini key's step-by-step guide.
+  const geminiRow = page.locator("div.rounded-forge").filter({ hasText: "Gemini API Key" });
+  await geminiRow.getByLabel("発行手順").first().click();
+  // The guide panel exposes the official issuance link (unique to the guide).
+  await expect(page.getByRole("link", { name: /Google AI Studio/ })).toBeVisible({ timeout: 5_000 });
 });
 
 /* ── CODE mode (ui-r14): Claude Code-like coding agent ── */

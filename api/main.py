@@ -28,6 +28,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 import agenda
+import agent
 import autopilot
 import automations
 import config
@@ -218,6 +219,12 @@ class AiConfigRequest(BaseModel):
     provider: Optional[str] = None   # auto | gemini | huggingface
     hf_model: Optional[str] = None
     code_model: Optional[str] = None
+
+
+class AgentActRequest(BaseModel):
+    instruction: str
+    history: Optional[List[ChatMessage]] = None
+    name: Optional[str] = None       # アシスタント名（既定 "AIbou"）
 
 
 class GithubImportRequest(BaseModel):
@@ -463,6 +470,49 @@ async def chat(req: ChatRequest, _auth: None = Depends(require_auth)):
                 mem_add("user", req.message, importance=0)
             if full:
                 mem_add("assistant", full, importance=0)
+        except Exception:
+            pass
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+@app.post("/agent/act")
+async def agent_act(req: AgentActRequest, _auth: None = Depends(require_auth)):
+    """HOME：手足となって動く自律エージェント（SSE）。plan→act→observe を
+    繰り返し、進捗を data:{"phase":...} で実況、最後に final→done を送る。"""
+    if llm.active_provider() == "none":
+        async def err_stream():
+            yield _sse({"phase": "error", "detail": "AI未設定です。Settings → KEYCHAIN に GEMINI_API_KEY か HUGGINGFACE_TOKEN を保存してください。"})
+            yield _sse({"phase": "done", "steps": 0})
+        return StreamingResponse(err_stream(), media_type="text/event-stream")
+
+    history = [h.model_dump() for h in (req.history or [])]
+
+    async def event_stream():
+        loop = asyncio.get_event_loop()
+        gen = agent.run_stream(req.instruction, history, req.name or "AIbou")
+
+        def _next(g):
+            try:
+                return next(g)
+            except StopIteration:
+                return None
+
+        collected_final = ""
+        while True:
+            ev = await loop.run_in_executor(None, _next, gen)
+            if ev is None:
+                break
+            if ev.get("phase") == "final":
+                collected_final = ev.get("text", "")
+            yield _sse(ev)
+
+        # 会話を記憶（best-effort）— CHAT と同じ扱い。
+        try:
+            if req.instruction:
+                mem_add("user", req.instruction, importance=0)
+            if collected_final:
+                mem_add("assistant", collected_final, importance=0)
         except Exception:
             pass
 

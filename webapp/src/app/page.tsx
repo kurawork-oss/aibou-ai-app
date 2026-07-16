@@ -84,6 +84,7 @@ function Hud() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [view, setView] = useState<View>("chat");
+  const [fullscreen, setFullscreen] = useState(false);
 
   useEffect(() => {
     try {
@@ -100,6 +101,7 @@ function Hud() {
       if (savedView && ["chat", "me", "forge", "code", "vault", "income", "tasks", "studio", "autopilot", "board", "archive", "home"].includes(savedView)) {
         setView(savedView);
       }
+      if (localStorage.getItem("forge_fullscreen") === "1") setFullscreen(true);
     } catch { /* ignore */ }
     setLoaded(true);
   }, []);
@@ -109,6 +111,12 @@ function Hud() {
     if (!loaded) return;
     try { localStorage.setItem("forge_view", view); } catch { /* ignore */ }
   }, [view, loaded]);
+
+  // Persist the fullscreen (focus) preference.
+  useEffect(() => {
+    if (!loaded) return;
+    try { localStorage.setItem("forge_fullscreen", fullscreen ? "1" : "0"); } catch { /* ignore */ }
+  }, [fullscreen, loaded]);
 
   useEffect(() => {
     let active = true;
@@ -153,7 +161,7 @@ function Hud() {
   return (
     <main
       data-mode={view}
-      className={`relative mx-auto flex h-[100dvh] w-full flex-col px-4 pb-20 pt-[max(env(safe-area-inset-top),0.75rem)] transition-[max-width] duration-300 sm:pb-3 ${view === "chat" ? "max-w-[1700px]" : "max-w-6xl"}`}
+      className={`relative mx-auto flex h-[100dvh] w-full flex-col px-4 pb-20 pt-[max(env(safe-area-inset-top),0.75rem)] transition-[max-width] duration-300 sm:pb-3 ${fullscreen ? "max-w-none" : view === "chat" ? "max-w-[1700px]" : "max-w-6xl"}`}
     >
       {/* Occasional drifting light-silver ambient bloom (behind everything). */}
       <div className="forge-ambient" aria-hidden />
@@ -173,6 +181,17 @@ function Hud() {
             <ModeLauncher view={view} onChange={setView} />
             <button
               type="button"
+              onClick={() => setFullscreen((f) => !f)}
+              className="grid h-8 w-8 place-items-center rounded-lg border border-panel text-muted transition hover:border-[var(--line)] hover:text-fg-strong"
+              aria-label={fullscreen ? "Restore" : "Fullscreen"}
+              title={fullscreen ? "コアを表示（元に戻す）" : "全画面（コアを隠す）"}
+              aria-pressed={fullscreen}
+              style={fullscreen ? { borderColor: "var(--accent)", color: "var(--fg-strong)" } : undefined}
+            >
+              <FullscreenIcon on={fullscreen} />
+            </button>
+            <button
+              type="button"
               onClick={() => setSettingsOpen(true)}
               className="grid h-8 w-8 place-items-center rounded-lg border border-panel text-muted transition hover:border-[var(--line)] hover:text-fg-strong"
               aria-label="Settings"
@@ -183,21 +202,27 @@ function Hud() {
           </div>
         </div>
 
-        {/* Core + wordmark (compact when not on chat / home) */}
-        <header
-          className="flex flex-col items-center transition-all duration-300"
-          style={{ paddingBottom: view === "chat" || view === "home" ? "0.5rem" : "0.25rem", paddingTop: view === "chat" || view === "home" ? "0.25rem" : "0" }}
-        >
-          <CoreOrb size={view === "chat" || view === "home" ? 108 : 72} state={coreState} />
-          <h1 className="label-mono text-glow mt-3 text-[13px] font-normal text-fg-strong sm:text-sm">
-            THE FORGE OS
-          </h1>
-          <p className="mt-0.5 text-[10px] tracking-[0.28em] text-muted/80 label-mono">
-            {loaded ? `${settings.name} · ${stateLabel(coreState)}` : "INITIALIZING"}
-          </p>
-        </header>
+        {/* Core + wordmark (compact when not on chat / home). Hidden in
+            fullscreen to give the active mode the whole canvas — the slim
+            status row above keeps the restore/modes/settings controls. */}
+        {!fullscreen && (
+          <>
+            <header
+              className="flex flex-col items-center transition-all duration-300"
+              style={{ paddingBottom: view === "chat" || view === "home" ? "0.5rem" : "0.25rem", paddingTop: view === "chat" || view === "home" ? "0.25rem" : "0" }}
+            >
+              <CoreOrb size={view === "chat" || view === "home" ? 108 : 72} state={coreState} />
+              <h1 className="label-mono text-glow mt-3 text-[13px] font-normal text-fg-strong sm:text-sm">
+                THE FORGE OS
+              </h1>
+              <p className="mt-0.5 text-[10px] tracking-[0.28em] text-muted/80 label-mono">
+                {loaded ? `${settings.name} · ${stateLabel(coreState)}` : "INITIALIZING"}
+              </p>
+            </header>
 
-        <div className="divider my-2" />
+            <div className="divider my-2" />
+          </>
+        )}
       </div>
 
       {/* Active view fills remaining space. Home & Forge own the full width
@@ -525,6 +550,19 @@ function StatusDot({ online }: { online: boolean }) {
         />
       )}
     </span>
+  );
+}
+
+function FullscreenIcon({ on }: { on: boolean }) {
+  // on → "compress" (arrows in / restore); off → "expand" (arrows out).
+  return on ? (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5" />
+    </svg>
+  ) : (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
+    </svg>
   );
 }
 

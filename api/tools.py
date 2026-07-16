@@ -47,6 +47,13 @@ TOOL_CALL_MARKER = "<<<TOOL_CALL>>>"
 # 差し込み、モデルにどんな行動が取れるかを伝えるためのドキュメント。
 TOOLS_DOC = (
     "【利用可能なツール】\n"
+    '- add_task: ToDo（タスク）を1件追加する。「〜しておいて」「〜を忘れないように」等の依頼で使う '
+    '/ params: { "title": "タスク名", "content": "補足（任意）" }\n'
+    '- add_agenda: 予定（カレンダー）を1件追加する。日付は YYYY-MM-DD、時刻は HH:MM。'
+    '相対表現（明日・金曜など）は system に記載の今日の日付を基準に自分で計算して埋める '
+    '/ params: { "title": "予定名", "date": "2026-07-17", "time": "15:00" }\n'
+    '- list_state: 今のタスク・予定・副業ジョブ・未読通知の件数と概要を取得する（状況把握に使う） '
+    "/ params: { }\n"
     '- remember: ユーザーが「覚えておいて」と言った事実・好み・重要情報を長期記憶に保存する '
     '/ params: { "content": "覚える内容（例：私の誕生日は6月12日）" }\n'
     '- recall: 長期記憶から過去の事実・文脈を検索して思い出す '
@@ -55,7 +62,7 @@ TOOLS_DOC = (
     '/ params: { "theme": "生成テーマ（例：雪のロッジの環境音）" }\n'
     '- income_status: 副業ジョブの状況（承認待ち/承認済/完了/失敗 などの件数）を報告する '
     "/ params: { }\n"
-    '- notify: Discord（DISCORD_WEBHOOK 設定時）にメッセージを通知する '
+    '- notify: 設定済みの通知先（LINE / Discord / Slack）へメッセージを送る '
     '/ params: { "message": "送信するメッセージ" }\n'
     '- save_note: ノート（Vault）にメモを保存する。ノートブックが無ければ作成する '
     '/ params: { "notebook": "保存先ノートブック名", "title": "タイトル", "content": "本文" }'
@@ -188,20 +195,92 @@ def _do_income_status(_params: dict) -> str:
 
 
 def _do_notify(params: dict) -> str:
-    """Discord Webhook（DISCORD_WEBHOOK）へメッセージを送る。未設定ならその旨を返す。"""
+    """設定済みの通知先（LINE / Discord / Slack）へメッセージを送る。
+    どのチャンネルも未設定でも、アプリ内通知ログには必ず残るので優雅に縮退する。"""
     message = (params.get("message") or "").strip()
     if not message:
         return "送信するメッセージが空です。"
-    if requests is None:
-        return "requests がインストールされていないため通知を送れません。"
-    url = (os.environ.get("DISCORD_WEBHOOK") or "").strip()
-    if not url:
-        return "DISCORD_WEBHOOK が未設定のため通知を送れませんでした。"
     try:
-        requests.post(url, json={"content": message[:1900]}, timeout=30)
-        return "Discord に通知を送信しました。"
+        import notify
+        res = notify.notify_all(message[:1900])
     except Exception as e:
         return f"通知の送信に失敗しました：{e}"
+    sent = res.get("sent") or []
+    if sent:
+        return f"{'・'.join(sent)} に通知を送信しました。"
+    # 外部チャンネル未設定でも log_internal 済み → ホームの通知に出る。
+    return "外部の通知先（LINE / Discord / Slack）が未設定のため、アプリ内通知に記録しました。"
+
+
+def _do_add_task(params: dict) -> str:
+    """ToDo（タスク）を1件追加する。"""
+    title = (params.get("title") or "").strip()
+    if not title:
+        return "タスクのタイトルが空です。"
+    content = (params.get("content") or "").strip()
+    try:
+        import tasks
+        t = tasks.create_task(title, content)
+    except Exception as e:
+        return f"タスクの作成に失敗しました：{e}"
+    if isinstance(t, dict) and t.get("error"):
+        return f"タスクの作成に失敗しました：{t['error']}"
+    return f"タスクを追加しました：{title}"
+
+
+def _do_add_agenda(params: dict) -> str:
+    """予定（カレンダー）を1件追加する。date=YYYY-MM-DD, time=HH:MM。"""
+    title = (params.get("title") or "").strip()
+    if not title:
+        return "予定のタイトルが空です。"
+    date = (params.get("date") or "").strip()
+    time = (params.get("time") or "").strip()
+    try:
+        import agenda
+        ev = agenda.add_event(title, date, time)
+    except Exception as e:
+        return f"予定の追加に失敗しました：{e}"
+    if isinstance(ev, dict) and ev.get("error"):
+        return f"予定の追加に失敗しました：{ev['error']}"
+    when = " ".join(x for x in (date, time) if x) or "日時未指定"
+    return f"予定を追加しました：{when} {title}"
+
+
+def _do_list_state(_params: dict) -> str:
+    """今のタスク・予定・副業・未読通知の状況を1文にまとめて返す（状況把握用）。"""
+    parts: list = []
+    try:
+        import tasks
+        all_tasks = tasks.list_tasks(None, 1000) or []
+        open_tasks = [t for t in all_tasks if (t.get("status") or "pending") in ("pending", "in_progress")]
+        parts.append(f"未完了タスク {len(open_tasks)}件")
+        for t in open_tasks[:5]:
+            parts.append(f"・{t.get('title', '(無題)')}")
+    except Exception:
+        pass
+    try:
+        import agenda
+        events = agenda.list_events(1000) or []
+        parts.append(f"予定 {len(events)}件")
+        for e in events[:5]:
+            when = " ".join(x for x in (e.get("date", ""), e.get("time", "")) if x)
+            parts.append(f"・{when} {e.get('title', '(無題)')}".strip())
+    except Exception:
+        pass
+    try:
+        pending = len(income.list_jobs("pending", 1000) or [])
+        if pending:
+            parts.append(f"副業の承認待ち {pending}件")
+    except Exception:
+        pass
+    try:
+        import notify
+        unread = notify.unread_count()
+        if unread:
+            parts.append(f"未読通知 {unread}件")
+    except Exception:
+        pass
+    return "現在の状況：\n" + "\n".join(parts) if parts else "現在、記録されたタスク・予定はありません。"
 
 
 def _do_save_note(params: dict) -> str:
@@ -257,6 +336,9 @@ def _do_save_note(params: dict) -> str:
 
 # ツール名 → 実装関数のディスパッチ表。
 _DISPATCH = {
+    "add_task": _do_add_task,
+    "add_agenda": _do_add_agenda,
+    "list_state": _do_list_state,
     "remember": _do_remember,
     "recall": _do_recall,
     "enqueue_income": _do_enqueue_income,

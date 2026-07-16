@@ -424,6 +424,75 @@ export function codeGenerateStream(
   return { cancel: () => controller.abort() };
 }
 
+/* ---------------- HOME agent (手足となって動く) ---------------- */
+export interface AgentEvent {
+  phase: "start" | "thinking" | "tool" | "observation" | "final" | "done" | "error";
+  step?: number;
+  tool?: string;
+  params?: Record<string, unknown>;
+  note?: string;
+  result?: string;
+  text?: string;
+  detail?: string;
+  steps?: number;
+}
+
+/**
+ * POST /agent/act (SSE) — the HOME agent runs a plan→act→observe loop and
+ * streams each step (thinking / tool / observation) then a final report.
+ * onEvent fires for every phase; onDone fires once when the stream closes.
+ */
+export function agentActStream(
+  instruction: string,
+  history: ChatTurn[],
+  name: string | undefined,
+  onEvent: (ev: AgentEvent) => void,
+  onDone: (error?: string) => void,
+): StreamHandlers {
+  const controller = new AbortController();
+  (async () => {
+    let url: string;
+    try { url = `${requireApiUrl()}/agent/act`; } catch (e) {
+      onDone(e instanceof Error ? e.message : "Missing API URL");
+      return;
+    }
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: authHeaders({ "Content-Type": "application/json", Accept: "text/event-stream" }),
+        body: JSON.stringify({ instruction, history, name }),
+        signal: controller.signal,
+      });
+      if (!res.ok || !res.body) { onDone(`Agent failed (${res.status})`); return; }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let finished = false;
+      let serverError: string | undefined;
+      while (!finished) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let sep: number;
+        while ((sep = indexOfEventBoundary(buffer)) !== -1) {
+          const rawEvent = buffer.slice(0, sep);
+          buffer = buffer.slice(sep).replace(/^(\r?\n)+/, "");
+          const ev = parseSSEJson(rawEvent) as AgentEvent | null;
+          if (!ev) continue;
+          onEvent(ev);
+          if (ev.phase === "error" && typeof ev.detail === "string") serverError = ev.detail;
+          if (ev.phase === "done") { finished = true; break; }
+        }
+      }
+      onDone(serverError);
+    } catch (err) {
+      if ((err as Error)?.name === "AbortError") { onDone(); return; }
+      onDone(err instanceof Error ? err.message : "Stream failed");
+    }
+  })();
+  return { cancel: () => controller.abort() };
+}
+
 /* ---------------- AI provider / model config ---------------- */
 export interface AiConfig {
   provider: string;
