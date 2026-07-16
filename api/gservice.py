@@ -27,6 +27,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive.file",
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/documents",
+    "https://www.googleapis.com/auth/calendar.events",
 ]
 
 
@@ -181,5 +182,90 @@ def create_doc(title: str, content: str) -> dict:
                 json={"requests": [{"insertText": {"location": {"index": 1}, "text": content}}]},
                 timeout=30)
         return {"ok": True, "url": f"https://docs.google.com/document/d/{did}/edit", "id": did}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+# ── Google Calendar ──────────────────────────────────────────────────
+_JST = None
+
+
+def _jst():
+    global _JST
+    if _JST is None:
+        from datetime import timezone, timedelta
+        _JST = timezone(timedelta(hours=9))
+    return _JST
+
+
+def create_event(title: str, date: str, time: str = "", duration_min: int = 60) -> dict:
+    """Google カレンダー（primary）に予定を追加する。date=YYYY-MM-DD, time=HH:MM。
+    time 省略時は終日予定。{ok, url, id} / {ok:False, error}。"""
+    tok = _access_token()
+    if not tok:
+        return _err_not_connected()
+    from datetime import datetime, timedelta
+    date = (date or "").strip()
+    time = (time or "").strip()
+    if not date:
+        return {"ok": False, "error": "日付(date=YYYY-MM-DD)が必要です"}
+    try:
+        if time:
+            start_dt = datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M").replace(tzinfo=_jst())
+            end_dt = start_dt + timedelta(minutes=int(duration_min or 60))
+            body = {
+                "summary": title or "予定",
+                "start": {"dateTime": start_dt.isoformat(), "timeZone": "Asia/Tokyo"},
+                "end": {"dateTime": end_dt.isoformat(), "timeZone": "Asia/Tokyo"},
+            }
+        else:
+            d = datetime.strptime(date, "%Y-%m-%d")
+            body = {
+                "summary": title or "予定",
+                "start": {"date": date},
+                "end": {"date": (d + timedelta(days=1)).strftime("%Y-%m-%d")},  # end.date は排他
+            }
+    except Exception as e:
+        return {"ok": False, "error": f"日付/時刻の形式が不正です：{e}"}
+    headers = {"Authorization": f"Bearer {tok}", "Content-Type": "application/json"}
+    try:
+        r = requests.post("https://www.googleapis.com/calendar/v3/calendars/primary/events",
+                          headers=headers, json=body, timeout=30)
+        d = r.json() if r.content else {}
+        if not d.get("id"):
+            return {"ok": False, "error": (d.get("error") or {}).get("message") or "作成に失敗しました"}
+        return {"ok": True, "url": d.get("htmlLink"), "id": d.get("id")}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+def list_events(days: int = 7, max_results: int = 10) -> dict:
+    """直近 days 日の予定を返す。{ok, items:[{title,start,url}]}。"""
+    tok = _access_token()
+    if not tok:
+        return _err_not_connected()
+    from datetime import datetime, timedelta
+    now = datetime.now(_jst())
+    params = {
+        "timeMin": now.isoformat(),
+        "timeMax": (now + timedelta(days=int(days or 7))).isoformat(),
+        "singleEvents": "true",
+        "orderBy": "startTime",
+        "maxResults": str(max(1, min(int(max_results or 10), 25))),
+    }
+    headers = {"Authorization": f"Bearer {tok}"}
+    try:
+        r = requests.get("https://www.googleapis.com/calendar/v3/calendars/primary/events",
+                         headers=headers, params=params, timeout=30)
+        d = r.json() if r.content else {}
+        items = []
+        for ev in d.get("items", []):
+            start = ev.get("start", {})
+            items.append({
+                "title": ev.get("summary", "(無題)"),
+                "start": start.get("dateTime") or start.get("date") or "",
+                "url": ev.get("htmlLink", ""),
+            })
+        return {"ok": True, "items": items}
     except Exception as e:
         return {"ok": False, "error": str(e)}

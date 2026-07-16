@@ -426,7 +426,7 @@ export function codeGenerateStream(
 
 /* ---------------- HOME agent (手足となって動く) ---------------- */
 export interface AgentEvent {
-  phase: "start" | "thinking" | "tool" | "observation" | "final" | "done" | "error";
+  phase: "start" | "thinking" | "tool" | "observation" | "approval" | "final" | "done" | "error";
   step?: number;
   tool?: string;
   params?: Record<string, unknown>;
@@ -435,6 +435,7 @@ export interface AgentEvent {
   text?: string;
   detail?: string;
   steps?: number;
+  awaiting_approval?: boolean;
 }
 
 /**
@@ -446,6 +447,7 @@ export function agentActStream(
   instruction: string,
   history: ChatTurn[],
   name: string | undefined,
+  approval: boolean,
   onEvent: (ev: AgentEvent) => void,
   onDone: (error?: string) => void,
 ): StreamHandlers {
@@ -460,7 +462,7 @@ export function agentActStream(
       const res = await fetch(url, {
         method: "POST",
         headers: authHeaders({ "Content-Type": "application/json", Accept: "text/event-stream" }),
-        body: JSON.stringify({ instruction, history, name }),
+        body: JSON.stringify({ instruction, history, name, approval }),
         signal: controller.signal,
       });
       if (!res.ok || !res.body) { onDone(`Agent failed (${res.status})`); return; }
@@ -491,6 +493,17 @@ export function agentActStream(
     }
   })();
   return { cancel: () => controller.abort() };
+}
+
+/** POST /agent/execute — run a single approved tool (approval-mode confirm). */
+export async function agentExecute(tool: string, params: Record<string, unknown>): Promise<string> {
+  const res = await fetch(`${requireApiUrl()}/agent/execute`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ tool, params }),
+  });
+  const data = (await res.json().catch(() => ({ result: "" }))) as { result?: string };
+  return data.result ?? "";
 }
 
 /* ---------------- Google integration (Sheets / Docs) ---------------- */

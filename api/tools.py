@@ -65,6 +65,18 @@ TOOLS_DOC = (
     '/ params: { "title": "表の名前", "rows": [["名前","金額"],["家賃","80000"]] }\n'
     '- google_doc: Googleドキュメントを新規作成して本文を書く（Google連携が必要） '
     '/ params: { "title": "見出し", "content": "本文" }\n'
+    '- calendar_add: Googleカレンダーに予定を追加する（Google連携が必要）。日付=YYYY-MM-DD、時刻=HH:MM '
+    '/ params: { "title": "予定名", "date": "2026-07-20", "time": "15:00" }\n'
+    '- calendar_list: Googleカレンダーの直近の予定を取得する '
+    '/ params: { "days": 7 }\n'
+    '- send_email: メールを送信する（機微な操作。承認が必要な場合あり） '
+    '/ params: { "to": "宛先@example.com", "subject": "件名", "body": "本文" }\n'
+    '- email_inbox: 受信トレイの最新メールを確認する '
+    '/ params: { "limit": 5 }\n'
+    '- web_search: Webを検索して最新情報の上位結果（タイトル/URL/要約）を得る '
+    '/ params: { "query": "検索したいこと" }\n'
+    '- web_read: 指定URLのページ本文を読み取る（記事や資料の要約に使う） '
+    '/ params: { "url": "https://example.com/article" }\n'
     '- notion_add: Notionのページ/データベースにメモ（新規ページ）を追記する '
     '/ params: { "title": "メモの見出し", "content": "本文" }\n'
     '- create_automation: ノーコード自動化フロー（Zapier風）を作る。stepsのtypeは '
@@ -432,6 +444,109 @@ def _do_google_doc(params: dict) -> str:
     return f"Googleドキュメント「{title or '無題'}」を作成しました：{res.get('url')}"
 
 
+def _do_calendar_add(params: dict) -> str:
+    """Google カレンダーに予定を追加する。"""
+    title = (params.get("title") or "").strip()
+    date = (params.get("date") or "").strip()
+    time = (params.get("time") or "").strip()
+    if not (title and date):
+        return "予定のタイトルと日付(date=YYYY-MM-DD)が必要です。"
+    try:
+        import gservice
+        res = gservice.create_event(title, date, time, params.get("duration_min") or 60)
+    except Exception as e:
+        return f"カレンダー登録に失敗しました：{e}"
+    if not res.get("ok"):
+        return f"カレンダーに登録できませんでした：{res.get('error')}"
+    when = f"{date}{(' ' + time) if time else ''}"
+    return f"Googleカレンダーに「{title}」({when})を登録しました：{res.get('url')}"
+
+
+def _do_calendar_list(params: dict) -> str:
+    """Google カレンダーの直近予定を取得する。"""
+    try:
+        import gservice
+        res = gservice.list_events(params.get("days") or 7)
+    except Exception as e:
+        return f"カレンダーの取得に失敗しました：{e}"
+    if not res.get("ok"):
+        return f"カレンダーを取得できませんでした：{res.get('error')}"
+    items = res.get("items") or []
+    if not items:
+        return "直近の予定はありません。"
+    lines = [f"・{it.get('start', '')} {it.get('title', '')}" for it in items[:15]]
+    return "直近の予定：\n" + "\n".join(lines)
+
+
+def _do_send_email(params: dict) -> str:
+    """メールを送信する（SMTP）。※機微な操作 → 承認モード対象。"""
+    to = (params.get("to") or "").strip()
+    subject = (params.get("subject") or "").strip()
+    body = (params.get("body") or "").strip()
+    if not (to and (subject or body)):
+        return "宛先(to)と本文(または件名)が必要です。"
+    try:
+        import email_svc
+        res = email_svc.send(to, subject, body)
+    except Exception as e:
+        return f"メール送信に失敗しました：{e}"
+    if not res.get("ok"):
+        return f"メールを送信できませんでした：{res.get('error')}"
+    return f"{to} にメールを送信しました（件名：{subject or '(なし)'}）。"
+
+
+def _do_email_inbox(params: dict) -> str:
+    """受信トレイの最新メールを要約して返す。"""
+    try:
+        import email_svc
+        res = email_svc.inbox(params.get("limit") or 5)
+    except Exception as e:
+        return f"受信メールの取得に失敗しました：{e}"
+    if not res.get("ok"):
+        return f"受信メールを取得できませんでした：{res.get('error')}"
+    items = res.get("items") or []
+    if not items:
+        return "受信トレイに新しいメールはありません。"
+    lines = []
+    for m in items:
+        lines.append(f"・{m.get('from', '')}｜{m.get('subject', '(件名なし)')}\n  {m.get('snippet', '')}")
+    return "最新メール：\n" + "\n".join(lines)
+
+
+def _do_web_search(params: dict) -> str:
+    """Webを検索して上位結果を返す。"""
+    query = (params.get("query") or params.get("q") or "").strip()
+    if not query:
+        return "検索クエリ(query)が空です。"
+    try:
+        import web
+        res = web.web_search(query, params.get("n") or 5)
+    except Exception as e:
+        return f"Web検索に失敗しました：{e}"
+    if not res.get("ok"):
+        return f"Web検索できませんでした：{res.get('error')}"
+    lines = []
+    for i, r in enumerate(res.get("results", []), start=1):
+        lines.append(f"{i}. {r.get('title', '')}\n   {r.get('url', '')}\n   {r.get('snippet', '')}")
+    return f"「{query}」の検索結果：\n" + "\n".join(lines)
+
+
+def _do_web_read(params: dict) -> str:
+    """URLのページ本文を取得して返す。"""
+    url = (params.get("url") or "").strip()
+    if not url:
+        return "URLが空です。"
+    try:
+        import web
+        res = web.web_read(url, params.get("max_chars") or 4000)
+    except Exception as e:
+        return f"ページの取得に失敗しました：{e}"
+    if not res.get("ok"):
+        return f"ページを取得できませんでした：{res.get('error')}"
+    title = res.get("title") or ""
+    return f"【{title}】\n{res.get('text', '')}"
+
+
 def _notion_blocks(content: str) -> list:
     """本文を Notion の paragraph ブロック配列に変換する（行=段落）。"""
     blocks = []
@@ -573,6 +688,12 @@ _DISPATCH = {
     "create_spreadsheet": _do_create_spreadsheet,
     "google_sheet": _do_google_sheet,
     "google_doc": _do_google_doc,
+    "calendar_add": _do_calendar_add,
+    "calendar_list": _do_calendar_list,
+    "send_email": _do_send_email,
+    "email_inbox": _do_email_inbox,
+    "web_search": _do_web_search,
+    "web_read": _do_web_read,
     "notion_add": _do_notion_add,
     "create_automation": _do_create_automation,
     "run_automation": _do_run_automation,

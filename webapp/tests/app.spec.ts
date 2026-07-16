@@ -568,6 +568,21 @@ test("KEYCHAIN includes a Google key with its issuance guide", async ({ page }) 
   await expect(page.getByRole("link", { name: /Google Cloud/ })).toBeVisible({ timeout: 5_000 });
 });
 
+test("KEYCHAIN includes an email key with its issuance guide", async ({ page }) => {
+  await page.goto("/");
+  await enterApp(page);
+  await page.getByLabel("Settings").click();
+  await page.getByText("KEYCHAIN", { exact: true }).click();
+  await expect(page.getByText("SET ACCESS CODE")).toBeVisible({ timeout: 5_000 });
+  await page.getByPlaceholder("パスコード（4文字以上）").fill("test-pass");
+  await page.getByPlaceholder("確認のためもう一度").fill("test-pass");
+  await page.getByRole("button", { name: "CREATE VAULT" }).click();
+  await expect(page.getByText("オフライン下書き · UNLOCKED")).toBeVisible({ timeout: 5_000 });
+  const mailRow = page.locator("div.rounded-forge").filter({ hasText: "メール アプリパスワード" });
+  await mailRow.getByLabel("発行手順").first().click();
+  await expect(page.getByRole("link", { name: /アプリパスワード/ })).toBeVisible({ timeout: 5_000 });
+});
+
 /* ── HOME cockpit: agent console + instrument cluster (ui-r22) ── */
 test("HOME agent console renders with action suggestions", async ({ page }) => {
   await page.goto("/");

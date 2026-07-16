@@ -21,6 +21,7 @@ import {
   notificationsList,
   notificationsMarkRead,
   agentActStream,
+  agentExecute,
   artifactsList,
   artifactDownload,
   artifactDelete,
@@ -227,6 +228,12 @@ const TOOL_LABELS: Record<string, string> = {
   create_automation: "自動化フローを作成",
   run_automation: "自動化を実行",
   create_mission: "ミッションを作成",
+  calendar_add: "カレンダーに追加",
+  calendar_list: "カレンダーを確認",
+  send_email: "メールを送信",
+  email_inbox: "受信メールを確認",
+  web_search: "Webを検索",
+  web_read: "ページを読む",
   remember: "記憶する",
   recall: "記憶を思い出す",
   enqueue_income: "副業ジョブを投入",
@@ -234,6 +241,8 @@ const TOOL_LABELS: Record<string, string> = {
   notify: "通知を送信",
   save_note: "ノートに保存",
 };
+
+type Pending = { tool: string; params: Record<string, unknown>; note?: string };
 
 type Step =
   | { kind: "thinking" }
@@ -243,10 +252,17 @@ type Step =
 
 const SUGGESTIONS = [
   "今日のおすすめの動き方を教えて",
+  "AIの最新ニュースを検索して要約して",
   "明日15時に歯医者の予定を入れて",
-  "牛乳を買うタスクを追加して",
   "今の状況を整理して報告して",
 ];
+
+function summarizeParams(params: Record<string, unknown>): string {
+  return Object.entries(params)
+    .map(([k, v]) => `${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`)
+    .join(" · ")
+    .slice(0, 220);
+}
 
 function AgentConsole({
   settings, offline, onDidAct, onNavigate,
@@ -261,11 +277,15 @@ function AgentConsole({
   const [steps, setSteps] = useState<Step[]>([]);
   const [answer, setAnswer] = useState("");
   const [ran, setRan] = useState(false);
+  const [approval, setApproval] = useState(true);   // 実行前に確認（機微な操作）
+  const [pending, setPending] = useState<Pending | null>(null);
+  const [approving, setApproving] = useState(false);
   const cancelRef = useRef<(() => void) | null>(null);
   const logRef = useRef<HTMLDivElement | null>(null);
+  const actedRef = useRef(false);
 
   useEffect(() => () => cancelRef.current?.(), []);
-  useEffect(() => { logRef.current?.scrollTo({ top: logRef.current.scrollHeight }); }, [steps, answer]);
+  useEffect(() => { logRef.current?.scrollTo({ top: logRef.current.scrollHeight }); }, [steps, answer, pending]);
 
   const run = (msg: string) => {
     const text = msg.trim();
@@ -274,24 +294,30 @@ function AgentConsole({
     setRan(true);
     setSteps([]);
     setAnswer("");
+    setPending(null);
     setInput("");
-    let didAct = false;
+    actedRef.current = false;
 
     cancelRef.current = agentActStream(
       text,
       [],
       settings.name,
+      approval,
       (ev: AgentEvent) => {
         switch (ev.phase) {
           case "thinking":
             setSteps((s) => [...s.filter((x) => x.kind !== "thinking"), { kind: "thinking" }]);
             break;
           case "tool":
-            didAct = true;
+            actedRef.current = true;
             setSteps((s) => [...s.filter((x) => x.kind !== "thinking"), { kind: "tool", tool: ev.tool || "", note: ev.note }]);
             break;
           case "observation":
             setSteps((s) => [...s, { kind: "observation", result: ev.result || "" }]);
+            break;
+          case "approval":
+            setSteps((s) => s.filter((x) => x.kind !== "thinking"));
+            setPending({ tool: ev.tool || "", params: ev.params || {}, note: ev.note });
             break;
           case "error":
             setSteps((s) => [...s.filter((x) => x.kind !== "thinking"), { kind: "error", detail: ev.detail || "エラー" }]);
@@ -304,9 +330,33 @@ function AgentConsole({
       },
       () => {
         setBusy(false);
-        if (didAct) onDidAct(); // refresh KPIs / agenda / notifications
+        if (actedRef.current) onDidAct(); // refresh KPIs / agenda / notifications
       },
     ).cancel;
+  };
+
+  const approve = async () => {
+    if (!pending) return;
+    const p = pending;
+    setApproving(true);
+    setSteps((s) => [...s, { kind: "tool", tool: p.tool, note: p.note }]);
+    try {
+      const result = await agentExecute(p.tool, p.params);
+      setSteps((s) => [...s, { kind: "observation", result }]);
+      actedRef.current = true;
+      onDidAct();
+    } catch {
+      setSteps((s) => [...s, { kind: "error", detail: "実行に失敗しました" }]);
+    } finally {
+      setApproving(false);
+      setPending(null);
+    }
+  };
+
+  const reject = () => {
+    if (!pending) return;
+    setSteps((s) => [...s, { kind: "observation", result: `（${TOOL_LABELS[pending.tool] || pending.tool} をキャンセルしました）` }]);
+    setPending(null);
   };
 
   const stop = () => { cancelRef.current?.(); setBusy(false); };
@@ -387,9 +437,36 @@ function AgentConsole({
                   {answer}
                 </div>
               )}
+              {pending && (
+                <div className="mt-2 rounded-forge border p-2.5" style={{ borderColor: "#ffd06066", background: "rgba(255,208,96,0.06)" }}>
+                  <div className="mb-1 text-[10px] tracking-[0.14em] label-mono" style={{ color: "#ffd060" }}>🛡 実行の確認</div>
+                  <p className="text-[12px] text-fg">
+                    <b>{TOOL_LABELS[pending.tool] || pending.tool}</b> を実行してよろしいですか？
+                  </p>
+                  {summarizeParams(pending.params) && (
+                    <p className="mt-0.5 break-all text-[10px] text-muted">{summarizeParams(pending.params)}</p>
+                  )}
+                  <div className="mt-2 flex gap-2">
+                    <button type="button" onClick={() => void approve()} disabled={approving}
+                      className="rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] px-3 py-1.5 text-[10px] tracking-[0.12em] text-fg-strong shadow-glow disabled:opacity-40 label-mono">
+                      {approving ? "実行中…" : "✓ 承認して実行"}
+                    </button>
+                    <button type="button" onClick={reject} disabled={approving}
+                      className="rounded-forge border border-[#ff6b6b44] px-3 py-1.5 text-[10px] tracking-[0.12em] text-[#ff8888] label-mono">却下</button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
+
+        {/* approval toggle */}
+        {!offline && (
+          <label className="mt-2 flex cursor-pointer items-center gap-1.5 text-[10px] text-muted">
+            <input type="checkbox" checked={approval} onChange={(e) => setApproval(e.target.checked)} className="accent-[var(--accent)]" />
+            🛡 実行前に確認（メール送信など機微な操作を承認制に）
+          </label>
+        )}
 
         {/* input */}
         <div className="mt-2 flex gap-2">

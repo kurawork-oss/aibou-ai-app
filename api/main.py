@@ -243,6 +243,12 @@ class AgentActRequest(BaseModel):
     instruction: str
     history: Optional[List[ChatMessage]] = None
     name: Optional[str] = None       # アシスタント名（既定 "AIbou"）
+    approval: bool = False           # 機微なツールを実行前に承認させる
+
+
+class AgentExecuteRequest(BaseModel):
+    tool: str
+    params: dict = Field(default_factory=dict)
 
 
 class GithubImportRequest(BaseModel):
@@ -508,7 +514,7 @@ async def agent_act(req: AgentActRequest, _auth: None = Depends(require_auth)):
 
     async def event_stream():
         loop = asyncio.get_event_loop()
-        gen = agent.run_stream(req.instruction, history, req.name or "AIbou")
+        gen = agent.run_stream(req.instruction, history, req.name or "AIbou", req.approval)
 
         def _next(g):
             try:
@@ -535,6 +541,14 @@ async def agent_act(req: AgentActRequest, _auth: None = Depends(require_auth)):
             pass
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+@app.post("/agent/execute")
+async def agent_execute(req: AgentExecuteRequest, _auth: None = Depends(require_auth)):
+    """承認された単一ツールを実行する（承認モードの『承認』ボタン用）。"""
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(None, lambda: tools.execute_tool(req.tool, req.params or {}))
+    return {"result": result}
 
 
 @app.post("/vision")

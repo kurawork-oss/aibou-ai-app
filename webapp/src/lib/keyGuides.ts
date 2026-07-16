@@ -169,6 +169,29 @@ export const KEY_GUIDES: Record<string, KeyGuide> = {
     ],
     note: "仕様変更で動かなくなる可能性があります（非公式）。",
   },
+  EMAIL_ADDRESS: {
+    purpose: "エージェントがメールを送受信するためのアドレス。",
+    free: true,
+    steps: [
+      "普段使っているメールアドレスを入力（Gmail推奨）",
+      "GmailならSMTP=smtp.gmail.com / IMAP=imap.gmail.com が自動で使われます",
+      "他社メールの場合は EMAIL_SMTP_HOST / EMAIL_IMAP_HOST をカスタムキーで追加",
+    ],
+    note: "パスワードは通常のログインパスワードではなく『アプリパスワード』を EMAIL_PASSWORD に入れてください（次項）。",
+  },
+  EMAIL_PASSWORD: {
+    purpose: "メール送受信用のアプリパスワード（通常のパスワードではありません）。",
+    free: true,
+    url: "https://myaccount.google.com/apppasswords",
+    urlLabel: "Google アプリパスワード",
+    steps: [
+      "Gmailの場合：Googleアカウントで2段階認証を有効にする",
+      "上のリンク（アプリパスワード）を開く",
+      "アプリ名を入力して「作成」→ 表示された16桁のパスワードをコピー",
+      "この欄に貼り付けて SAVE（スペースは詰めてもOK）",
+    ],
+    note: "⚠ 秘密情報です。2段階認証が有効でないとアプリパスワードは作れません。他社メールは各社のSMTP/IMAPパスワードを使用。",
+  },
   GOOGLE_CLIENT_ID: {
     purpose: "Google連携（スプレッドシート/ドキュメント作成）のOAuthクライアントID。無料。",
     free: true,

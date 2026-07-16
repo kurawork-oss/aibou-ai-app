@@ -27,6 +27,9 @@ MAX_STEPS = 6
 # 各ステップの生成トークン上限（ツール呼び出し or 最終報告に十分な小さめの値）。
 STEP_MAX_TOKENS = 1200
 
+# 承認モード時、実行前にユーザー確認を挟む「機微な」ツール（外部送信・不可逆な副作用）。
+SENSITIVE_TOOLS = {"send_email", "notify", "run_automation", "enqueue_income"}
+
 _MARKER = tools.TOOL_CALL_MARKER
 
 
@@ -73,8 +76,10 @@ def _build_convo(system_prompt: str, history, instruction: str) -> str:
     return "\n".join(lines)
 
 
-def run_stream(instruction: str, history=None, name: str = "AIbou"):
-    """エージェントを実行し、進捗イベントを逐次 yield するジェネレータ。"""
+def run_stream(instruction: str, history=None, name: str = "AIbou", approval: bool = False):
+    """エージェントを実行し、進捗イベントを逐次 yield するジェネレータ。
+    approval=True のとき、機微なツール（SENSITIVE_TOOLS）は実行せず 'approval'
+    イベントを出して停止する（人間が承認したら /agent/execute で実行する）。"""
     instruction = (instruction or "").strip()
     yield {"phase": "start"}
     if not instruction:
@@ -104,6 +109,13 @@ def run_stream(instruction: str, history=None, name: str = "AIbou"):
 
         tool = (call.get("tool") or "").strip()
         params = call.get("params") or {}
+
+        # 承認モード：機微なツールは実行せず、ユーザーの承認を待つ。
+        if approval and tool in SENSITIVE_TOOLS:
+            yield {"phase": "approval", "step": step, "tool": tool, "params": params, "note": (preface or "").strip()}
+            yield {"phase": "done", "steps": step - 1, "awaiting_approval": True}
+            return
+
         yield {"phase": "tool", "step": step, "tool": tool, "params": params, "note": (preface or "").strip()}
 
         result = tools.execute_tool(tool, params)
