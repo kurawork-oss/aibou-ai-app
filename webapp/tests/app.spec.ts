@@ -273,17 +273,52 @@ test("AUTO renders autopilot UI", async ({ page }) => {
   await expect(page.getByText("SET GOAL & DECOMPOSE")).toBeVisible();
 });
 
-test("BOARD renders Miro/Zapier-style automation canvas", async ({ page }) => {
+test("BOARD opens the Miro whiteboard by default; AUTOMATION tab keeps the builder", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
   await goMode(page, "BOARD");
-  // Zapier-copilot hero + template chips
+  // Whiteboard toolbar (default tab)
+  await expect(page.getByRole("button", { name: "＋ 付箋" })).toBeVisible({ timeout: 5_000 });
+  await expect(page.getByText(/ダブルクリックで付箋を追加/)).toBeVisible();
+  // Switch to the automation tab — Zapier-copilot hero + manual builder
+  await page.getByRole("button", { name: "⚡ AUTOMATION" }).click();
   await expect(page.getByText("AUTOMATION COPILOT")).toBeVisible({ timeout: 5_000 });
   await expect(page.getByText("何を自動化しますか？")).toBeVisible();
-  // Manual builder still reachable
   await page.getByText(/手動ビルダー/).click();
   await expect(page.getByText("AUTOMATION NAME")).toBeVisible({ timeout: 3_000 });
   await expect(page.getByText("+ ADD STEP")).toBeVisible();
+});
+
+test("BOARD whiteboard: add a sticky, type, and it persists across reload", async ({ page }) => {
+  await page.goto("/");
+  await enterApp(page);
+  await goMode(page, "BOARD");
+  await page.getByRole("button", { name: "＋ 付箋" }).click();
+  // The new sticky opens in edit mode — type and commit by blurring.
+  const ta = page.getByPlaceholder("メモを書く…");
+  await expect(ta).toBeVisible({ timeout: 5_000 });
+  await ta.fill("アイデア：新機能X");
+  await page.locator("[data-board-canvas]").click({ position: { x: 10, y: 10 } });
+  await expect(page.getByText("アイデア：新機能X")).toBeVisible();
+  // Offline (no API_URL) → saved to localStorage; survives a reload.
+  await page.waitForTimeout(1200);
+  await page.reload();
+  await enterApp(page);
+  await goMode(page, "BOARD");
+  await expect(page.getByText("アイデア：新機能X")).toBeVisible({ timeout: 8_000 });
+});
+
+test("TASKS kanban view shows status columns with drop zones", async ({ page }) => {
+  await page.goto("/");
+  await enterApp(page);
+  await goMode(page, "TASKS");
+  await page.getByRole("button", { name: "⊞ KANBAN" }).click();
+  await expect(page.locator("[data-col='pending']")).toBeVisible({ timeout: 5_000 });
+  await expect(page.locator("[data-col='completed']")).toBeVisible();
+  await expect(page.getByText("IN PROGRESS")).toBeVisible();
+  // 戻す（他テストは list ビュー前提）
+  await page.getByRole("button", { name: "☰ LIST" }).click();
+  await expect(page.getByRole("button", { name: "DONE" })).toBeVisible();
 });
 
 /* ── TASKS feature ────────────────────────────────────────────────── */
@@ -523,7 +558,8 @@ test("Mobile bottom nav switches modes and opens the MORE sheet", async ({ page 
   const sheet = page.getByLabel("All modes");
   await expect(sheet.getByText("BOARD", { exact: true })).toBeVisible({ timeout: 3_000 });
   await sheet.getByText("BOARD", { exact: true }).click();
-  await expect(page.getByText("AUTOMATION COPILOT")).toBeVisible({ timeout: 5_000 });
+  // BOARD now opens the Miro whiteboard by default.
+  await expect(page.getByRole("button", { name: "＋ 付箋" })).toBeVisible({ timeout: 5_000 });
 });
 
 /* ── CODE deep mode + AI provider settings (ui-r21) ── */

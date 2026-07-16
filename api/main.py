@@ -32,6 +32,7 @@ import agenda
 import agent
 import artifacts
 import autopilot
+import board
 import automations
 import config
 import code_agent
@@ -330,12 +331,23 @@ class TaskCreateRequest(BaseModel):
     title: str
     content: str = ""
     status: str = "pending"
+    priority: str = "mid"     # high | mid | low
+    due: str = ""             # YYYY-MM-DD
+    project: str = ""         # プロジェクト（グループ）名
 
 
 class TaskUpdateRequest(BaseModel):
     status: Optional[str] = None
     response: Optional[str] = None
     content: Optional[str] = None
+    priority: Optional[str] = None
+    due: Optional[str] = None
+    project: Optional[str] = None
+
+
+class BoardSaveRequest(BaseModel):
+    nodes: list = Field(default_factory=list)
+    edges: list = Field(default_factory=list)
 
 
 class AiCreateRequest(BaseModel):
@@ -1045,7 +1057,8 @@ async def create_task(req: TaskCreateRequest, _auth: None = Depends(require_auth
     """新しいタスクを作成する。"""
     loop = asyncio.get_event_loop()
     task = await loop.run_in_executor(
-        None, lambda: tasks_module.create_task(req.title, req.content, req.status)
+        None, lambda: tasks_module.create_task(req.title, req.content, req.status,
+                                               req.priority, req.due, req.project)
     )
     if isinstance(task, dict) and task.get("error"):
         return JSONResponse(status_code=400, content=task)
@@ -1055,10 +1068,11 @@ async def create_task(req: TaskCreateRequest, _auth: None = Depends(require_auth
 @app.patch("/tasks/{task_id}")
 async def update_task(task_id: str, req: TaskUpdateRequest,
                       _auth: None = Depends(require_auth)):
-    """タスクのステータス・返答・内容を更新する。"""
+    """タスクのステータス・返答・内容・優先度・期限・プロジェクトを更新する。"""
     loop = asyncio.get_event_loop()
     result = await loop.run_in_executor(
-        None, lambda: tasks_module.update_task(task_id, req.status, req.response, req.content)
+        None, lambda: tasks_module.update_task(task_id, req.status, req.response, req.content,
+                                               req.priority, req.due, req.project)
     )
     if isinstance(result, dict) and result.get("error"):
         return JSONResponse(status_code=404, content=result)
@@ -1256,6 +1270,22 @@ async def notifications_list(_auth: None = Depends(require_auth)):
 async def notifications_read(_auth: None = Depends(require_auth)):
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(None, notify.mark_all_read)
+
+
+# ── Board（Miro風ホワイトボード） ─────────────────────────────────────
+
+@app.get("/board")
+async def board_get(_auth: None = Depends(require_auth)):
+    """ホワイトボード（付箋 + 接続）を返す。"""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, board.get_board)
+
+
+@app.post("/board")
+async def board_save(req: BoardSaveRequest, _auth: None = Depends(require_auth)):
+    """ホワイトボードを保存する（全置換・デバウンス保存前提）。"""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, lambda: board.save_board(req.nodes, req.edges))
 
 
 # ── Artifacts（エージェント生成物：ドキュメント / スプレッドシート） ──

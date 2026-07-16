@@ -506,6 +506,36 @@ export async function agentExecute(tool: string, params: Record<string, unknown>
   return data.result ?? "";
 }
 
+/* ---------------- Whiteboard (Miro-style board) ---------------- */
+export interface BoardNode {
+  id: string;
+  x: number;
+  y: number;
+  text: string;
+  color: string;   // yellow | cyan | green | pink | purple | orange
+  w?: number;
+}
+export interface BoardEdge { id: string; from: string; to: string }
+export interface BoardData { nodes: BoardNode[]; edges: BoardEdge[] }
+
+/** GET /board — the shared whiteboard. */
+export async function boardGet(): Promise<BoardData> {
+  const res = await fetch(`${requireApiUrl()}/board`, { headers: authHeaders(), cache: "no-store" });
+  if (!res.ok) throw new Error(`Board failed (${res.status})`);
+  const data = (await res.json().catch(() => ({ nodes: [], edges: [] }))) as BoardData;
+  return { nodes: data.nodes ?? [], edges: data.edges ?? [] };
+}
+
+/** POST /board — save the whiteboard (full replace; call debounced). */
+export async function boardSave(data: BoardData): Promise<boolean> {
+  const res = await fetch(`${requireApiUrl()}/board`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(data),
+  });
+  return res.ok;
+}
+
 /* ---------------- File extract (PDF / text) ---------------- */
 /** POST /file/extract — upload a file, get its extracted text. */
 export async function fileExtract(file: File): Promise<{ name: string; chars: number; text: string }> {
@@ -870,6 +900,9 @@ export interface Task {
   status: "pending" | "in_progress" | "awaiting_approval" | "completed" | "cancelled";
   content?: string;
   response?: string;
+  priority?: "high" | "mid" | "low";
+  due?: string;       // YYYY-MM-DD
+  project?: string;   // グループ名
   created_at?: string;
   updated_at?: string;
   [key: string]: unknown;
@@ -887,11 +920,16 @@ export async function listTasks(status?: string, limit = 100): Promise<Task[]> {
 }
 
 /** POST /tasks — create a new task. */
-export async function createTask(title: string, content = "", status = "pending"): Promise<Task> {
+export async function createTask(
+  title: string,
+  content = "",
+  status = "pending",
+  extra: { priority?: string; due?: string; project?: string } = {},
+): Promise<Task> {
   const res = await fetch(`${requireApiUrl()}/tasks`, {
     method: "POST",
     headers: authHeaders({ "Content-Type": "application/json" }),
-    body: JSON.stringify({ title, content, status }),
+    body: JSON.stringify({ title, content, status, ...extra }),
   });
   const data = (await res.json().catch(() => ({}))) as Task & { error?: string };
   if (!res.ok) throw new Error(data.error ?? `Create task failed (${res.status})`);
@@ -899,7 +937,7 @@ export async function createTask(title: string, content = "", status = "pending"
 }
 
 /** PATCH /tasks/{id} — update task. */
-export async function updateTask(id: string, updates: { status?: string; response?: string; content?: string }): Promise<Task> {
+export async function updateTask(id: string, updates: { status?: string; response?: string; content?: string; priority?: string; due?: string; project?: string }): Promise<Task> {
   const res = await fetch(`${requireApiUrl()}/tasks/${encodeURIComponent(id)}`, {
     method: "PATCH",
     headers: authHeaders({ "Content-Type": "application/json" }),

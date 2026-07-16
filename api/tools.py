@@ -47,8 +47,14 @@ TOOL_CALL_MARKER = "<<<TOOL_CALL>>>"
 # 差し込み、モデルにどんな行動が取れるかを伝えるためのドキュメント。
 TOOLS_DOC = (
     "【利用可能なツール】\n"
-    '- add_task: ToDo（タスク）を1件追加する。「〜しておいて」「〜を忘れないように」等の依頼で使う '
-    '/ params: { "title": "タスク名", "content": "補足（任意）" }\n'
+    '- add_task: ToDo（タスク）を1件追加する。「〜しておいて」「〜を忘れないように」等の依頼で使う。'
+    'priorityは high|mid|low、dueは YYYY-MM-DD、projectはグループ名（すべて任意） '
+    '/ params: { "title": "タスク名", "content": "補足", "priority": "high", "due": "2026-07-20", "project": "副業" }\n'
+    '- complete_task: タイトル（部分一致）でタスクを探して完了にする '
+    '/ params: { "title": "牛乳" }\n'
+    '- board_add_note: Miro風ホワイトボード（BOARD）に付箋を追加する。ブレスト・アイデア整理に使う。'
+    'colorは yellow|cyan|green|pink|purple|orange '
+    '/ params: { "text": "付箋の内容", "color": "yellow" }\n'
     '- add_agenda: 予定（カレンダー）を1件追加する。日付は YYYY-MM-DD、時刻は HH:MM。'
     '相対表現（明日・金曜など）は system に記載の今日の日付を基準に自分で計算して埋める '
     '/ params: { "title": "予定名", "date": "2026-07-17", "time": "15:00" }\n'
@@ -282,6 +288,44 @@ def _do_add_agenda(params: dict) -> str:
         return f"予定の追加に失敗しました：{ev['error']}"
     when = " ".join(x for x in (date, time) if x) or "日時未指定"
     return f"予定を追加しました：{when} {title}"
+
+
+def _do_complete_task(params: dict) -> str:
+    """タイトル（部分一致）でタスクを探して完了にする。"""
+    key = (params.get("title") or "").strip().lower()
+    if not key:
+        return "完了にするタスクのタイトルが必要です。"
+    try:
+        import tasks
+        all_tasks = tasks.list_tasks(None, 1000) or []
+        target = next(
+            (t for t in all_tasks
+             if (t.get("status") or "") != "completed" and key in (t.get("title") or "").lower()),
+            None,
+        )
+        if not target:
+            return f"「{params.get('title')}」に一致する未完了タスクは見つかりませんでした。"
+        res = tasks.update_task(target["id"], status="completed")
+    except Exception as e:
+        return f"タスクの完了に失敗しました：{e}"
+    if isinstance(res, dict) and res.get("error"):
+        return f"タスクの完了に失敗しました：{res['error']}"
+    return f"タスク「{target.get('title')}」を完了にしました。"
+
+
+def _do_board_add_note(params: dict) -> str:
+    """Miro風ホワイトボード（BOARD）に付箋を追加する。"""
+    text = (params.get("text") or "").strip()
+    if not text:
+        return "付箋に書く内容(text)が空です。"
+    try:
+        import board
+        res = board.add_note(text, params.get("color") or "yellow")
+    except Exception as e:
+        return f"付箋の追加に失敗しました：{e}"
+    if isinstance(res, dict) and res.get("error"):
+        return f"付箋の追加に失敗しました：{res['error']}"
+    return f"ホワイトボードに付箋を追加しました（現在 {res.get('count')}枚）。BOARDモードで確認できます。"
 
 
 def _do_list_state(_params: dict) -> str:
@@ -750,7 +794,9 @@ def _do_create_mission(params: dict) -> str:
 # ツール名 → 実装関数のディスパッチ表。
 _DISPATCH = {
     "add_task": _do_add_task,
+    "complete_task": _do_complete_task,
     "add_agenda": _do_add_agenda,
+    "board_add_note": _do_board_add_note,
     "list_state": _do_list_state,
     "create_document": _do_create_document,
     "create_spreadsheet": _do_create_spreadsheet,

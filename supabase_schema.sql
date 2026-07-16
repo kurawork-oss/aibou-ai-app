@@ -137,6 +137,10 @@ CREATE TABLE IF NOT EXISTS tasks (
   updated_at timestamptz DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status, created_at DESC);
+-- プロジェクト管理の拡張列（既存テーブルへの後方互換アップグレード）
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS priority text DEFAULT 'mid';   -- high|mid|low
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS due text DEFAULT '';           -- YYYY-MM-DD
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS project text DEFAULT '';       -- グループ名
 
 -- ✦ AI Studio：カスタムAI
 CREATE TABLE IF NOT EXISTS studio_ais (

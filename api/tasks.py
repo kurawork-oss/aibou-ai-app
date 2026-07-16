@@ -49,17 +49,26 @@ def list_tasks(status: Optional[str] = None, limit: int = 100) -> list:
     return items[:limit]
 
 
-def create_task(title: str, content: str = "", status: str = "pending") -> dict:
-    """タスクを作成して返す。"""
+VALID_PRIORITIES = ("high", "mid", "low")
+
+
+def create_task(title: str, content: str = "", status: str = "pending",
+                priority: str = "mid", due: str = "", project: str = "") -> dict:
+    """タスクを作成して返す。priority: high|mid|low / due: YYYY-MM-DD / project: 任意のグループ名。"""
     title = (title or "").strip()
     if not title:
         return {"error": "title is empty"}
+    if priority not in VALID_PRIORITIES:
+        priority = "mid"
 
     task = {
         "id": _uuid(),
         "title": title,
         "content": content or "",
         "status": status,
+        "priority": priority,
+        "due": (due or "").strip(),
+        "project": (project or "").strip(),
         "response": "",
         "created_at": _now_iso(),
         "updated_at": _now_iso(),
@@ -71,14 +80,21 @@ def create_task(title: str, content: str = "", status: str = "pending") -> dict:
             res = c.table("tasks").insert(task).execute()
             return (res.data or [task])[0]
         except Exception:
-            pass
+            # 旧テーブル（新列なし）へのフォールバック：基本フィールドだけで永続化。
+            try:
+                legacy = {k: task[k] for k in ("id", "title", "content", "status", "response", "created_at", "updated_at")}
+                res = c.table("tasks").insert(legacy).execute()
+                return (res.data or [task])[0]
+            except Exception:
+                pass
 
     _mem_tasks.insert(0, task)
     return task
 
 
 def update_task(task_id: str, status: Optional[str] = None, response: Optional[str] = None,
-                content: Optional[str] = None) -> dict:
+                content: Optional[str] = None, priority: Optional[str] = None,
+                due: Optional[str] = None, project: Optional[str] = None) -> dict:
     """タスクを更新する。指定されたフィールドのみ更新。"""
     if not task_id:
         return {"error": "task_id is empty"}
@@ -90,6 +106,12 @@ def update_task(task_id: str, status: Optional[str] = None, response: Optional[s
         updates["response"] = response
     if content is not None:
         updates["content"] = content
+    if priority is not None and priority in VALID_PRIORITIES:
+        updates["priority"] = priority
+    if due is not None:
+        updates["due"] = due.strip()
+    if project is not None:
+        updates["project"] = project.strip()
 
     c = config.get_supabase()
     if c:
@@ -98,7 +120,15 @@ def update_task(task_id: str, status: Optional[str] = None, response: Optional[s
             rows = res.data or []
             return rows[0] if rows else {"error": "task not found"}
         except Exception as e:
-            return {"error": f"update failed: {e}"}
+            # 旧テーブル（priority/due/project 列なし）→ 既存列だけで再試行。
+            legacy = {k: v for k, v in updates.items()
+                      if k in ("updated_at", "status", "response", "content")}
+            try:
+                res = c.table("tasks").update(legacy).eq("id", task_id).execute()
+                rows = res.data or []
+                return rows[0] if rows else {"error": "task not found"}
+            except Exception:
+                return {"error": f"update failed: {e}"}
 
     # インメモリ fallback
     for task in _mem_tasks:

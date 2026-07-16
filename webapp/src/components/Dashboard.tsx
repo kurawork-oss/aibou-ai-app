@@ -1,10 +1,11 @@
 "use client";
 
 /**
- * Dashboard — 視覚的プロジェクト設計 + ノーコード自動化（Miro / Zapier 風）.
+ * Dashboard — BOARD モード：Miro風ホワイトボード + ノーコード自動化（Zapier風）.
  *
- * 「トリガー → ステップ → ステップ」のフローをカードで視覚的に組み立て、ノーコードで
- * 自動化を作成・実行する。各ステップの出力は {input} で次へ受け渡す。
+ * タブ構成:
+ *  - WHITEBOARD（既定）… 付箋・接続・パン/ズームの無限キャンバス（Whiteboard.tsx）
+ *  - AUTOMATION … 「トリガー → ステップ」のフローをカードで組み立てるビルダー
  */
 
 import { motion, AnimatePresence } from "framer-motion";
@@ -21,6 +22,7 @@ import {
   type AutomationRunResult,
 } from "@/lib/api";
 import Tilt3D from "@/components/Tilt3D";
+import Whiteboard from "@/components/Whiteboard";
 
 const STEP_META: Record<StepType, { label: string; color: string; field: string; placeholder: string }> = {
   ai_generate: { label: "AI生成", color: "#00f3ff", field: "prompt", placeholder: "{input}を要約して…" },
@@ -38,6 +40,52 @@ const TEMPLATES = [
 ];
 
 export default function Dashboard() {
+  const [tab, setTab] = useState<"board" | "auto">("board");
+
+  // Restore the last tab (whiteboard is the default).
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("forge_board_tab") === "auto") setTab("auto");
+    } catch { /* ignore */ }
+  }, []);
+  useEffect(() => {
+    try { localStorage.setItem("forge_board_tab", tab); } catch { /* ignore */ }
+  }, [tab]);
+
+  return (
+    <div className="flex h-full min-h-0 flex-col gap-2">
+      {/* Tab bar */}
+      <div className="flex items-center gap-1.5">
+        {([
+          { key: "board", label: "⊞ WHITEBOARD" },
+          { key: "auto", label: "⚡ AUTOMATION" },
+        ] as const).map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setTab(t.key)}
+            aria-pressed={tab === t.key}
+            className="rounded-forge border px-3 py-1.5 text-[10px] tracking-[0.16em] transition label-mono"
+            style={{
+              borderColor: tab === t.key ? "var(--accent)" : "var(--panel-bd)",
+              color: tab === t.key ? "var(--fg-strong)" : "var(--muted)",
+              background: tab === t.key ? "var(--btn-bg)" : "transparent",
+              boxShadow: tab === t.key ? "0 0 10px var(--glow)" : "none",
+            }}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="min-h-0 flex-1">
+        {tab === "board" ? <Whiteboard /> : <AutomationBoard />}
+      </div>
+    </div>
+  );
+}
+
+function AutomationBoard() {
   const [flows, setFlows] = useState<Automation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

@@ -1,16 +1,15 @@
 "use client";
 
 /**
- * Tasks — Active Tasks management (アクティブタスク管理).
- * Mirrors the original Streamlit "Active Tasks" room:
- *  - View all tasks with status filters
- *  - Create new tasks
- *  - Update status / add response
- *  - Delete tasks
+ * Tasks — プロジェクト管理（Active Tasks）.
+ *  - LIST / KANBAN の2ビュー（カンバンはドラッグ&ドロップでステータス変更）
+ *  - 優先度（high/mid/low）・期限（due）・プロジェクト（グループ）
+ *  - プロジェクトフィルタ / ステータスフィルタ
+ *  - ワンタップ完了 ⇄ 5秒アンドゥ
  */
 
 import { motion, AnimatePresence } from "framer-motion";
-import { useRef, useEffect, useState, useCallback } from "react";
+import { useRef, useEffect, useState, useCallback, type PointerEvent as ReactPointerEvent } from "react";
 import { listTasks, createTask, updateTask, deleteTask, type Task } from "@/lib/api";
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
@@ -21,6 +20,19 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   cancelled: { label: "CANCELLED", color: "#ff6b6b" },
 };
 
+const KANBAN_COLS: { key: Task["status"]; label: string }[] = [
+  { key: "pending", label: "PENDING" },
+  { key: "in_progress", label: "IN PROGRESS" },
+  { key: "awaiting_approval", label: "AWAITING" },
+  { key: "completed", label: "DONE" },
+];
+
+const PRIORITY_META: Record<string, { label: string; color: string }> = {
+  high: { label: "高", color: "#ff6b6b" },
+  mid: { label: "中", color: "#ffd060" },
+  low: { label: "低", color: "#60d394" },
+};
+
 const FILTER_TABS = [
   { key: "", label: "ALL" },
   { key: "pending", label: "PENDING" },
@@ -29,30 +41,80 @@ const FILTER_TABS = [
   { key: "completed", label: "DONE" },
 ];
 
+function isOverdue(due?: string): boolean {
+  if (!due) return false;
+  try { return due < new Date().toISOString().slice(0, 10); } catch { return false; }
+}
+
+/** Small badges: priority dot / due date / project tag (shared by both views). */
+function TaskBadges({ task }: { task: Task }) {
+  const pr = PRIORITY_META[task.priority || "mid"];
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1.5">
+      <span className="inline-flex items-center gap-1 text-[9px] label-mono" style={{ color: pr.color }} title={`優先度: ${pr.label}`}>
+        ● {pr.label}
+      </span>
+      {task.due && (
+        <span
+          className="rounded px-1 py-0.5 text-[9px] label-mono"
+          style={{
+            color: isOverdue(task.due) && task.status !== "completed" ? "#ff6b6b" : "var(--muted)",
+            border: `1px solid ${isOverdue(task.due) && task.status !== "completed" ? "#ff6b6b66" : "var(--panel-bd)"}`,
+          }}
+          title="期限"
+        >
+          ⏱ {task.due.slice(5)}
+        </span>
+      )}
+      {task.project && (
+        <span className="rounded px-1 py-0.5 text-[9px] text-[var(--accent)] label-mono" style={{ border: "1px solid rgba(0,243,255,0.3)" }}>
+          {task.project}
+        </span>
+      )}
+    </span>
+  );
+}
+
 export default function Tasks() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [filter, setFilter] = useState("");
+  const [projectFilter, setProjectFilter] = useState("");
+  const [view, setView] = useState<"list" | "kanban">("list");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newContent, setNewContent] = useState("");
+  const [newPriority, setNewPriority] = useState("mid");
+  const [newDue, setNewDue] = useState("");
+  const [newProject, setNewProject] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [responseText, setResponseText] = useState("");
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+
+  // Restore the preferred view (list is the default).
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem("forge_tasks_view");
+      if (v === "kanban") setView("kanban");
+    } catch { /* ignore */ }
+  }, []);
+  useEffect(() => {
+    try { localStorage.setItem("forge_tasks_view", view); } catch { /* ignore */ }
+  }, [view]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const items = await listTasks(filter || undefined);
+      const items = await listTasks(view === "kanban" ? undefined : filter || undefined);
       setTasks(items);
     } catch (e) {
       setError(e instanceof Error ? e.message : "failed to load tasks");
     } finally {
       setLoading(false);
     }
-  }, [filter]);
+  }, [filter, view]);
 
   useEffect(() => {
     void load();
@@ -62,9 +124,14 @@ export default function Tasks() {
     if (!newTitle.trim()) return;
     setCreating(true);
     try {
-      await createTask(newTitle.trim(), newContent.trim());
+      await createTask(newTitle.trim(), newContent.trim(), "pending", {
+        priority: newPriority,
+        due: newDue,
+        project: newProject.trim(),
+      });
       setNewTitle("");
       setNewContent("");
+      setNewDue("");
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "create failed");
@@ -133,6 +200,9 @@ export default function Tasks() {
     }
   };
 
+  const projects = Array.from(new Set(tasks.map((t) => t.project).filter(Boolean))) as string[];
+  const visible = projectFilter ? tasks.filter((t) => t.project === projectFilter) : tasks;
+
   const counts = tasks.reduce(
     (acc, t) => {
       const s = t.status || "pending";
@@ -143,11 +213,11 @@ export default function Tasks() {
   );
 
   return (
-    <div className="grid h-full min-h-0 gap-3 overflow-y-auto pb-2 lg:grid-cols-[22rem_1fr] lg:content-start">
+    <div className={`grid h-full min-h-0 gap-3 overflow-y-auto pb-2 lg:content-start ${view === "list" ? "lg:grid-cols-[22rem_1fr]" : ""}`}>
       {/* ── Left column: KPI + new task + filters ── */}
-      <div className="flex flex-col gap-3">
+      <div className={`flex flex-col gap-3 ${view === "kanban" ? "lg:flex-row lg:flex-wrap lg:items-start" : ""}`}>
       {/* KPI row */}
-      <div className="grid grid-cols-4 gap-2">
+      <div className={`grid grid-cols-4 gap-2 ${view === "kanban" ? "lg:w-80" : ""}`}>
         {[
           { key: "pending", label: "PENDING" },
           { key: "in_progress", label: "ACTIVE" },
@@ -162,7 +232,7 @@ export default function Tasks() {
       </div>
 
       {/* New Task Form */}
-      <div className="panel p-3">
+      <div className={`panel p-3 ${view === "kanban" ? "lg:min-w-[24rem] lg:flex-1" : ""}`}>
         <div className="mb-1.5 text-[10px] tracking-[0.2em] text-muted label-mono">NEW TASK</div>
         <input
           value={newTitle}
@@ -178,6 +248,33 @@ export default function Tasks() {
           placeholder="詳細（任意）…"
           className="mb-2 w-full resize-none rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2 text-sm text-fg-strong placeholder:text-muted focus:border-[var(--line)] focus:outline-none"
         />
+        {/* Priority / due / project */}
+        <div className="mb-2 flex gap-2">
+          <select
+            value={newPriority}
+            onChange={(e) => setNewPriority(e.target.value)}
+            aria-label="優先度"
+            className="rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-2 py-1.5 text-[12px] text-fg-strong focus:outline-none"
+          >
+            <option value="high" className="bg-[#0a0e16]">優先度 高</option>
+            <option value="mid" className="bg-[#0a0e16]">優先度 中</option>
+            <option value="low" className="bg-[#0a0e16]">優先度 低</option>
+          </select>
+          <input
+            type="date"
+            value={newDue}
+            onChange={(e) => setNewDue(e.target.value)}
+            aria-label="期限"
+            className="min-w-0 flex-1 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-2 py-1.5 text-[12px] text-fg-strong focus:outline-none"
+          />
+          <input
+            value={newProject}
+            onChange={(e) => setNewProject(e.target.value)}
+            placeholder="プロジェクト"
+            aria-label="プロジェクト"
+            className="min-w-0 flex-1 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-2 py-1.5 text-[12px] text-fg-strong placeholder:text-muted focus:outline-none"
+          />
+        </div>
         <button
           type="button"
           onClick={() => void handleCreate()}
@@ -188,9 +285,27 @@ export default function Tasks() {
         </button>
       </div>
 
-      {/* Filter tabs */}
-      <div className="flex flex-wrap gap-1.5">
-        {FILTER_TABS.map((t) => (
+      {/* View toggle + filter tabs */}
+      <div className={`flex flex-wrap items-center gap-1.5 ${view === "kanban" ? "lg:w-full" : ""}`}>
+        <div className="flex overflow-hidden rounded-forge border border-panel" role="tablist" aria-label="表示切替">
+          {(["list", "kanban"] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => setView(v)}
+              aria-pressed={view === v}
+              className="px-3 py-1 text-[10px] tracking-[0.14em] transition label-mono"
+              style={{
+                color: view === v ? "var(--fg-strong)" : "var(--muted)",
+                background: view === v ? "var(--btn-bg)" : "transparent",
+              }}
+            >
+              {v === "list" ? "☰ LIST" : "⊞ KANBAN"}
+            </button>
+          ))}
+        </div>
+
+        {view === "list" && FILTER_TABS.map((t) => (
           <button
             key={t.key}
             type="button"
@@ -205,6 +320,33 @@ export default function Tasks() {
             {t.label}
           </button>
         ))}
+
+        {/* Project filter chips */}
+        {projects.length > 0 && (
+          <>
+            <span className="ml-1 text-[9px] tracking-[0.14em] text-muted/60 label-mono">PROJECT:</span>
+            <button
+              type="button"
+              onClick={() => setProjectFilter("")}
+              className="rounded-full border px-2 py-0.5 text-[9px] label-mono"
+              style={{ borderColor: !projectFilter ? "var(--accent)" : "var(--panel-bd)", color: !projectFilter ? "var(--fg-strong)" : "var(--muted)" }}
+            >
+              全て
+            </button>
+            {projects.map((p) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => setProjectFilter(projectFilter === p ? "" : p)}
+                className="rounded-full border px-2 py-0.5 text-[9px] label-mono"
+                style={{ borderColor: projectFilter === p ? "var(--accent)" : "var(--panel-bd)", color: projectFilter === p ? "var(--fg-strong)" : "var(--muted)" }}
+              >
+                {p}
+              </button>
+            ))}
+          </>
+        )}
+
         <button
           type="button"
           onClick={() => void load()}
@@ -217,7 +359,15 @@ export default function Tasks() {
       {error && <div className="panel p-3 text-xs text-[#ff9b9b]">⚠️ {error}</div>}
       </div>
 
-      {/* ── Right column: task list ── */}
+      {/* ── Right area: list or kanban ── */}
+      {view === "kanban" ? (
+        <KanbanBoard
+          tasks={visible}
+          loading={loading}
+          onMove={(id, status) => void handleStatusChange(id, status)}
+          onDelete={(id) => void handleDelete(id)}
+        />
+      ) : (
       <div className="flex min-h-0 flex-col gap-2">
       {loading ? (
         <motion.div
@@ -227,14 +377,14 @@ export default function Tasks() {
         >
           ◈ LOADING TASKS…
         </motion.div>
-      ) : tasks.length === 0 ? (
+      ) : visible.length === 0 ? (
         <div className="panel p-6 text-center text-[11px] tracking-[0.18em] text-muted label-mono">
           NO TASKS FOUND
         </div>
       ) : (
         <div className="flex flex-col gap-2">
           <AnimatePresence>
-            {tasks.map((task) => {
+            {visible.map((task) => {
               const st = STATUS_LABELS[task.status] ?? STATUS_LABELS.pending;
               const isExpanded = expanded === task.id;
               return (
@@ -262,7 +412,7 @@ export default function Tasks() {
                       {task.status === "completed" ? "✓" : ""}
                     </button>
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span
                           className="shrink-0 rounded px-1.5 py-0.5 text-[9px] tracking-[0.12em] label-mono"
                           style={{ background: `${st.color}22`, color: st.color, border: `1px solid ${st.color}44` }}
@@ -270,6 +420,7 @@ export default function Tasks() {
                           {st.label}
                         </span>
                         <span className={`truncate text-[13px] ${task.status === "completed" ? "text-muted line-through" : "text-fg-strong"}`}>{task.title}</span>
+                        <TaskBadges task={task} />
                       </div>
                       {task.content && (
                         <p className="mt-1 text-[11px] leading-relaxed text-muted line-clamp-2">{task.content}</p>
@@ -318,6 +469,30 @@ export default function Tasks() {
                               </button>
                             ))}
                           </div>
+                          {/* Priority / due / project editors */}
+                          <div className="mb-2 flex flex-wrap gap-1.5">
+                            {Object.entries(PRIORITY_META).map(([key, meta]) => (
+                              <button
+                                key={key}
+                                type="button"
+                                onClick={() => { void updateTask(task.id, { priority: key }).then(load); }}
+                                className="rounded-forge px-2 py-0.5 text-[9px] label-mono"
+                                style={{
+                                  border: `1px solid ${(task.priority || "mid") === key ? meta.color : "rgba(197,198,199,0.2)"}`,
+                                  color: (task.priority || "mid") === key ? meta.color : "var(--muted)",
+                                }}
+                              >
+                                優先度{meta.label}
+                              </button>
+                            ))}
+                            <input
+                              type="date"
+                              defaultValue={task.due || ""}
+                              onChange={(e) => { void updateTask(task.id, { due: e.target.value }).then(load); }}
+                              aria-label="期限を変更"
+                              className="rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-2 py-0.5 text-[10px] text-fg-strong focus:outline-none"
+                            />
+                          </div>
                           {/* Response input */}
                           <textarea
                             value={responseText}
@@ -355,6 +530,7 @@ export default function Tasks() {
         </div>
       )}
       </div>
+      )}
 
       {/* Undo toast — 5秒だけ表示 */}
       <AnimatePresence>
@@ -372,6 +548,117 @@ export default function Tasks() {
           </motion.div>
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+/* ── Kanban board (pointer-drag between status columns) ───────────── */
+function KanbanBoard({
+  tasks, loading, onMove, onDelete,
+}: {
+  tasks: Task[];
+  loading: boolean;
+  onMove: (id: string, status: string) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [drag, setDrag] = useState<{ id: string; x: number; y: number; w: number } | null>(null);
+  const [overCol, setOverCol] = useState<string | null>(null);
+  const dragTask = drag ? tasks.find((t) => t.id === drag.id) : null;
+
+  const colFromPoint = (x: number, y: number): string | null => {
+    const el = document.elementFromPoint(x, y);
+    return (el?.closest("[data-col]") as HTMLElement | null)?.dataset.col ?? null;
+  };
+
+  const onCardPointerDown = (e: ReactPointerEvent<HTMLDivElement>, task: Task) => {
+    // 左ボタン/タッチのみ。✕ボタン等のクリックはドラッグにしない。
+    if ((e.target as HTMLElement).closest("button")) return;
+    const card = e.currentTarget;
+    card.setPointerCapture(e.pointerId);
+    const rect = card.getBoundingClientRect();
+    setDrag({ id: task.id, x: e.clientX, y: e.clientY, w: rect.width });
+  };
+
+  const onCardPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!drag) return;
+    setDrag((d) => (d ? { ...d, x: e.clientX, y: e.clientY } : d));
+    setOverCol(colFromPoint(e.clientX, e.clientY));
+  };
+
+  const onCardPointerUp = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!drag) return;
+    const col = colFromPoint(e.clientX, e.clientY);
+    const t = tasks.find((x) => x.id === drag.id);
+    if (col && t && col !== t.status) onMove(drag.id, col);
+    setDrag(null);
+    setOverCol(null);
+  };
+
+  if (loading) {
+    return (
+      <motion.div className="panel p-4 text-center text-[11px] tracking-[0.2em] text-muted label-mono" animate={{ opacity: [0.4, 1, 0.4] }} transition={{ duration: 1.4, repeat: Infinity }}>
+        ◈ LOADING TASKS…
+      </motion.div>
+    );
+  }
+
+  return (
+    <div className="relative grid min-h-0 grid-cols-2 items-start gap-2 lg:grid-cols-4">
+      {KANBAN_COLS.map((col) => {
+        const colTasks = tasks.filter((t) => t.status === col.key);
+        const st = STATUS_LABELS[col.key];
+        return (
+          <div
+            key={col.key}
+            data-col={col.key}
+            className="flex min-h-[14rem] flex-col gap-1.5 rounded-forge border p-2 transition"
+            style={{
+              borderColor: overCol === col.key && drag ? st.color : "var(--panel-bd)",
+              background: overCol === col.key && drag ? `${st.color}0d` : "rgba(255,255,255,0.015)",
+            }}
+          >
+            <div className="flex items-center justify-between px-1">
+              <span className="text-[9px] tracking-[0.16em] label-mono" style={{ color: st.color }}>{col.label}</span>
+              <span className="text-[9px] text-muted label-mono">{colTasks.length}</span>
+            </div>
+            {colTasks.length === 0 && (
+              <div className="rounded-forge border border-dashed border-panel py-4 text-center text-[9px] tracking-[0.12em] text-muted/50 label-mono">
+                ここにドラッグ
+              </div>
+            )}
+            {colTasks.map((task) => (
+              <div
+                key={task.id}
+                onPointerDown={(e) => onCardPointerDown(e, task)}
+                onPointerMove={onCardPointerMove}
+                onPointerUp={onCardPointerUp}
+                className="cursor-grab touch-none select-none rounded-forge border border-panel bg-[rgba(10,14,22,0.75)] p-2 transition hover:border-[var(--line)]"
+                style={{ opacity: drag?.id === task.id ? 0.35 : 1 }}
+              >
+                <div className="flex items-start justify-between gap-1">
+                  <span className={`min-w-0 flex-1 break-words text-[12px] leading-snug ${task.status === "completed" ? "text-muted line-through" : "text-fg"}`}>
+                    {task.title}
+                  </span>
+                  <button type="button" onClick={() => onDelete(task.id)} aria-label="削除" className="shrink-0 text-[10px] text-[#ff8888]">✕</button>
+                </div>
+                <div className="mt-1">
+                  <TaskBadges task={task} />
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      })}
+
+      {/* Drag ghost (follows the pointer) */}
+      {drag && dragTask && (
+        <div
+          className="pointer-events-none fixed z-[60] rounded-forge border border-[var(--accent)] bg-[rgba(10,14,22,0.95)] p-2 shadow-glow"
+          style={{ left: drag.x + 8, top: drag.y + 8, width: Math.min(drag.w, 240) }}
+        >
+          <span className="text-[12px] text-fg-strong">{dragTask.title}</span>
+        </div>
+      )}
     </div>
   );
 }
