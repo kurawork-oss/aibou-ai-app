@@ -608,6 +608,19 @@ test("HOME agent console has a file-attach button", async ({ page }) => {
   await expect(page.getByTitle("ファイルを添付（PDF/テキスト）")).toBeVisible({ timeout: 5_000 });
 });
 
+/* ── Realtime voice conversation mode (ui-r27) ── */
+test("CHAT voice mode opens a fullscreen overlay and exits", async ({ page }) => {
+  await page.goto("/");
+  await enterApp(page);
+  // Chromium exposes webkitSpeechRecognition → the 会話モード button renders.
+  const btn = page.getByLabel("会話モード");
+  await expect(btn).toBeVisible({ timeout: 5_000 });
+  await btn.click();
+  await expect(page.getByText("VOICE MODE · 会話モード")).toBeVisible({ timeout: 5_000 });
+  await page.getByRole("button", { name: /終了/ }).click();
+  await expect(page.getByText("VOICE MODE · 会話モード")).toBeHidden();
+});
+
 /* ── Fullscreen (focus) mode for any view ── */
 test("Fullscreen toggle hides the CORE header and restores it", async ({ page }) => {
   await page.goto("/");

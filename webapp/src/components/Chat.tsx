@@ -11,6 +11,7 @@
  */
 
 import { AnimatePresence, motion } from "framer-motion";
+import { createPortal } from "react-dom";
 import {
   useCallback,
   useEffect,
@@ -228,11 +229,18 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
   // that finishes after that must not be spoken into the new context.
   const speechCancelledRef = useRef(false);
 
+  // ── リアルタイム会話モード（話す→自動送信→返答を読み上げ→再びマイク） ──
+  const [voiceMode, setVoiceMode] = useState(false);
+  const voiceModeRef = useRef(false);
+  useEffect(() => { voiceModeRef.current = voiceMode; }, [voiceMode]);
+
   /** Speak a completed assistant reply (browser TTS → API /tts fallback). */
   const speakReply = useCallback(
     async (text: string) => {
       if (speechCancelledRef.current) return;
-      if (!voiceReplies || !text.trim()) return;
+      // 会話モード中は「SPOKEN REPLIES」設定に関わらず必ず読み上げる（会話が成立しないため）。
+      if (!voiceReplies && !voiceModeRef.current) return;
+      if (!text.trim()) return;
       setSpeaking(true);
       const rate = settings.rate ?? 1.0;
       if (ttsSupported) {
@@ -344,6 +352,44 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
     const history = buildHistory();
     await runTurn(text, image ? { base64: image.base64, mime: image.mime } : null, assistantMsg.id, history);
   }, [input, pendingImage, streaming, listening, stopMic, resetMic, buildHistory, runTurn]);
+
+  /** 会話モード開始：マイクを開き、以後は 無音→自動送信→読み上げ→再びマイク のループ。 */
+  const enterVoiceMode = useCallback(() => {
+    if (!micSupported) return;
+    speechCancelledRef.current = false;
+    setVoiceMode(true);
+    setInput("");
+    resetMic();
+    startMic();
+  }, [micSupported, resetMic, startMic]);
+
+  const exitVoiceMode = useCallback(() => {
+    setVoiceMode(false);
+    stopMic();
+    resetMic();
+    stopSpeaking();
+    setSpeaking(false);
+    setInput("");
+  }, [stopMic, resetMic]);
+
+  // 会話モード：発話が止まって1.8秒たったら自動送信。
+  useEffect(() => {
+    if (!voiceMode || !listening || streaming) return;
+    const text = transcript.trim();
+    if (!text) return;
+    const t = setTimeout(() => { void send(); }, 1800);
+    return () => clearTimeout(t);
+  }, [voiceMode, listening, streaming, transcript, send]);
+
+  // 会話モード：読み上げが終わったら次のターンのためにマイクを再開。
+  // （streaming→speaking は同一レンダーで切り替わるので、TTSを拾う隙間はない）
+  useEffect(() => {
+    if (!voiceMode || speaking || streaming || listening) return;
+    const t = setTimeout(() => {
+      if (voiceModeRef.current) { resetMic(); startMic(); }
+    }, 500);
+    return () => clearTimeout(t);
+  }, [voiceMode, speaking, streaming, listening, resetMic, startMic]);
 
   /** ChatGPT-style 再生成 — re-run the latest user turn into a fresh bubble. */
   const regenerate = useCallback(async () => {
@@ -593,6 +639,20 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
             </button>
           )}
 
+          {/* Realtime voice conversation (hands-free loop) */}
+          {micSupported && (
+            <button
+              type="button"
+              onClick={enterVoiceMode}
+              disabled={streaming}
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-lg text-muted transition hover:bg-white/5 hover:text-fg-strong disabled:opacity-40"
+              aria-label="会話モード"
+              title="会話モード（話す→自動返答のループ）"
+            >
+              <WaveIcon />
+            </button>
+          )}
+
           {/* Send / Stop */}
           {streaming ? (
             <button
@@ -636,7 +696,103 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
         </div>
       </div>
       </div>
+
+      {/* ── リアルタイム会話モードの全画面オーバーレイ ── */}
+      <AnimatePresence>
+        {voiceMode && (
+          <VoiceOverlay
+            state={coreState}
+            transcript={listening ? input : ""}
+            lastReply={[...messages].reverse().find((m) => m.role === "assistant" && !m.pending && !m.error)?.content || ""}
+            onExit={exitVoiceMode}
+          />
+        )}
+      </AnimatePresence>
     </div>
+  );
+}
+
+/* ── Fullscreen realtime-voice overlay (ChatGPT voice-mode style) ──── */
+function VoiceOverlay({
+  state, transcript, lastReply, onExit,
+}: {
+  state: CoreState;
+  transcript: string;
+  lastReply: string;
+  onExit: () => void;
+}) {
+  // ビュー切替ラッパーの perspective が fixed の基準を奪うため body へポータル。
+  const label =
+    state === "listening" ? "聞いています…"
+      : state === "thinking" ? "考えています…"
+        : state === "speaking" ? "話しています…"
+          : "待機中";
+  const color =
+    state === "listening" ? "var(--accent)"
+      : state === "speaking" ? "#60d394"
+        : state === "thinking" ? "#ffd060"
+          : "var(--muted)";
+
+  return createPortal(
+    <motion.div
+      role="dialog"
+      aria-label="会話モード"
+      className="fixed inset-0 z-[80] flex flex-col items-center justify-between bg-black/90 px-6 py-8 backdrop-blur-md"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+    >
+      <div className="text-[10px] tracking-[0.3em] text-muted label-mono">VOICE MODE · 会話モード</div>
+
+      {/* Breathing status orb */}
+      <div className="flex flex-col items-center gap-5">
+        <span className="relative grid place-items-center">
+          <motion.span
+            className="absolute h-40 w-40 rounded-full"
+            style={{ border: `1px solid ${color}`, opacity: 0.5 }}
+            animate={{ scale: state === "idle" ? 1 : [1, 1.35], opacity: state === "idle" ? 0.3 : [0.5, 0] }}
+            transition={{ duration: 1.6, repeat: state === "idle" ? 0 : Infinity, ease: "easeOut" }}
+          />
+          <motion.span
+            className="grid h-32 w-32 place-items-center rounded-full"
+            style={{ background: `radial-gradient(circle at 38% 32%, ${color}33, rgba(10,14,22,0.9) 70%)`, border: `1px solid ${color}66`, boxShadow: `0 0 42px ${color}44` }}
+            animate={{ scale: state === "speaking" ? [1, 1.06, 1] : state === "listening" ? [1, 1.04, 1] : 1 }}
+            transition={{ duration: state === "speaking" ? 0.55 : 1.4, repeat: Infinity, ease: "easeInOut" }}
+          >
+            <span className="text-2xl" aria-hidden>{state === "listening" ? "🎙" : state === "thinking" ? "◈" : state === "speaking" ? "♪" : "…"}</span>
+          </motion.span>
+        </span>
+        <div className="text-[12px] tracking-[0.22em] label-mono" style={{ color }}>{label}</div>
+
+        {/* Live transcript / latest reply */}
+        <div className="max-h-40 w-full max-w-md overflow-y-auto text-center">
+          {transcript ? (
+            <p className="text-[15px] leading-relaxed text-fg-strong">{transcript}</p>
+          ) : lastReply ? (
+            <p className="whitespace-pre-wrap text-[12px] leading-relaxed text-muted">{lastReply.slice(0, 280)}</p>
+          ) : (
+            <p className="text-[11px] text-muted/70">話しかけてください。無音が続くと自動で送信されます。</p>
+          )}
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={onExit}
+        className="rounded-full border border-[#ff6b6b55] bg-[rgba(255,107,107,0.08)] px-8 py-2.5 text-[11px] tracking-[0.22em] text-[#ff8888] transition hover:bg-[rgba(255,107,107,0.16)] label-mono"
+      >
+        ■ 終了
+      </button>
+    </motion.div>,
+    document.body,
+  );
+}
+
+function WaveIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden>
+      <path d="M3 12v0M7 9v6M11 5v14M15 8v8M19 11v2" />
+    </svg>
   );
 }
 

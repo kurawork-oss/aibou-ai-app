@@ -221,12 +221,15 @@ CREATE TABLE IF NOT EXISTS artifacts (
 );
 CREATE INDEX IF NOT EXISTS idx_artifacts_created ON artifacts(created_at DESC);
 
--- ⏰ 定期実行（Scheduler）— 毎日 指定時刻にエージェント指示を自動実行。
+-- ⏰ 定期実行（Scheduler）— 毎日 or 曜日指定の時刻にエージェント指示を自動実行。
 CREATE TABLE IF NOT EXISTS schedules (
   id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   instruction text NOT NULL,
   time       text DEFAULT '08:00',      -- HH:MM (JST)
+  days       text DEFAULT 'daily',      -- 'daily' | 'mon,wed,fri' 形式
   enabled    boolean DEFAULT true,
   last_run   text DEFAULT '',           -- YYYY-MM-DD
   created_at timestamptz DEFAULT now()
 );
+-- 既存テーブルへの後方互換アップグレード（自動マイグレーションで反映）
+ALTER TABLE schedules ADD COLUMN IF NOT EXISTS days text DEFAULT 'daily';

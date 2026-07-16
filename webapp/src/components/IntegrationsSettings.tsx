@@ -39,10 +39,24 @@ export default function IntegrationsSettings() {
 }
 
 /* ── Scheduler (recurring agent runs) ───────────────────────────── */
+const DAY_CHIPS: { key: string; label: string }[] = [
+  { key: "mon", label: "月" }, { key: "tue", label: "火" }, { key: "wed", label: "水" },
+  { key: "thu", label: "木" }, { key: "fri", label: "金" }, { key: "sat", label: "土" }, { key: "sun", label: "日" },
+];
+
+/** "daily" → 毎日 / "mon,fri" → 毎週月・金 */
+function daysLabel(days?: string): string {
+  const d = (days || "daily").toLowerCase();
+  if (d === "daily") return "毎日";
+  const jp = new Map(DAY_CHIPS.map((c) => [c.key, c.label]));
+  return "週" + d.split(",").map((k) => jp.get(k.trim()) || "").filter(Boolean).join("・");
+}
+
 function SchedulerPanel() {
   const [items, setItems] = useState<ScheduleItem[]>([]);
   const [instruction, setInstruction] = useState("");
   const [time, setTime] = useState("07:00");
+  const [days, setDays] = useState<string[]>([]);  // 空 = 毎日
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -50,11 +64,18 @@ function SchedulerPanel() {
   }, []);
   useEffect(() => { void load(); }, [load]);
 
+  const toggleDay = (key: string) =>
+    setDays((p) => (p.includes(key) ? p.filter((d) => d !== key) : [...p, key]));
+
   const add = async () => {
     if (!instruction.trim() || busy) return;
     setBusy(true);
-    try { await scheduleAdd(instruction.trim(), time); setInstruction(""); await load(); }
-    catch { /* ignore */ } finally { setBusy(false); }
+    try {
+      await scheduleAdd(instruction.trim(), time, days.length ? days.join(",") : "daily");
+      setInstruction("");
+      setDays([]);
+      await load();
+    } catch { /* ignore */ } finally { setBusy(false); }
   };
   const remove = async (id: string) => {
     if (!window.confirm("この定期実行を削除しますか？")) return;
@@ -64,7 +85,7 @@ function SchedulerPanel() {
 
   return (
     <div className="mb-4 rounded-forge border border-panel p-3">
-      <div className="mb-2 text-[10px] tracking-[0.2em] text-muted label-mono">定期実行 — SCHEDULER（毎日）</div>
+      <div className="mb-2 text-[10px] tracking-[0.2em] text-muted label-mono">定期実行 — SCHEDULER</div>
       <div className="flex gap-2">
         <input
           type="time" value={time} onChange={(e) => setTime(e.target.value)}
@@ -79,11 +100,37 @@ function SchedulerPanel() {
         <button type="button" onClick={() => void add()} disabled={busy || !instruction.trim()}
           className="shrink-0 rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] px-3 text-[10px] tracking-[0.12em] text-fg-strong disabled:opacity-40 label-mono">+ 追加</button>
       </div>
+
+      {/* 曜日チップ（未選択=毎日） */}
+      <div className="mt-2 flex items-center gap-1">
+        {DAY_CHIPS.map((c) => {
+          const on = days.includes(c.key);
+          return (
+            <button
+              key={c.key}
+              type="button"
+              onClick={() => toggleDay(c.key)}
+              aria-pressed={on}
+              className="h-7 w-7 rounded-full border text-[10px] transition"
+              style={{
+                borderColor: on ? "var(--accent)" : "var(--panel-bd)",
+                color: on ? "var(--fg-strong)" : "var(--muted)",
+                background: on ? "var(--btn-bg)" : "transparent",
+              }}
+            >
+              {c.label}
+            </button>
+          );
+        })}
+        <span className="ml-1 text-[9px] text-muted label-mono">{days.length ? daysLabel(days.join(",")) : "毎日"}</span>
+      </div>
+
       {items.length > 0 && (
         <div className="mt-2 flex flex-col gap-1.5">
           {items.map((s) => (
             <div key={s.id} className="flex items-center gap-2 rounded-forge border border-panel p-2">
               <span className="shrink-0 text-[11px] tracking-[0.08em] text-[var(--accent)] label-mono">{s.time}</span>
+              <span className="shrink-0 rounded-full border border-panel px-1.5 py-0.5 text-[8px] tracking-[0.06em] text-muted label-mono">{daysLabel(s.days)}</span>
               <span className="min-w-0 flex-1 truncate text-[12px] text-fg">{s.instruction}</span>
               <button type="button" onClick={() => void remove(s.id)} className="shrink-0 text-[10px] text-[#ff8888]">✕</button>
             </div>
@@ -91,7 +138,7 @@ function SchedulerPanel() {
         </div>
       )}
       <p className="mt-2 text-[9px] leading-relaxed text-muted">
-        ※ サーバーが起きている間は自動で実行します。無料プランでスリープする場合は、
+        ※ 曜日を選ばなければ毎日実行。サーバーが起きている間は自動で実行します。無料プランでスリープする場合は、
         <code className="text-fg">/scheduler/tick</code> を無料の外部cron（cron-job.org等）から定期的に叩くと確実です。定期実行は承認なしで実行されます。
       </p>
     </div>

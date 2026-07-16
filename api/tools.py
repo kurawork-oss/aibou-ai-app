@@ -79,8 +79,9 @@ TOOLS_DOC = (
     '/ params: { "url": "https://example.com/article" }\n'
     '- generate_image: プロンプトから画像を生成する（HOMEの生成物に保存される） '
     '/ params: { "prompt": "夕焼けの富士山、油絵風" }\n'
-    '- schedule_add: 毎日きまった時刻に指示を自動実行する定期タスクを登録する '
-    '/ params: { "instruction": "AIニュースを検索してメールで送る", "time": "07:00" }\n'
+    '- schedule_add: きまった時刻に指示を自動実行する定期タスクを登録する。'
+    'daysは "daily"（毎日）か "mon,wed,fri" のような曜日カンマ区切り '
+    '/ params: { "instruction": "AIニュースを検索してメールで送る", "time": "07:00", "days": "daily" }\n'
     '- schedule_list: 登録済みの定期実行を一覧する / params: { }\n'
     '- notion_add: Notionのページ/データベースにメモ（新規ページ）を追記する '
     '/ params: { "title": "メモの見出し", "content": "本文" }\n'
@@ -573,20 +574,31 @@ def _do_generate_image(params: dict) -> str:
     return f"画像を生成しました：{url}（HOMEの『生成物』からも見られます）"
 
 
+_DAY_JP = {"mon": "月", "tue": "火", "wed": "水", "thu": "木", "fri": "金", "sat": "土", "sun": "日"}
+
+
+def _days_label(days: str) -> str:
+    days = (days or "daily").strip().lower()
+    if days == "daily":
+        return "毎日"
+    return "毎週" + "・".join(_DAY_JP.get(d.strip(), d) for d in days.split(",") if d.strip())
+
+
 def _do_schedule_add(params: dict) -> str:
-    """毎日 指定時刻に指示を自動実行する定期タスクを登録する。"""
+    """毎日 or 曜日指定の時刻に指示を自動実行する定期タスクを登録する。"""
     instruction = (params.get("instruction") or "").strip()
     time = (params.get("time") or "08:00").strip()
+    days = params.get("days") or "daily"
     if not instruction:
         return "定期実行する指示(instruction)が空です。"
     try:
         import scheduler
-        s = scheduler.add(instruction, time)
+        s = scheduler.add(instruction, time, days)
     except Exception as e:
         return f"定期実行の登録に失敗しました：{e}"
     if isinstance(s, dict) and s.get("error"):
         return f"定期実行の登録に失敗しました：{s['error']}"
-    return f"毎日 {s.get('time')} に「{instruction}」を実行する定期タスクを登録しました。"
+    return f"{_days_label(s.get('days'))} {s.get('time')} に「{instruction}」を実行する定期タスクを登録しました。"
 
 
 def _do_schedule_list(_params: dict) -> str:
@@ -598,7 +610,9 @@ def _do_schedule_list(_params: dict) -> str:
         return f"定期実行の取得に失敗しました：{e}"
     if not items:
         return "登録された定期実行はありません。"
-    return "定期実行：\n" + "\n".join(f"・毎日 {s.get('time')} — {s.get('instruction')}" for s in items[:15])
+    return "定期実行：\n" + "\n".join(
+        f"・{_days_label(s.get('days'))} {s.get('time')} — {s.get('instruction')}" for s in items[:15]
+    )
 
 
 def _notion_blocks(content: str) -> list:

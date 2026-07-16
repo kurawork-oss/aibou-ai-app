@@ -62,6 +62,53 @@ def test_scheduler_add_requires_instruction():
     assert scheduler.add("", "07:00").get("error")
 
 
+# ── 曜日指定（weekly） ───────────────────────────────────────────────
+def test_normalize_days():
+    assert scheduler._normalize_days("daily") == "daily"
+    assert scheduler._normalize_days("") == "daily"
+    assert scheduler._normalize_days("mon, wed,FRI") == "mon,wed,fri"
+    assert scheduler._normalize_days(["sat", "sun", "sat"]) == "sat,sun"
+    assert scheduler._normalize_days("noday,xyz") == "daily"  # 全滅→daily
+
+
+def test_runs_today_daily_and_weekday(monkeypatch):
+    import datetime as dt
+    # 2026-07-16 は木曜（thu）
+    fixed = dt.datetime(2026, 7, 16, 9, 0, tzinfo=dt.timezone(dt.timedelta(hours=9)))
+    monkeypatch.setattr(scheduler, "_now", lambda: fixed)
+    assert scheduler._runs_today("daily") is True
+    assert scheduler._runs_today("thu") is True
+    assert scheduler._runs_today("mon,thu") is True
+    assert scheduler._runs_today("mon,fri") is False
+
+
+def test_due_skips_wrong_weekday(monkeypatch):
+    import datetime as dt
+    fixed = dt.datetime(2026, 7, 16, 23, 59, tzinfo=dt.timezone(dt.timedelta(hours=9)))  # 木曜
+    monkeypatch.setattr(scheduler, "_now", lambda: fixed)
+    s_thu = scheduler.add("thursday job", "00:00", "thu")
+    s_fri = scheduler.add("friday job", "00:00", "fri")
+    due_ids = {d["id"] for d in scheduler._due(scheduler.list_schedules(1000))}
+    assert s_thu["id"] in due_ids and s_fri["id"] not in due_ids
+    scheduler.delete(s_thu["id"])
+    scheduler.delete(s_fri["id"])
+
+
+def test_schedule_add_tool_weekly_label():
+    r = tools.execute_tool("schedule_add", {"instruction": "週次レビュー", "time": "09:00", "days": "mon,fri"})
+    assert "毎週月・金" in r and "09:00" in r
+    # cleanup（名前で探して削除）
+    for s in scheduler.list_schedules(1000):
+        if s.get("instruction") == "週次レビュー":
+            scheduler.delete(s["id"])
+
+
+def test_scheduler_endpoint_with_days():
+    r = client.post("/scheduler", json={"instruction": "weekly x", "time": "10:00", "days": "sat,sun"})
+    assert r.status_code == 200 and r.json()["days"] == "sat,sun"
+    client.delete(f"/scheduler/{r.json()['id']}")
+
+
 def test_scheduler_tick_runs_due_once(monkeypatch):
     import agent
     import notify

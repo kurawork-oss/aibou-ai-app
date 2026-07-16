@@ -13,6 +13,7 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ClipboardEvent } from "react";
+import { createPortal } from "react-dom";
 import {
   homeSummary,
   agendaList,
@@ -681,6 +682,8 @@ function fmtSize(n: number): string {
 
 function ArtifactsPanel({ arts, onChange }: { arts: ArtifactMeta[]; onChange: () => void }) {
   const [busy, setBusy] = useState<string | null>(null);
+  const [lightbox, setLightbox] = useState<string | null>(null);  // artifact id
+  const images = arts.filter((a) => a.kind === "image" && a.url);
 
   const download = async (a: ArtifactMeta) => {
     setBusy(a.id);
@@ -704,10 +707,11 @@ function ArtifactsPanel({ arts, onChange }: { arts: ArtifactMeta[]; onChange: ()
           {arts.slice(0, 6).map((a) => (
             <div key={a.id} className="flex items-center gap-2 rounded-forge border border-panel p-2">
               {a.kind === "image" && a.url ? (
-                <a href={a.url} target="_blank" rel="noopener noreferrer" className="block h-9 w-9 shrink-0 overflow-hidden rounded border border-panel">
+                <button type="button" onClick={() => setLightbox(a.id)} title="全画面で見る"
+                  className="block h-9 w-9 shrink-0 overflow-hidden rounded border border-panel transition hover:shadow-glow">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={a.url} alt={a.title} className="h-full w-full object-cover" />
-                </a>
+                </button>
               ) : (
                 <span className="text-[14px] leading-none text-[var(--accent)]">{a.kind === "spreadsheet" ? "▦" : "▤"}</span>
               )}
@@ -718,8 +722,8 @@ function ArtifactsPanel({ arts, onChange }: { arts: ArtifactMeta[]; onChange: ()
                 </div>
               </div>
               {a.kind === "image" && a.url ? (
-                <a href={a.url} target="_blank" rel="noopener noreferrer" title="開く"
-                  className="shrink-0 rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] px-2 py-1 text-[10px] text-fg-strong label-mono">開く</a>
+                <button type="button" onClick={() => setLightbox(a.id)} title="全画面で見る"
+                  className="shrink-0 rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] px-2 py-1 text-[10px] text-fg-strong label-mono">開く</button>
               ) : (
                 <button
                   type="button"
@@ -736,7 +740,100 @@ function ArtifactsPanel({ arts, onChange }: { arts: ArtifactMeta[]; onChange: ()
           ))}
         </div>
       )}
+
+      <AnimatePresence>
+        {lightbox && (
+          <ImageLightbox
+            images={images}
+            currentId={lightbox}
+            onNavigate={setLightbox}
+            onClose={() => setLightbox(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
+  );
+}
+
+/* ── Fullscreen image lightbox (gallery for generated images) ────── */
+function ImageLightbox({
+  images, currentId, onNavigate, onClose,
+}: {
+  images: ArtifactMeta[];
+  currentId: string;
+  onNavigate: (id: string) => void;
+  onClose: () => void;
+}) {
+  const idx = Math.max(0, images.findIndex((i) => i.id === currentId));
+  const cur = images[idx];
+  const prev = () => images.length > 1 && onNavigate(images[(idx - 1 + images.length) % images.length].id);
+  const next = () => images.length > 1 && onNavigate(images[(idx + 1) % images.length].id);
+
+  // Keyboard: Esc close, ←/→ navigate.
+  useEffect(() => {
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      else if (e.key === "ArrowLeft") prev();
+      else if (e.key === "ArrowRight") next();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
+  if (!cur?.url) return null;
+  // HOMEは3D変形（rotateX）されたラッパー内にあるため、fixed をビューポートに
+  // 効かせるには body へポータルする必要がある。
+  return createPortal(
+    <motion.div
+      role="dialog"
+      aria-label="画像ギャラリー"
+      className="fixed inset-0 z-[70] flex flex-col bg-black/90 backdrop-blur-sm"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onClose}
+    >
+      {/* top bar */}
+      <div className="flex items-center justify-between px-4 py-3" onClick={(e) => e.stopPropagation()}>
+        <div className="min-w-0">
+          <div className="truncate text-[13px] text-fg-strong">{cur.title}</div>
+          <div className="text-[9px] tracking-[0.16em] text-muted label-mono">
+            GALLERY {images.length > 1 ? `· ${idx + 1} / ${images.length}` : ""}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <a href={cur.url} target="_blank" rel="noopener noreferrer"
+            className="rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] px-3 py-1.5 text-[10px] tracking-[0.12em] text-fg-strong label-mono">
+            新しいタブで開く ↗
+          </a>
+          <button type="button" onClick={onClose} aria-label="閉じる"
+            className="grid h-8 w-8 place-items-center rounded-lg border border-panel text-muted transition hover:text-fg-strong">✕</button>
+        </div>
+      </div>
+
+      {/* image + nav */}
+      <div className="relative flex min-h-0 flex-1 items-center justify-center px-4 pb-6" onClick={(e) => e.stopPropagation()}>
+        {images.length > 1 && (
+          <button type="button" onClick={prev} aria-label="前の画像"
+            className="absolute left-3 z-10 grid h-10 w-10 place-items-center rounded-full border border-panel bg-black/50 text-lg text-muted transition hover:text-fg-strong">‹</button>
+        )}
+        <motion.img
+          key={cur.id}
+          src={cur.url}
+          alt={cur.title}
+          className="max-h-full max-w-full rounded-lg object-contain"
+          style={{ boxShadow: "0 0 40px rgba(0,0,0,0.6)" }}
+          initial={{ opacity: 0, scale: 0.96 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ type: "spring", stiffness: 320, damping: 30 }}
+        />
+        {images.length > 1 && (
+          <button type="button" onClick={next} aria-label="次の画像"
+            className="absolute right-3 z-10 grid h-10 w-10 place-items-center rounded-full border border-panel bg-black/50 text-lg text-muted transition hover:text-fg-strong">›</button>
+        )}
+      </div>
+    </motion.div>,
+    document.body,
   );
 }
 

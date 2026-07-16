@@ -525,6 +525,7 @@ export interface ScheduleItem {
   id: string;
   instruction: string;
   time: string;
+  days?: string;        // "daily" | "mon,wed,fri"
   enabled?: boolean;
   last_run?: string;
 }
@@ -536,11 +537,11 @@ export async function schedulesList(): Promise<ScheduleItem[]> {
   return data.items ?? [];
 }
 
-export async function scheduleAdd(instruction: string, time: string): Promise<ScheduleItem> {
+export async function scheduleAdd(instruction: string, time: string, days = "daily"): Promise<ScheduleItem> {
   const res = await fetch(`${requireApiUrl()}/scheduler`, {
     method: "POST",
     headers: authHeaders({ "Content-Type": "application/json" }),
-    body: JSON.stringify({ instruction, time }),
+    body: JSON.stringify({ instruction, time, days }),
   });
   if (!res.ok) throw new Error(`Schedule add failed (${res.status})`);
   return (await res.json()) as ScheduleItem;
