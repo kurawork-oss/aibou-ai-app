@@ -13,7 +13,7 @@
  */
 
 import { AnimatePresence, motion } from "framer-motion";
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from "react";
 import Markdown from "@/components/Markdown";
 import {
   streamLifeChat,
@@ -21,6 +21,7 @@ import {
   lifeAdd,
   lifeDelete,
   lifeExtract,
+  vision,
   API_URL,
   type ChatTurn,
   type LifeEntry,
@@ -159,6 +160,30 @@ export default function LifeMode({ settings }: { settings: ChatSettings }) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       send();
+    }
+  };
+
+  // Paste a screenshot → describe it via vision and drop the description in.
+  const onPasteImage = (e: ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const it of Array.from(items)) {
+      if (it.type.startsWith("image/")) {
+        const f = it.getAsFile();
+        if (!f) continue;
+        e.preventDefault();
+        const reader = new FileReader();
+        reader.onload = async () => {
+          const src = String(reader.result || "");
+          const comma = src.indexOf(",");
+          try {
+            const desc = await vision({ prompt: "この画像の内容を簡潔に説明して。", imageBase64: comma >= 0 ? src.slice(comma + 1) : "", mime: f.type || "image/png" });
+            setInput((p) => `${p}${p ? "\n" : ""}【添付画像の内容】${desc}\n`);
+          } catch { /* ignore */ }
+        };
+        reader.readAsDataURL(f);
+        break;
+      }
     }
   };
 
@@ -320,8 +345,9 @@ export default function LifeMode({ settings }: { settings: ChatSettings }) {
                 e.target.style.height = `${Math.min(e.target.scrollHeight, 128)}px`;
               }}
               onKeyDown={onKeyDown}
+              onPaste={onPasteImage}
               rows={1}
-              placeholder="人生でも、お金でも、なんでも相談してください…"
+              placeholder="人生でも、お金でも、なんでも相談… (スクショはCtrl+Vで貼付)"
               className="max-h-32 min-h-[40px] flex-1 resize-none bg-transparent px-2 py-2 text-sm text-fg-strong placeholder:text-muted focus:outline-none"
               style={{ scrollbarWidth: "none" }}
             />

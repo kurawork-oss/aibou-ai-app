@@ -12,3 +12,7 @@ gTTS
 cryptography
 # 任意：SUPABASE_DB_URL を設定した時のテーブル自動作成（migrate.py）に使用
 psycopg2-binary
+# アップロードされたPDFからテキストを抽出（/file/extract）
+pypdf
+# ファイルアップロード（multipart/form-data）の受け取りに必要
+python-multipart

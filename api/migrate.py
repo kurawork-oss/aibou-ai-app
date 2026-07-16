@@ -16,7 +16,7 @@ import keychain
 EXPECTED_TABLES = [
     "api_keys", "tasks", "events", "notifications", "automations", "missions",
     "studio_ais", "studio_workflows", "vault_notebooks", "income_jobs",
-    "agent_memory", "life_entries", "artifacts",
+    "agent_memory", "life_entries", "artifacts", "schedules",
 ]
 
 _HERE = os.path.dirname(os.path.abspath(__file__))

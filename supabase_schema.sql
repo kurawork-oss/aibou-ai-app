@@ -213,10 +213,20 @@ CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read, created
 -- content は Markdown / CSV などの小さめテキスト。Aibou内でダウンロードできる。
 CREATE TABLE IF NOT EXISTS artifacts (
   id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  kind       text DEFAULT 'document',   -- document | spreadsheet
+  kind       text DEFAULT 'document',   -- document | spreadsheet | image
   title      text NOT NULL,
   content    text DEFAULT '',
   mime       text DEFAULT 'text/markdown',
   created_at timestamptz DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_artifacts_created ON artifacts(created_at DESC);
+
+-- ⏰ 定期実行（Scheduler）— 毎日 指定時刻にエージェント指示を自動実行。
+CREATE TABLE IF NOT EXISTS schedules (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  instruction text NOT NULL,
+  time       text DEFAULT '08:00',      -- HH:MM (JST)
+  enabled    boolean DEFAULT true,
+  last_run   text DEFAULT '',           -- YYYY-MM-DD
+  created_at timestamptz DEFAULT now()
+);

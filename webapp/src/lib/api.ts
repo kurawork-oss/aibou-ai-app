@@ -506,6 +506,52 @@ export async function agentExecute(tool: string, params: Record<string, unknown>
   return data.result ?? "";
 }
 
+/* ---------------- File extract (PDF / text) ---------------- */
+/** POST /file/extract — upload a file, get its extracted text. */
+export async function fileExtract(file: File): Promise<{ name: string; chars: number; text: string }> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`${requireApiUrl()}/file/extract`, {
+    method: "POST",
+    headers: authHeaders(), // do NOT set Content-Type; the browser adds the multipart boundary
+    body: form,
+  });
+  if (!res.ok) throw new Error(`File extract failed (${res.status})`);
+  return (await res.json()) as { name: string; chars: number; text: string };
+}
+
+/* ---------------- Scheduler (recurring agent runs) ---------------- */
+export interface ScheduleItem {
+  id: string;
+  instruction: string;
+  time: string;
+  enabled?: boolean;
+  last_run?: string;
+}
+
+export async function schedulesList(): Promise<ScheduleItem[]> {
+  const res = await fetch(`${requireApiUrl()}/scheduler`, { headers: authHeaders(), cache: "no-store" });
+  if (!res.ok) throw new Error(`Schedules failed (${res.status})`);
+  const data = (await res.json().catch(() => ({ items: [] }))) as { items?: ScheduleItem[] };
+  return data.items ?? [];
+}
+
+export async function scheduleAdd(instruction: string, time: string): Promise<ScheduleItem> {
+  const res = await fetch(`${requireApiUrl()}/scheduler`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ instruction, time }),
+  });
+  if (!res.ok) throw new Error(`Schedule add failed (${res.status})`);
+  return (await res.json()) as ScheduleItem;
+}
+
+export async function scheduleDelete(id: string): Promise<boolean> {
+  const res = await fetch(`${requireApiUrl()}/scheduler/${id}`, { method: "DELETE", headers: authHeaders() });
+  const data = (await res.json().catch(() => ({ ok: false }))) as { ok?: boolean };
+  return Boolean(data.ok);
+}
+
 /* ---------------- Google integration (Sheets / Docs) ---------------- */
 export interface GoogleStatus { configured: boolean; connected: boolean }
 
@@ -1210,11 +1256,12 @@ export async function notificationsMarkRead(): Promise<boolean> {
 /* ---------------- Artifacts (agent-generated documents / spreadsheets) ---------------- */
 export interface ArtifactMeta {
   id: string;
-  kind: string;       // "document" | "spreadsheet"
+  kind: string;       // "document" | "spreadsheet" | "image"
   title: string;
   mime: string;
   size: number;
   preview?: string;
+  url?: string;       // image artifacts only (thumbnail / open)
   created_at?: string;
 }
 export interface ArtifactFull extends ArtifactMeta {

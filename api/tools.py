@@ -77,6 +77,11 @@ TOOLS_DOC = (
     '/ params: { "query": "検索したいこと" }\n'
     '- web_read: 指定URLのページ本文を読み取る（記事や資料の要約に使う） '
     '/ params: { "url": "https://example.com/article" }\n'
+    '- generate_image: プロンプトから画像を生成する（HOMEの生成物に保存される） '
+    '/ params: { "prompt": "夕焼けの富士山、油絵風" }\n'
+    '- schedule_add: 毎日きまった時刻に指示を自動実行する定期タスクを登録する '
+    '/ params: { "instruction": "AIニュースを検索してメールで送る", "time": "07:00" }\n'
+    '- schedule_list: 登録済みの定期実行を一覧する / params: { }\n'
     '- notion_add: Notionのページ/データベースにメモ（新規ページ）を追記する '
     '/ params: { "title": "メモの見出し", "content": "本文" }\n'
     '- create_automation: ノーコード自動化フロー（Zapier風）を作る。stepsのtypeは '
@@ -547,6 +552,55 @@ def _do_web_read(params: dict) -> str:
     return f"【{title}】\n{res.get('text', '')}"
 
 
+def _do_generate_image(params: dict) -> str:
+    """プロンプトから画像を生成して保存（HOMEの生成物で閲覧）。"""
+    prompt = (params.get("prompt") or "").strip()
+    if not prompt:
+        return "画像の指示(prompt)が空です。"
+    try:
+        import imagegen
+        res = imagegen.generate(prompt, params.get("width") or 1024, params.get("height") or 1024)
+    except Exception as e:
+        return f"画像生成に失敗しました：{e}"
+    if not res.get("ok"):
+        return f"画像を生成できませんでした：{res.get('error')}"
+    url = res.get("url")
+    try:
+        import artifacts
+        artifacts.create("image", prompt[:60], url, "image/url")
+    except Exception:
+        pass
+    return f"画像を生成しました：{url}（HOMEの『生成物』からも見られます）"
+
+
+def _do_schedule_add(params: dict) -> str:
+    """毎日 指定時刻に指示を自動実行する定期タスクを登録する。"""
+    instruction = (params.get("instruction") or "").strip()
+    time = (params.get("time") or "08:00").strip()
+    if not instruction:
+        return "定期実行する指示(instruction)が空です。"
+    try:
+        import scheduler
+        s = scheduler.add(instruction, time)
+    except Exception as e:
+        return f"定期実行の登録に失敗しました：{e}"
+    if isinstance(s, dict) and s.get("error"):
+        return f"定期実行の登録に失敗しました：{s['error']}"
+    return f"毎日 {s.get('time')} に「{instruction}」を実行する定期タスクを登録しました。"
+
+
+def _do_schedule_list(_params: dict) -> str:
+    """登録済みの定期実行を一覧する。"""
+    try:
+        import scheduler
+        items = scheduler.list_schedules(100)
+    except Exception as e:
+        return f"定期実行の取得に失敗しました：{e}"
+    if not items:
+        return "登録された定期実行はありません。"
+    return "定期実行：\n" + "\n".join(f"・毎日 {s.get('time')} — {s.get('instruction')}" for s in items[:15])
+
+
 def _notion_blocks(content: str) -> list:
     """本文を Notion の paragraph ブロック配列に変換する（行=段落）。"""
     blocks = []
@@ -694,6 +748,9 @@ _DISPATCH = {
     "email_inbox": _do_email_inbox,
     "web_search": _do_web_search,
     "web_read": _do_web_read,
+    "generate_image": _do_generate_image,
+    "schedule_add": _do_schedule_add,
+    "schedule_list": _do_schedule_list,
     "notion_add": _do_notion_add,
     "create_automation": _do_create_automation,
     "run_automation": _do_run_automation,

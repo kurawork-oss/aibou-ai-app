@@ -18,6 +18,7 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type ClipboardEvent,
   type KeyboardEvent,
 } from "react";
 import type { CoreState } from "./CoreOrb";
@@ -399,10 +400,9 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
     }
   }, [micSupported, listening, startMic, stopMic]);
 
-  const onPickImage = useCallback((e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = ""; // allow re-selecting the same file
-    if (!file) return;
+  // Shared: turn a File/Blob (from the picker OR a pasted screenshot) into a
+  // downscaled data-URL attachment for /vision + preview.
+  const processImageFile = useCallback((file: File) => {
     const reader = new FileReader();
     reader.onload = () => {
       const src = String(reader.result || "");
@@ -434,6 +434,24 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
     };
     reader.readAsDataURL(file);
   }, []);
+
+  const onPickImage = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file
+    if (file) processImageFile(file);
+  }, [processImageFile]);
+
+  // Paste a screenshot (Ctrl/Cmd+V) directly into the composer.
+  const onPasteImage = useCallback((e: ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const it of Array.from(items)) {
+      if (it.type.startsWith("image/")) {
+        const file = it.getAsFile();
+        if (file) { e.preventDefault(); processImageFile(file); break; }
+      }
+    }
+  }, [processImageFile]);
 
   const onKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -542,8 +560,9 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
               e.target.style.height = `${Math.min(e.target.scrollHeight, 128)}px`;
             }}
             onKeyDown={onKeyDown}
+            onPaste={onPasteImage}
             rows={1}
-            placeholder={listening ? "聞き取り中…" : "THE FORGE OS にメッセージ…"}
+            placeholder={listening ? "聞き取り中…" : "THE FORGE OS にメッセージ… (スクショはCtrl+Vで貼付)"}
             className="max-h-32 min-h-[40px] flex-1 resize-none bg-transparent px-2 py-2 text-sm text-fg-strong placeholder:text-muted focus:outline-none"
             style={{ scrollbarWidth: "none" }}
           />

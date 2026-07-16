@@ -451,7 +451,7 @@ test("ME: consultation send fails gracefully offline", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
   await goMode(page, "ME");
-  await page.getByPlaceholder("人生でも、お金でも、なんでも相談してください…").fill("お金の相談をしたい");
+  await page.getByPlaceholder(/なんでも相談/).fill("お金の相談をしたい");
   await page.keyboard.press("Enter");
   await expect(page.getByText("お金の相談をしたい")).toBeVisible({ timeout: 5_000 });
   await expect(page.locator("text=⚠").first()).toBeVisible({ timeout: 8_000 });
@@ -591,6 +591,21 @@ test("HOME agent console renders with action suggestions", async ({ page }) => {
   await expect(page.getByText("AGENT CONSOLE · 手足となって動く")).toBeVisible({ timeout: 5_000 });
   // Suggestion chips are visible (they drive the agent when connected)
   await expect(page.getByText("今の状況を整理して報告して")).toBeVisible();
+});
+
+/* ── Attachments: screenshot paste + file attach (ui-r26) ── */
+test("CHAT composer hints screenshot paste", async ({ page }) => {
+  await page.goto("/");
+  await enterApp(page);
+  // Default view is CHAT; its composer placeholder now mentions Ctrl+V paste.
+  await expect(page.getByPlaceholder(/Ctrl\+V/)).toBeVisible({ timeout: 5_000 });
+});
+
+test("HOME agent console has a file-attach button", async ({ page }) => {
+  await page.goto("/");
+  await enterApp(page);
+  await goMode(page, "HOME");
+  await expect(page.getByTitle("ファイルを添付（PDF/テキスト）")).toBeVisible({ timeout: 5_000 });
 });
 
 /* ── Fullscreen (focus) mode for any view ── */

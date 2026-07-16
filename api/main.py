@@ -23,7 +23,7 @@ import sys
 from contextlib import asynccontextmanager
 from typing import List, Optional
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, File, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from pydantic import BaseModel, Field
@@ -36,6 +36,7 @@ import automations
 import config
 import code_agent
 import evolve
+import fileread
 import forge
 import gh
 import gservice
@@ -46,23 +47,41 @@ import llm
 import migrate
 import notify
 import proactive
+import scheduler
 import studio
 import tasks as tasks_module
 import tools
 import vault
 from memory_store import mem_add, mem_recall, mem_recent
 
+async def _scheduler_loop():
+    """常駐ループ：60秒ごとに定期実行(scheduler.tick)を確認する（best-effort）。
+    サーバーがスリープする無料プランでは起きている間のみ動く（外部cronは /scheduler/tick）。"""
+    while True:
+        try:
+            await asyncio.sleep(60)
+            await asyncio.get_event_loop().run_in_executor(None, scheduler.tick)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:  # pragma: no cover
+            print(f"[scheduler] loop error: {e}")
+
+
 @asynccontextmanager
 async def _lifespan(_app: "FastAPI"):
     """起動時：SUPABASE_DB_URL があればテーブルを自動作成（冪等・best-effort）。
-    未設定なら何もしない（in-memory 動作のまま）。絶対に起動を止めない。"""
+    定期実行の常駐ループも起動する。未設定でも何もせず、絶対に起動を止めない。"""
     try:
         if migrate.db_url():
             res = await asyncio.get_event_loop().run_in_executor(None, migrate.run_migrations)
             print(f"[migrate] startup: {res}")
     except Exception as e:  # pragma: no cover
         print(f"[migrate] startup error: {e}")
-    yield
+    task = asyncio.ensure_future(_scheduler_loop())
+    try:
+        yield
+    finally:
+        task.cancel()
 
 
 app = FastAPI(
@@ -249,6 +268,11 @@ class AgentActRequest(BaseModel):
 class AgentExecuteRequest(BaseModel):
     tool: str
     params: dict = Field(default_factory=dict)
+
+
+class ScheduleRequest(BaseModel):
+    instruction: str
+    time: str = "08:00"
 
 
 class GithubImportRequest(BaseModel):
@@ -1272,6 +1296,46 @@ async def admin_migrate(_auth: None = Depends(require_auth)):
     """SUPABASE_DB_URL を使って supabase_schema.sql を実行（テーブル自動作成）。"""
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(None, migrate.run_migrations)
+
+
+# ── ファイル読み取り（PDF / テキスト → 本文抽出） ──────────────────────
+
+@app.post("/file/extract")
+async def file_extract(file: UploadFile = File(...), _auth: None = Depends(require_auth)):
+    """アップロードされたファイルからテキストを抽出して返す（PDF/テキスト対応）。"""
+    data = await file.read()
+    name = file.filename or "file"
+    ctype = file.content_type or ""
+    loop = asyncio.get_event_loop()
+    text = await loop.run_in_executor(None, lambda: fileread.extract_text(name, data, ctype))
+    return {"name": name, "chars": len(text), "text": text}
+
+
+# ── 定期実行（スケジューラ） ──────────────────────────────────────────
+
+@app.get("/scheduler")
+async def scheduler_list(_auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    return {"items": await loop.run_in_executor(None, scheduler.list_schedules)}
+
+
+@app.post("/scheduler")
+async def scheduler_add(req: ScheduleRequest, _auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, lambda: scheduler.add(req.instruction, req.time))
+
+
+@app.delete("/scheduler/{schedule_id}")
+async def scheduler_delete(schedule_id: str, _auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, lambda: scheduler.delete(schedule_id))
+
+
+@app.post("/scheduler/tick")
+async def scheduler_tick():
+    """外部cron（無料のcron-job.org等）から叩く実行トリガ。認証不要（副作用は登録済み定期のみ）。"""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, scheduler.tick)
 
 
 # ── Google 連携（OAuth：スプレッドシート / ドキュメント） ──────────────

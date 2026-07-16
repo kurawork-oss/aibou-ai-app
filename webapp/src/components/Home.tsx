@@ -12,7 +12,7 @@
  */
 
 import { AnimatePresence, motion } from "framer-motion";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ClipboardEvent } from "react";
 import {
   homeSummary,
   agendaList,
@@ -25,6 +25,8 @@ import {
   artifactsList,
   artifactDownload,
   artifactDelete,
+  fileExtract,
+  vision,
   API_URL,
   type HomeSummary,
   type AgendaEvent,
@@ -234,6 +236,9 @@ const TOOL_LABELS: Record<string, string> = {
   email_inbox: "受信メールを確認",
   web_search: "Webを検索",
   web_read: "ページを読む",
+  generate_image: "画像を生成",
+  schedule_add: "定期実行を登録",
+  schedule_list: "定期実行を確認",
   remember: "記憶する",
   recall: "記憶を思い出す",
   enqueue_income: "副業ジョブを投入",
@@ -251,9 +256,9 @@ type Step =
   | { kind: "error"; detail: string };
 
 const SUGGESTIONS = [
-  "今日のおすすめの動き方を教えて",
   "AIの最新ニュースを検索して要約して",
-  "明日15時に歯医者の予定を入れて",
+  "夕焼けの富士山の絵を描いて",
+  "毎朝7時にニュースをメールで送って",
   "今の状況を整理して報告して",
 ];
 
@@ -360,6 +365,57 @@ function AgentConsole({
   };
 
   const stop = () => { cancelRef.current?.(); setBusy(false); };
+
+  // Attach: pasted screenshot → describe via vision; file → extract text. The
+  // result is appended to the composer so the agent can act on it.
+  const [attaching, setAttaching] = useState(false);
+  const fileRef = useRef<HTMLInputElement | null>(null);
+
+  const describePastedImage = useCallback(async (file: File) => {
+    setAttaching(true);
+    try {
+      const dataUrl: string = await new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(String(r.result || ""));
+        r.onerror = reject;
+        r.readAsDataURL(file);
+      });
+      const comma = dataUrl.indexOf(",");
+      const base64 = comma >= 0 ? dataUrl.slice(comma + 1) : "";
+      const desc = await vision({ prompt: "この画像（スクリーンショット）の内容を簡潔に説明して。", imageBase64: base64, mime: file.type || "image/png" });
+      setInput((p) => `${p}${p ? "\n" : ""}【添付画像の内容】${desc}\n`);
+    } catch {
+      /* ignore */
+    } finally {
+      setAttaching(false);
+    }
+  }, []);
+
+  const onPasteImage = (e: ClipboardEvent<HTMLInputElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const it of Array.from(items)) {
+      if (it.type.startsWith("image/")) {
+        const f = it.getAsFile();
+        if (f) { e.preventDefault(); void describePastedImage(f); break; }
+      }
+    }
+  };
+
+  const onPickFile = async (e: ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    setAttaching(true);
+    try {
+      const { name, text } = await fileExtract(f);
+      setInput((p) => `${p}${p ? "\n" : ""}【添付ファイル: ${name}】\n${text.slice(0, 4000)}\n`);
+    } catch {
+      /* ignore */
+    } finally {
+      setAttaching(false);
+    }
+  };
 
   return (
     <div className="glass-silver relative flex h-full min-h-[16rem] flex-col overflow-hidden p-0">
@@ -470,11 +526,22 @@ function AgentConsole({
 
         {/* input */}
         <div className="mt-2 flex gap-2">
+          <input ref={fileRef} type="file" accept=".pdf,.txt,.md,.csv,.json,image/*" onChange={onPickFile} className="hidden" />
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            disabled={offline || busy || attaching}
+            title="ファイルを添付（PDF/テキスト）"
+            className="shrink-0 rounded-forge border border-panel px-2.5 text-[13px] text-muted transition hover:text-fg-strong disabled:opacity-40"
+          >
+            {attaching ? "…" : "📎"}
+          </button>
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && run(input)}
-            placeholder={offline ? "バックエンド接続後に使えます" : "例：明日15時に歯医者、牛乳を買うタスクも追加して"}
+            onPaste={onPasteImage}
+            placeholder={offline ? "バックエンド接続後に使えます" : "指示… (📎で資料添付・スクショはCtrl+Vで貼付)"}
             disabled={offline || busy}
             className="min-w-0 flex-1 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2 text-sm text-fg-strong placeholder:text-muted focus:border-[var(--line)] focus:outline-none disabled:opacity-50"
           />
@@ -630,28 +697,40 @@ function ArtifactsPanel({ arts, onChange }: { arts: ArtifactMeta[]; onChange: ()
       <div className="mb-1.5 text-[10px] tracking-[0.2em] text-muted label-mono">生成物 — ARTIFACTS</div>
       {arts.length === 0 ? (
         <p className="text-[11px] leading-relaxed text-muted">
-          エージェントに「◯◯の表を作って」「◯◯をドキュメントにまとめて」と頼むと、資料がここに生成されダウンロードできます。
+          エージェントに「◯◯の表を作って」「◯◯の絵を描いて」と頼むと、資料や画像がここに生成されます。
         </p>
       ) : (
         <div className="flex flex-col gap-1.5">
           {arts.slice(0, 6).map((a) => (
             <div key={a.id} className="flex items-center gap-2 rounded-forge border border-panel p-2">
-              <span className="text-[14px] leading-none text-[var(--accent)]">{a.kind === "spreadsheet" ? "▦" : "▤"}</span>
+              {a.kind === "image" && a.url ? (
+                <a href={a.url} target="_blank" rel="noopener noreferrer" className="block h-9 w-9 shrink-0 overflow-hidden rounded border border-panel">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={a.url} alt={a.title} className="h-full w-full object-cover" />
+                </a>
+              ) : (
+                <span className="text-[14px] leading-none text-[var(--accent)]">{a.kind === "spreadsheet" ? "▦" : "▤"}</span>
+              )}
               <div className="min-w-0 flex-1">
                 <div className="truncate text-[12px] text-fg">{a.title}</div>
                 <div className="text-[9px] tracking-[0.08em] text-muted label-mono">
-                  {a.kind === "spreadsheet" ? "CSV" : "MARKDOWN"} · {fmtSize(a.size)}
+                  {a.kind === "image" ? "IMAGE" : a.kind === "spreadsheet" ? "CSV" : "MARKDOWN"} · {fmtSize(a.size)}
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => void download(a)}
-                disabled={busy === a.id}
-                title="ダウンロード"
-                className="shrink-0 rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] px-2 py-1 text-[11px] text-fg-strong disabled:opacity-40"
-              >
-                ⭳
-              </button>
+              {a.kind === "image" && a.url ? (
+                <a href={a.url} target="_blank" rel="noopener noreferrer" title="開く"
+                  className="shrink-0 rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] px-2 py-1 text-[10px] text-fg-strong label-mono">開く</a>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void download(a)}
+                  disabled={busy === a.id}
+                  title="ダウンロード"
+                  className="shrink-0 rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] px-2 py-1 text-[11px] text-fg-strong disabled:opacity-40"
+                >
+                  ⭳
+                </button>
+              )}
               <button type="button" onClick={() => void remove(a)} disabled={busy === a.id} className="shrink-0 text-[10px] text-[#ff8888]">✕</button>
             </div>
           ))}

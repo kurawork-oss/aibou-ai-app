@@ -66,17 +66,22 @@ def _size(content: str) -> int:
 
 
 def _meta(art: dict) -> dict:
-    """一覧用のメタデータ（content は含めない・size と preview のみ）。"""
+    """一覧用のメタデータ（content は含めない・size と preview のみ）。
+    画像(kind=image)は content がURLなので、サムネイル用に url を含める。"""
     content = art.get("content") or ""
-    return {
+    kind = art.get("kind")
+    meta = {
         "id": art.get("id"),
-        "kind": art.get("kind"),
+        "kind": kind,
         "title": art.get("title"),
         "mime": art.get("mime"),
         "size": _size(content),
         "preview": content[:140],
         "created_at": art.get("created_at"),
     }
+    if kind == "image":
+        meta["url"] = content
+    return meta
 
 
 def _with_meta(row: dict) -> dict:
