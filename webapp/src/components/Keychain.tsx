@@ -20,6 +20,10 @@ const LS_VAULT = "forge_vault_v1";
 /** よく使うキー（プリセット）。ここに無いものは「カスタム」で追加可能。 */
 const KNOWN_KEYS: { name: string; label: string; hint: string }[] = [
   { name: "GEMINI_API_KEY", label: "Gemini API Key", hint: "コアAI（必須） · Google AI Studioで取得" },
+  { name: "HUGGINGFACE_TOKEN", label: "HuggingFace Token", hint: "無料の代替AI（学習されない）" },
+  { name: "GITHUB_TOKEN", label: "GitHub Token", hint: "CODEモードのリポジトリ連携" },
+  { name: "NOTION_TOKEN", label: "Notion Token", hint: "エージェントがNotionにメモを追記" },
+  { name: "NOTION_PARENT_ID", label: "Notion 追記先ID", hint: "メモを追加するページ/DBのID" },
   { name: "OPENAI_API_KEY", label: "OpenAI API Key", hint: "任意 · GPT系を使う場合" },
   { name: "LINE_NOTIFY_TOKEN", label: "LINE Notify Token", hint: "完了/失敗をLINEに通知" },
   { name: "DISCORD_WEBHOOK", label: "Discord Webhook", hint: "Discordに通知" },

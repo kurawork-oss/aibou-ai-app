@@ -117,6 +117,38 @@ def test_tool_notify_logs_internally_when_no_channel(monkeypatch):
     assert "通知" in r
 
 
+# ── 新ツール: Notion / 内部自動操作 ───────────────────────────────────
+def test_tool_notion_add_without_token(monkeypatch):
+    import keychain
+    monkeypatch.setattr(keychain, "get_key", lambda name: "")
+    r = tools.execute_tool("notion_add", {"title": "メモ", "content": "本文"})
+    assert "NOTION_TOKEN" in r
+
+
+def test_tool_create_automation_then_run():
+    r = tools.execute_tool("create_automation", {
+        "name": "通知フローZZ",
+        "steps": [{"type": "notify", "params": {"message": "hi"}}],
+    })
+    assert "通知フローZZ" in r
+    r2 = tools.execute_tool("run_automation", {"name": "通知フローZZ"})
+    assert "通知フローZZ" in r2
+
+
+def test_tool_run_automation_not_found():
+    assert "見つかりません" in tools.execute_tool("run_automation", {"name": "存在しないフロー___"})
+
+
+def test_tool_create_automation_requires_name():
+    assert "空" in tools.execute_tool("create_automation", {"name": "", "steps": []})
+
+
+def test_tool_create_mission():
+    # Gemini 無し → 単一ステップに縮退（ネットワークなし）
+    r = tools.execute_tool("create_mission", {"objective": "ブログを毎週書く"})
+    assert "ブログを毎週書く" in r
+
+
 # ── エンドポイント ───────────────────────────────────────────────────
 def test_agent_act_without_provider_streams_error():
     r = client.post("/agent/act", json={"instruction": "タスク追加して"})

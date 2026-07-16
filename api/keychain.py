@@ -88,6 +88,8 @@ KNOWN_KEYS: List[Dict[str, str]] = [
     {"name": "DISCORD_WEBHOOK", "label": "Discord Webhook", "hint": "ジョブ結果の通知"},
     {"name": "SLACK_WEBHOOK", "label": "Slack Webhook", "hint": "ジョブ結果の通知"},
     {"name": "OPENAI_API_KEY", "label": "OpenAI API Key", "hint": "代替の生成エンジン（任意）"},
+    {"name": "NOTION_TOKEN", "label": "Notion Token", "hint": "エージェントがメモを追記（内部インテグレーション）"},
+    {"name": "NOTION_PARENT_ID", "label": "Notion 追記先ID", "hint": "メモを追加するページ or データベースのID"},
     {"name": "LEONARDO_API_KEY", "label": "Leonardo.ai Key", "hint": "高品質画像生成（任意）"},
     {"name": "YOUTUBE_API_KEY", "label": "YouTube Data API", "hint": "動画自動投稿（任意）"},
     {"name": "NOTE_TOKEN", "label": "note Token", "hint": "記事自動下書き（任意）"},

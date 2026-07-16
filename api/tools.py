@@ -54,6 +54,21 @@ TOOLS_DOC = (
     '/ params: { "title": "予定名", "date": "2026-07-17", "time": "15:00" }\n'
     '- list_state: 今のタスク・予定・副業ジョブ・未読通知の件数と概要を取得する（状況把握に使う） '
     "/ params: { }\n"
+    '- create_document: Markdownのドキュメントを生成してAibou内に保存（ダウンロード可）。'
+    'contentには完成した本文を自分で書いて渡す '
+    '/ params: { "title": "見出し", "content": "Markdown本文" }\n'
+    '- create_spreadsheet: 表データからCSVスプレッドシートを生成して保存（ダウンロード可）。'
+    'rowsは1行目を見出しにした二次元配列 '
+    '/ params: { "title": "表の名前", "rows": [["名前","金額"],["家賃","80000"]] }\n'
+    '- notion_add: Notionのページ/データベースにメモ（新規ページ）を追記する '
+    '/ params: { "title": "メモの見出し", "content": "本文" }\n'
+    '- create_automation: ノーコード自動化フロー（Zapier風）を作る。stepsのtypeは '
+    'ai_generate / notify / create_task のみ '
+    '/ params: { "name": "フロー名", "steps": [{"type":"ai_generate","params":{"prompt":"..."}}] }\n'
+    '- run_automation: 既存の自動化フローを名前かIDで実行する '
+    '/ params: { "name": "フロー名", "input": "任意の入力" }\n'
+    '- create_mission: オートパイロットのミッション（ゴールを自動でステップ分解）を作る '
+    '/ params: { "objective": "達成したいゴール" }\n'
     '- remember: ユーザーが「覚えておいて」と言った事実・好み・重要情報を長期記憶に保存する '
     '/ params: { "content": "覚える内容（例：私の誕生日は6月12日）" }\n'
     '- recall: 長期記憶から過去の事実・文脈を検索して思い出す '
@@ -334,11 +349,195 @@ def _do_save_note(params: dict) -> str:
         return f"ノート保存に失敗しました（vault_notebooks テーブル未作成の可能性）: {e}"
 
 
+def _rows_to_csv(rows) -> str:
+    """[[...],[...]] や ["a","b"] を正しくクォートした CSV 文字列にする。"""
+    import csv
+    import io
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    for r in rows:
+        if isinstance(r, (list, tuple)):
+            w.writerow(["" if c is None else str(c) for c in r])
+        else:
+            w.writerow([str(r)])
+    return buf.getvalue()
+
+
+def _do_create_document(params: dict) -> str:
+    """Markdown ドキュメントを生成して Aibou 内に保存（ダウンロード可）。"""
+    title = (params.get("title") or "").strip()
+    content = (params.get("content") or "").strip()
+    if not content:
+        return "ドキュメントの本文が空です。"
+    try:
+        import artifacts
+        art = artifacts.create("document", title or "ドキュメント", content, "text/markdown")
+    except Exception as e:
+        return f"ドキュメントの作成に失敗しました：{e}"
+    return f"ドキュメント「{art.get('title')}」を作成しました。HOMEの『生成物』からダウンロードできます。"
+
+
+def _do_create_spreadsheet(params: dict) -> str:
+    """表データ（rows or csv）から CSV を生成して Aibou 内に保存（ダウンロード可）。"""
+    title = (params.get("title") or "").strip()
+    rows = params.get("rows")
+    csv_text = (params.get("csv") or "").strip()
+    if isinstance(rows, list) and rows:
+        csv_text = _rows_to_csv(rows)
+    if not csv_text:
+        return "スプレッドシートの中身（rows か csv）が空です。"
+    try:
+        import artifacts
+        art = artifacts.create("spreadsheet", title or "スプレッドシート", csv_text, "text/csv")
+    except Exception as e:
+        return f"スプレッドシートの作成に失敗しました：{e}"
+    n = csv_text.strip().count("\n") + 1
+    return f"スプレッドシート「{art.get('title')}」を作成しました（{n}行・CSV）。HOMEの『生成物』からダウンロードできます。"
+
+
+def _notion_blocks(content: str) -> list:
+    """本文を Notion の paragraph ブロック配列に変換する（行=段落）。"""
+    blocks = []
+    for line in (content or "").split("\n"):
+        line = line[:1900]
+        blocks.append({
+            "object": "block",
+            "type": "paragraph",
+            "paragraph": {"rich_text": ([{"type": "text", "text": {"content": line}}] if line else [])},
+        })
+        if len(blocks) >= 90:  # children は最大100。余裕をもって打ち切る。
+            break
+    return blocks or [{"object": "block", "type": "paragraph", "paragraph": {"rich_text": []}}]
+
+
+def _notion_result(r, title: str) -> str:
+    if 200 <= r.status_code < 300:
+        return f"Notionに「{title}」を追記しました。"
+    if r.status_code in (401, 403):
+        return ("Notionの認証に失敗しました。トークンが正しいか、対象のページ/データベースを"
+                "インテグレーションに『共有（Connections）』しているか確認してください。")
+    try:
+        msg = (r.json() or {}).get("message", "")
+    except Exception:
+        msg = (r.text or "")[:200]
+    return f"Notionへの追記に失敗しました（{r.status_code}）：{msg}"
+
+
+def _do_notion_add(params: dict) -> str:
+    """Notion のページ/データベースにメモ（ページ）を追記する。"""
+    title = (params.get("title") or "").strip()
+    content = (params.get("content") or "").strip()
+    if not title and not content:
+        return "Notionに書く内容が空です。"
+    if requests is None:
+        return "requests が無いためNotionに送れません。"
+    import keychain
+    token = (keychain.get_key("NOTION_TOKEN") or "").strip()
+    parent = (params.get("parent") or keychain.get_key("NOTION_PARENT_ID") or "").strip()
+    if not token:
+        return "NOTION_TOKEN が未設定です。KEYCHAIN で設定してください（発行手順は各欄の「?」参照）。"
+    if not parent:
+        return "NOTION_PARENT_ID（追記先のページ or データベースID）が未設定です。KEYCHAIN で設定してください。"
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Notion-Version": "2022-06-28",
+        "Content-Type": "application/json",
+    }
+    children = _notion_blocks(content)
+    title = (title or "メモ")[:200]
+
+    # 1) parent がデータベースなら、タイトル型プロパティ名を調べて1行追加する。
+    try:
+        db = requests.get(f"https://api.notion.com/v1/databases/{parent}", headers=headers, timeout=30)
+        if db.status_code == 200:
+            props = (db.json() or {}).get("properties", {}) or {}
+            title_key = next((k for k, v in props.items() if (v or {}).get("type") == "title"), "Name")
+            body = {
+                "parent": {"database_id": parent},
+                "properties": {title_key: {"title": [{"text": {"content": title}}]}},
+                "children": children,
+            }
+            return _notion_result(requests.post("https://api.notion.com/v1/pages", headers=headers, json=body, timeout=30), title)
+    except Exception:
+        pass
+
+    # 2) それ以外は parent をページとみなし、子ページとして追記する。
+    try:
+        body = {
+            "parent": {"page_id": parent},
+            "properties": {"title": {"title": [{"text": {"content": title}}]}},
+            "children": children,
+        }
+        return _notion_result(requests.post("https://api.notion.com/v1/pages", headers=headers, json=body, timeout=30), title)
+    except Exception as e:
+        return f"Notionへの追記に失敗しました：{e}"
+
+
+def _do_create_automation(params: dict) -> str:
+    """ノーコード自動化フロー（Zapier風）を作成する。steps=[{type,name,params}]。
+    type は ai_generate / notify / create_task。"""
+    name = (params.get("name") or "").strip()
+    if not name:
+        return "自動化フローの名前が空です。"
+    steps = params.get("steps") or []
+    try:
+        import automations
+        flow = automations.create_flow(name, params.get("trigger"), steps)
+    except Exception as e:
+        return f"自動化の作成に失敗しました：{e}"
+    if isinstance(flow, dict) and flow.get("error"):
+        return f"自動化の作成に失敗しました：{flow['error']}"
+    n = len(flow.get("steps") or [])
+    return f"自動化フロー「{name}」を作成しました（{n}ステップ）。BOARDモードから実行・編集できます。"
+
+
+def _do_run_automation(params: dict) -> str:
+    """名前またはIDで自動化フローを実行する。"""
+    key = (params.get("name") or params.get("id") or "").strip()
+    if not key:
+        return "実行する自動化フローの名前かIDが必要です。"
+    try:
+        import automations
+        flows = automations.list_flows(1000) or []
+        target = next((f for f in flows if f.get("id") == key or (f.get("name") or "").lower() == key.lower()), None)
+        if not target:
+            return f"「{key}」という自動化フローは見つかりませんでした。"
+        res = automations.run_flow(target["id"], params.get("input") or "")
+    except Exception as e:
+        return f"自動化の実行に失敗しました：{e}"
+    if isinstance(res, dict) and res.get("error"):
+        return f"自動化の実行に失敗しました：{res['error']}"
+    return f"自動化フロー「{target.get('name')}」を実行しました。"
+
+
+def _do_create_mission(params: dict) -> str:
+    """オートパイロットのミッション（ゴールを自動でステップ分解）を作成する。"""
+    goal = (params.get("objective") or params.get("goal") or "").strip()
+    if not goal:
+        return "ミッションの目標が空です。"
+    try:
+        import autopilot
+        m = autopilot.create_mission(goal)
+    except Exception as e:
+        return f"ミッションの作成に失敗しました：{e}"
+    if isinstance(m, dict) and m.get("error"):
+        return f"ミッションの作成に失敗しました：{m['error']}"
+    n = len(m.get("steps") or [])
+    return f"オートパイロットのミッション「{goal}」を作成しました（{n}ステップに分解）。AUTOモードで進められます。"
+
+
 # ツール名 → 実装関数のディスパッチ表。
 _DISPATCH = {
     "add_task": _do_add_task,
     "add_agenda": _do_add_agenda,
     "list_state": _do_list_state,
+    "create_document": _do_create_document,
+    "create_spreadsheet": _do_create_spreadsheet,
+    "notion_add": _do_notion_add,
+    "create_automation": _do_create_automation,
+    "run_automation": _do_run_automation,
+    "create_mission": _do_create_mission,
     "remember": _do_remember,
     "recall": _do_recall,
     "enqueue_income": _do_enqueue_income,

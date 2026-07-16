@@ -21,11 +21,15 @@ import {
   notificationsList,
   notificationsMarkRead,
   agentActStream,
+  artifactsList,
+  artifactDownload,
+  artifactDelete,
   API_URL,
   type HomeSummary,
   type AgendaEvent,
   type AppNotification,
   type AgentEvent,
+  type ArtifactMeta,
 } from "@/lib/api";
 import type { ChatSettings } from "@/components/Chat";
 
@@ -49,6 +53,7 @@ export default function Home({
   const [summary, setSummary] = useState<HomeSummary | null>(null);
   const [events, setEvents] = useState<AgendaEvent[]>([]);
   const [notes, setNotes] = useState<AppNotification[]>([]);
+  const [arts, setArts] = useState<ArtifactMeta[]>([]);
   const [offline, setOffline] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -61,7 +66,10 @@ export default function Home({
       setOffline(false);
     } catch {
       setOffline(true);
+      return;
     }
+    // Artifacts are optional (older backends may not have the endpoint yet).
+    try { setArts(await artifactsList()); } catch { /* ignore */ }
   }, []);
 
   useEffect(() => { void refresh(); }, [refresh]);
@@ -104,6 +112,7 @@ export default function Home({
         </div>
         <div className="flex flex-col gap-3">
           <NotificationsPanel notes={notes} offline={offline} onRead={async () => { await notificationsMarkRead(); await refresh(); }} />
+          {!offline && <ArtifactsPanel arts={arts} onChange={refresh} />}
           <ConnectCard onNavigate={onNavigate} />
         </div>
       </div>
@@ -210,6 +219,12 @@ const TOOL_LABELS: Record<string, string> = {
   add_task: "タスクを追加",
   add_agenda: "予定を追加",
   list_state: "現在の状況を確認",
+  create_document: "ドキュメントを作成",
+  create_spreadsheet: "スプレッドシートを作成",
+  notion_add: "Notionに追記",
+  create_automation: "自動化フローを作成",
+  run_automation: "自動化を実行",
+  create_mission: "ミッションを作成",
   remember: "記憶する",
   recall: "記憶を思い出す",
   enqueue_income: "副業ジョブを投入",
@@ -503,6 +518,62 @@ function NotificationsPanel({
                 <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-fg">{n.message}</p>
                 {n.channel && <span className="text-[9px] text-muted label-mono">{n.channel}</span>}
               </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Artifacts panel (agent-generated documents / spreadsheets) ──── */
+function fmtSize(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function ArtifactsPanel({ arts, onChange }: { arts: ArtifactMeta[]; onChange: () => void }) {
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const download = async (a: ArtifactMeta) => {
+    setBusy(a.id);
+    try { await artifactDownload(a); } catch { /* ignore */ } finally { setBusy(null); }
+  };
+  const remove = async (a: ArtifactMeta) => {
+    if (!window.confirm(`「${a.title}」を削除しますか？`)) return;
+    setBusy(a.id);
+    try { await artifactDelete(a.id); await onChange(); } catch { /* ignore */ } finally { setBusy(null); }
+  };
+
+  return (
+    <div className="glass-silver p-3">
+      <div className="mb-1.5 text-[10px] tracking-[0.2em] text-muted label-mono">生成物 — ARTIFACTS</div>
+      {arts.length === 0 ? (
+        <p className="text-[11px] leading-relaxed text-muted">
+          エージェントに「◯◯の表を作って」「◯◯をドキュメントにまとめて」と頼むと、資料がここに生成されダウンロードできます。
+        </p>
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          {arts.slice(0, 6).map((a) => (
+            <div key={a.id} className="flex items-center gap-2 rounded-forge border border-panel p-2">
+              <span className="text-[14px] leading-none text-[var(--accent)]">{a.kind === "spreadsheet" ? "▦" : "▤"}</span>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[12px] text-fg">{a.title}</div>
+                <div className="text-[9px] tracking-[0.08em] text-muted label-mono">
+                  {a.kind === "spreadsheet" ? "CSV" : "MARKDOWN"} · {fmtSize(a.size)}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => void download(a)}
+                disabled={busy === a.id}
+                title="ダウンロード"
+                className="shrink-0 rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] px-2 py-1 text-[11px] text-fg-strong disabled:opacity-40"
+              >
+                ⭳
+              </button>
+              <button type="button" onClick={() => void remove(a)} disabled={busy === a.id} className="shrink-0 text-[10px] text-[#ff8888]">✕</button>
             </div>
           ))}
         </div>

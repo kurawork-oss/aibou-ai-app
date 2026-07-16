@@ -208,3 +208,15 @@ CREATE TABLE IF NOT EXISTS notifications (
   created_at timestamptz DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read, created_at DESC);
+
+-- 📄 エージェント成果物（Artifacts）— create_document / create_spreadsheet の保存先。
+-- content は Markdown / CSV などの小さめテキスト。Aibou内でダウンロードできる。
+CREATE TABLE IF NOT EXISTS artifacts (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  kind       text DEFAULT 'document',   -- document | spreadsheet
+  title      text NOT NULL,
+  content    text DEFAULT '',
+  mime       text DEFAULT 'text/markdown',
+  created_at timestamptz DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_artifacts_created ON artifacts(created_at DESC);

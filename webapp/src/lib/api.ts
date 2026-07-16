@@ -1150,6 +1150,58 @@ export async function notificationsMarkRead(): Promise<boolean> {
   return Boolean(data.ok);
 }
 
+/* ---------------- Artifacts (agent-generated documents / spreadsheets) ---------------- */
+export interface ArtifactMeta {
+  id: string;
+  kind: string;       // "document" | "spreadsheet"
+  title: string;
+  mime: string;
+  size: number;
+  preview?: string;
+  created_at?: string;
+}
+export interface ArtifactFull extends ArtifactMeta {
+  content: string;
+}
+
+/** GET /artifacts — metadata list (no content), newest first. */
+export async function artifactsList(): Promise<ArtifactMeta[]> {
+  const res = await fetch(`${requireApiUrl()}/artifacts`, { headers: authHeaders(), cache: "no-store" });
+  if (!res.ok) throw new Error(`Artifacts failed (${res.status})`);
+  const data = (await res.json().catch(() => ({ items: [] }))) as { items?: ArtifactMeta[] };
+  return data.items ?? [];
+}
+
+/** GET /artifacts/{id} — full artifact with content (for download). */
+export async function artifactGet(id: string): Promise<ArtifactFull> {
+  const res = await fetch(`${requireApiUrl()}/artifacts/${id}`, { headers: authHeaders(), cache: "no-store" });
+  if (!res.ok) throw new Error(`Artifact failed (${res.status})`);
+  return (await res.json()) as ArtifactFull;
+}
+
+/** DELETE /artifacts/{id}. */
+export async function artifactDelete(id: string): Promise<boolean> {
+  const res = await fetch(`${requireApiUrl()}/artifacts/${id}`, { method: "DELETE", headers: authHeaders() });
+  const data = (await res.json().catch(() => ({ ok: false }))) as { ok?: boolean };
+  return Boolean(data.ok);
+}
+
+/** Fetch an artifact and trigger a browser download (CSV/Markdown). */
+export async function artifactDownload(meta: ArtifactMeta): Promise<void> {
+  const full = await artifactGet(meta.id);
+  const ext = full.mime === "text/csv" ? "csv" : "md";
+  const safe = (meta.title || "artifact").replace(/[^\p{L}\p{N}_\- ]/gu, "_").slice(0, 60).trim() || "artifact";
+  const blob = new Blob([full.content], { type: `${full.mime || "text/plain"};charset=utf-8` });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${safe}.${ext}`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 /* ---------------- Evolve (self-evolution: instruction → proposal) ---------------- */
 export type EvolveType = "app" | "custom_ai" | "automation" | "answer";
 

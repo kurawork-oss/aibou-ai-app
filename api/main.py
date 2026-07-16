@@ -29,6 +29,7 @@ from pydantic import BaseModel, Field
 
 import agenda
 import agent
+import artifacts
 import autopilot
 import automations
 import config
@@ -1199,6 +1200,31 @@ async def notifications_list(_auth: None = Depends(require_auth)):
 async def notifications_read(_auth: None = Depends(require_auth)):
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(None, notify.mark_all_read)
+
+
+# ── Artifacts（エージェント生成物：ドキュメント / スプレッドシート） ──
+
+@app.get("/artifacts")
+async def artifacts_list(_auth: None = Depends(require_auth)):
+    """生成物のメタデータ一覧（content は含めない・新しい順）。"""
+    loop = asyncio.get_event_loop()
+    return {"items": await loop.run_in_executor(None, artifacts.list_artifacts)}
+
+
+@app.get("/artifacts/{artifact_id}")
+async def artifacts_get(artifact_id: str, _auth: None = Depends(require_auth)):
+    """1件の完全な内容（content 込み）。ダウンロードに使う。"""
+    loop = asyncio.get_event_loop()
+    art = await loop.run_in_executor(None, lambda: artifacts.get(artifact_id))
+    if not art:
+        return JSONResponse(status_code=404, content={"error": "artifact not found"})
+    return art
+
+
+@app.delete("/artifacts/{artifact_id}")
+async def artifacts_delete(artifact_id: str, _auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, lambda: artifacts.delete(artifact_id))
 
 
 # ── Home（コックピット集約サマリー） ──────────────────────────────

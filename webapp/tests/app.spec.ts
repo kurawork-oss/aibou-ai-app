@@ -587,6 +587,22 @@ test("KEYCHAIN: a key's ? button reveals its issuance guide", async ({ page }) =
   await expect(page.getByRole("link", { name: /Google AI Studio/ })).toBeVisible({ timeout: 5_000 });
 });
 
+/* ── Notion key + guide (ui-r23 agent tools) ── */
+test("KEYCHAIN includes a Notion key with its issuance guide", async ({ page }) => {
+  await page.goto("/");
+  await enterApp(page);
+  await page.getByLabel("Settings").click();
+  await page.getByText("KEYCHAIN", { exact: true }).click();
+  await expect(page.getByText("SET ACCESS CODE")).toBeVisible({ timeout: 5_000 });
+  await page.getByPlaceholder("パスコード（4文字以上）").fill("test-pass");
+  await page.getByPlaceholder("確認のためもう一度").fill("test-pass");
+  await page.getByRole("button", { name: "CREATE VAULT" }).click();
+  await expect(page.getByText("オフライン下書き · UNLOCKED")).toBeVisible({ timeout: 5_000 });
+  const notionRow = page.locator("div.rounded-forge").filter({ hasText: "Notion Token" });
+  await notionRow.getByLabel("発行手順").first().click();
+  await expect(page.getByRole("link", { name: /My integrations/ })).toBeVisible({ timeout: 5_000 });
+});
+
 /* ── CODE mode (ui-r14): Claude Code-like coding agent ── */
 test("CODE mode renders start screen with templates", async ({ page }) => {
   await page.goto("/");

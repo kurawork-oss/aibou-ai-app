@@ -63,6 +63,32 @@ export const KEY_GUIDES: Record<string, KeyGuide> = {
     ],
     note: "Contents 権限が無いと push できません。fine-grained（推奨）または classic PAT でも可。",
   },
+  NOTION_TOKEN: {
+    purpose: "エージェントが Notion のページ/DBにメモ（新規ページ）を追記するための連携。",
+    free: true,
+    url: "https://www.notion.so/my-integrations",
+    urlLabel: "Notion › My integrations",
+    steps: [
+      "上のリンクで「New integration（新しいインテグレーション）」を作成",
+      "Type は Internal、対象ワークスペースを選んで送信",
+      "「Internal Integration Secret」（secret_… / ntn_…）をコピー",
+      "この欄に貼り付けて SAVE",
+      "★重要：追記先の Notion ページ/データベースを開き、右上「•••」→「＋接続（Connections）」で今作ったインテグレーションを追加（共有）する",
+    ],
+    note: "共有を忘れると 401/403 で追記できません。次の NOTION 追記先ID も設定してください。",
+  },
+  NOTION_PARENT_ID: {
+    purpose: "メモを追加する先（親）の Notion ページ or データベースのID。",
+    free: true,
+    url: "https://www.notion.so/help/create-integrations-with-the-notion-api",
+    urlLabel: "Notion API ヘルプ",
+    steps: [
+      "追記先にしたい Notion のページ（またはデータベース）を開く",
+      "ブラウザのURL末尾の32桁の英数字がID（例 …so/メモ-1a2b3c4d5e6f7080a1b2c3d4e5f60718）",
+      "その32桁（ハイフンあり/なしどちらでも可）をコピーして貼り付け",
+    ],
+    note: "データベースIDでもページIDでもOK（自動判別）。NOTION_TOKEN のインテグレーションに、その対象を『共有』しておくこと。",
+  },
   OPENAI_API_KEY: {
     purpose: "任意。GPT系モデルを使う場合のみ。",
     url: "https://platform.openai.com/api-keys",
