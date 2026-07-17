@@ -24,7 +24,6 @@ import {
   agentActStream,
   agentExecute,
   artifactsList,
-  artifactDownload,
   artifactDelete,
   fileExtract,
   vision,
@@ -36,6 +35,8 @@ import {
   type ArtifactMeta,
 } from "@/lib/api";
 import type { ChatSettings } from "@/components/Chat";
+import ArtifactViewer from "@/components/ArtifactViewer";
+import Markdown from "@/components/Markdown";
 
 type View = "chat" | "me" | "forge" | "code" | "vault" | "income" | "tasks" | "studio" | "autopilot" | "board" | "archive" | "home";
 
@@ -225,6 +226,8 @@ const TOOL_LABELS: Record<string, string> = {
   list_state: "現在の状況を確認",
   create_document: "ドキュメントを作成",
   create_spreadsheet: "スプレッドシートを作成",
+  create_slides: "スライドを作成",
+  create_google_slides: "Googleスライドを作成",
   google_sheet: "Googleスプレッドシート作成",
   google_doc: "Googleドキュメント作成",
   notion_add: "Notionに追記",
@@ -257,10 +260,10 @@ type Step =
   | { kind: "error"; detail: string };
 
 const SUGGESTIONS = [
+  "新規事業の提案スライドを作って",
   "AIの最新ニュースを検索して要約して",
   "夕焼けの富士山の絵を描いて",
   "毎朝7時にニュースをメールで送って",
-  "今の状況を整理して報告して",
 ];
 
 function summarizeParams(params: Record<string, unknown>): string {
@@ -490,8 +493,8 @@ function AgentConsole({
                 ))}
               </AnimatePresence>
               {answer && (
-                <div className="mt-1 whitespace-pre-wrap rounded-forge border border-panel bg-[rgba(255,255,255,0.02)] p-2.5 text-[12px] leading-relaxed text-fg">
-                  {answer}
+                <div className="mt-1 rounded-forge border border-panel bg-[rgba(255,255,255,0.02)] p-2.5 text-[12px] leading-relaxed text-fg">
+                  <Markdown text={answer} />
                 </div>
               )}
               {pending && (
@@ -680,15 +683,15 @@ function fmtSize(n: number): string {
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
+const ARTIFACT_ICON: Record<string, string> = { spreadsheet: "▦", slides: "▤", document: "▤" };
+const ARTIFACT_KIND_LABEL: Record<string, string> = { image: "IMAGE", spreadsheet: "CSV", slides: "SLIDES", document: "MARKDOWN" };
+
 function ArtifactsPanel({ arts, onChange }: { arts: ArtifactMeta[]; onChange: () => void }) {
   const [busy, setBusy] = useState<string | null>(null);
-  const [lightbox, setLightbox] = useState<string | null>(null);  // artifact id
+  const [lightbox, setLightbox] = useState<string | null>(null);  // image artifact id
+  const [viewing, setViewing] = useState<ArtifactMeta | null>(null); // doc/slides/csv
   const images = arts.filter((a) => a.kind === "image" && a.url);
 
-  const download = async (a: ArtifactMeta) => {
-    setBusy(a.id);
-    try { await artifactDownload(a); } catch { /* ignore */ } finally { setBusy(null); }
-  };
   const remove = async (a: ArtifactMeta) => {
     if (!window.confirm(`「${a.title}」を削除しますか？`)) return;
     setBusy(a.id);
@@ -700,46 +703,42 @@ function ArtifactsPanel({ arts, onChange }: { arts: ArtifactMeta[]; onChange: ()
       <div className="mb-1.5 text-[10px] tracking-[0.2em] text-muted label-mono">生成物 — ARTIFACTS</div>
       {arts.length === 0 ? (
         <p className="text-[11px] leading-relaxed text-muted">
-          エージェントに「◯◯の表を作って」「◯◯の絵を描いて」と頼むと、資料や画像がここに生成されます。
+          エージェントに「◯◯のスライドを作って」「◯◯の表を作って」「◯◯の絵を描いて」と頼むと、資料や画像がここに生成されます（クリックで表示・PDF化）。
         </p>
       ) : (
         <div className="flex flex-col gap-1.5">
-          {arts.slice(0, 6).map((a) => (
-            <div key={a.id} className="flex items-center gap-2 rounded-forge border border-panel p-2">
-              {a.kind === "image" && a.url ? (
-                <button type="button" onClick={() => setLightbox(a.id)} title="全画面で見る"
-                  className="block h-9 w-9 shrink-0 overflow-hidden rounded border border-panel transition hover:shadow-glow">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={a.url} alt={a.title} className="h-full w-full object-cover" />
+          {arts.slice(0, 6).map((a) => {
+            const isImage = a.kind === "image" && a.url;
+            const open = () => (isImage ? setLightbox(a.id) : setViewing(a));
+            return (
+              <div key={a.id} className="flex items-center gap-2 rounded-forge border border-panel p-2 transition hover:border-[var(--line)]">
+                {isImage ? (
+                  <button type="button" onClick={() => setLightbox(a.id)} title="全画面で見る"
+                    className="block h-9 w-9 shrink-0 overflow-hidden rounded border border-panel transition hover:shadow-glow">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={a.url} alt={a.title} className="h-full w-full object-cover" />
+                  </button>
+                ) : (
+                  <span className="text-[14px] leading-none text-[var(--accent)]">{ARTIFACT_ICON[a.kind] ?? "▤"}</span>
+                )}
+                <button type="button" onClick={open} className="min-w-0 flex-1 text-left" title="開く">
+                  <div className="truncate text-[12px] text-fg">{a.title}</div>
+                  <div className="text-[9px] tracking-[0.08em] text-muted label-mono">
+                    {ARTIFACT_KIND_LABEL[a.kind] ?? a.kind.toUpperCase()}{a.size ? ` · ${fmtSize(a.size)}` : ""}
+                  </div>
                 </button>
-              ) : (
-                <span className="text-[14px] leading-none text-[var(--accent)]">{a.kind === "spreadsheet" ? "▦" : "▤"}</span>
-              )}
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[12px] text-fg">{a.title}</div>
-                <div className="text-[9px] tracking-[0.08em] text-muted label-mono">
-                  {a.kind === "image" ? "IMAGE" : a.kind === "spreadsheet" ? "CSV" : "MARKDOWN"} · {fmtSize(a.size)}
-                </div>
-              </div>
-              {a.kind === "image" && a.url ? (
-                <button type="button" onClick={() => setLightbox(a.id)} title="全画面で見る"
+                <button type="button" onClick={open}
                   className="shrink-0 rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] px-2 py-1 text-[10px] text-fg-strong label-mono">開く</button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => void download(a)}
-                  disabled={busy === a.id}
-                  title="ダウンロード"
-                  className="shrink-0 rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] px-2 py-1 text-[11px] text-fg-strong disabled:opacity-40"
-                >
-                  ⭳
-                </button>
-              )}
-              <button type="button" onClick={() => void remove(a)} disabled={busy === a.id} className="shrink-0 text-[10px] text-[#ff8888]">✕</button>
-            </div>
-          ))}
+                <button type="button" onClick={() => void remove(a)} disabled={busy === a.id} className="shrink-0 text-[10px] text-[#ff8888]">✕</button>
+              </div>
+            );
+          })}
         </div>
       )}
+
+      <AnimatePresence>
+        {viewing && <ArtifactViewer meta={viewing} onClose={() => setViewing(null)} />}
+      </AnimatePresence>
 
       <AnimatePresence>
         {lightbox && (

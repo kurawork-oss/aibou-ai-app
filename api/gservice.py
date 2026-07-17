@@ -27,6 +27,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive.file",
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/documents",
+    "https://www.googleapis.com/auth/presentations",
     "https://www.googleapis.com/auth/calendar.events",
 ]
 
@@ -182,6 +183,62 @@ def create_doc(title: str, content: str) -> dict:
                 json={"requests": [{"insertText": {"location": {"index": 1}, "text": content}}]},
                 timeout=30)
         return {"ok": True, "url": f"https://docs.google.com/document/d/{did}/edit", "id": did}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+# ── Google Slides ────────────────────────────────────────────────────
+def create_presentation(title: str, slides) -> dict:
+    """Google スライドを作成する。slides=[{title, bullets:[...]}]。{ok, url, id}。"""
+    tok = _access_token()
+    if not tok:
+        return _err_not_connected()
+    headers = {"Authorization": f"Bearer {tok}", "Content-Type": "application/json"}
+    slides = slides or []
+    try:
+        # 1) 空のプレゼンを作成（既定で空スライドが1枚できる）。
+        r = requests.post("https://slides.googleapis.com/v1/presentations",
+                          headers=headers, json={"title": title or "無題のプレゼン"}, timeout=30)
+        d = r.json() if r.content else {}
+        pid = d.get("presentationId")
+        if not pid:
+            return {"ok": False, "error": (d.get("error") or {}).get("message") or "作成に失敗しました"}
+        first_slide_id = (d.get("slides") or [{}])[0].get("objectId")
+
+        # 2) スライドを TITLE_AND_BODY レイアウトで追加し、テキストを差し込む。
+        reqs = []
+        for i, s in enumerate(slides[:30]):
+            sid, tid, bid = f"s_{i}", f"t_{i}", f"b_{i}"
+            reqs.append({
+                "createSlide": {
+                    "objectId": sid,
+                    "slideLayoutReference": {"predefinedLayout": "TITLE_AND_BODY"},
+                    "placeholderIdMappings": [
+                        {"layoutPlaceholder": {"type": "TITLE"}, "objectId": tid},
+                        {"layoutPlaceholder": {"type": "BODY"}, "objectId": bid},
+                    ],
+                }
+            })
+            stitle = str((s or {}).get("title") or "")[:150]
+            if stitle:
+                reqs.append({"insertText": {"objectId": tid, "text": stitle}})
+            bullets = (s or {}).get("bullets") or []
+            body = "\n".join(str(b) for b in bullets if str(b).strip())
+            if body:
+                reqs.append({"insertText": {"objectId": bid, "text": body}})
+                reqs.append({"createParagraphBullets": {
+                    "objectId": bid,
+                    "textRange": {"type": "ALL"},
+                    "bulletPreset": "BULLET_DISC_CIRCLE_SQUARE",
+                }})
+        # 既定の空スライドを削除（ユーザーのスライドが1枚以上あるときのみ）。
+        if first_slide_id and reqs:
+            reqs.append({"deleteObject": {"objectId": first_slide_id}})
+
+        if reqs:
+            requests.post(f"https://slides.googleapis.com/v1/presentations/{pid}:batchUpdate",
+                          headers=headers, json={"requests": reqs}, timeout=45)
+        return {"ok": True, "url": f"https://docs.google.com/presentation/d/{pid}/edit", "id": pid}
     except Exception as e:
         return {"ok": False, "error": str(e)}
 

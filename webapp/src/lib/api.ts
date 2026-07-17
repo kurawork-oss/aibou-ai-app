@@ -1374,6 +1374,20 @@ export async function artifactDelete(id: string): Promise<boolean> {
   return Boolean(data.ok);
 }
 
+/* Slide deck (artifact kind="slides", content = JSON of this shape). */
+export interface Slide { title: string; bullets: string[]; notes?: string }
+export interface SlideDeck { title: string; slides: Slide[] }
+
+/** POST /slides/google — convert a deck to Google Slides, returns the URL. */
+export async function slidesToGoogle(title: string, deckSlides: Slide[]): Promise<{ ok: boolean; url?: string; error?: string }> {
+  const res = await fetch(`${requireApiUrl()}/slides/google`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ title, slides: deckSlides }),
+  });
+  return (await res.json().catch(() => ({ ok: false }))) as { ok: boolean; url?: string; error?: string };
+}
+
 /** Fetch an artifact and trigger a browser download (CSV/Markdown). */
 export async function artifactDownload(meta: ArtifactMeta): Promise<void> {
   const full = await artifactGet(meta.id);

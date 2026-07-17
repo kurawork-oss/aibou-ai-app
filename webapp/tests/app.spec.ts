@@ -673,7 +673,7 @@ test("HOME agent console renders with action suggestions", async ({ page }) => {
   await goMode(page, "HOME");
   await expect(page.getByText("AGENT CONSOLE · 手足となって動く")).toBeVisible({ timeout: 5_000 });
   // Suggestion chips are visible (they drive the agent when connected)
-  await expect(page.getByText("今の状況を整理して報告して")).toBeVisible();
+  await expect(page.getByText("新規事業の提案スライドを作って")).toBeVisible();
 });
 
 /* ── Attachments: screenshot paste + file attach (ui-r26) ── */

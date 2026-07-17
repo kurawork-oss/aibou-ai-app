@@ -350,6 +350,11 @@ class BoardSaveRequest(BaseModel):
     edges: list = Field(default_factory=list)
 
 
+class SlidesExportRequest(BaseModel):
+    title: str = ""
+    slides: list = Field(default_factory=list)
+
+
 class BoardCreateRequest(BaseModel):
     name: str = ""
 
@@ -1478,6 +1483,13 @@ async def google_auth_callback(request: Request, code: str = "", error: str = ""
 @app.post("/google/disconnect")
 async def google_disconnect(_auth: None = Depends(require_auth)):
     return gservice.disconnect()
+
+
+@app.post("/slides/google")
+async def slides_to_google(req: SlidesExportRequest, _auth: None = Depends(require_auth)):
+    """スライド構成（title + slides[]）を Google スライドに変換して URL を返す。"""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, lambda: gservice.create_presentation(req.title, req.slides))
 
 
 # ── Home（コックピット集約サマリー） ──────────────────────────────

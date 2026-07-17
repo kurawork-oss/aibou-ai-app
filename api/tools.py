@@ -66,6 +66,12 @@ TOOLS_DOC = (
     '- create_spreadsheet: 表データからCSVスプレッドシートを生成して保存（ダウンロード可）。'
     'rowsは1行目を見出しにした二次元配列 '
     '/ params: { "title": "表の名前", "rows": [["名前","金額"],["家賃","80000"]] }\n'
+    '- create_slides: スライド資料（プレゼン）を作る。topicを渡すと内容も自動生成、'
+    'slides配列で直接指定も可。ビジュアル表示・PDF/Googleスライド化できる '
+    '/ params: { "topic": "新規事業の提案", "n": 6 }  または '
+    '{ "title": "提案", "slides": [{"title":"背景","bullets":["要点1","要点2"]}] }\n'
+    '- create_google_slides: 上記をGoogleスライドとして作成する（Google連携が必要） '
+    '/ params: { "topic": "新規事業の提案" }\n'
     '- google_sheet: Googleスプレッドシートを新規作成してrowsを書き込む（Google連携が必要）。'
     'クラウドで共有・編集したい表に使う '
     '/ params: { "title": "表の名前", "rows": [["名前","金額"],["家賃","80000"]] }\n'
@@ -463,6 +469,57 @@ def _do_create_spreadsheet(params: dict) -> str:
     return f"スプレッドシート「{art.get('title')}」を作成しました（{n}行・CSV）。HOMEの『生成物』からダウンロードできます。"
 
 
+def _do_create_slides(params: dict) -> str:
+    """スライド資料（プレゼン）を生成して保存する。topic か slides(配列) を受ける。"""
+    import json as _json
+    title = (params.get("title") or "").strip()
+    slides_in = params.get("slides")
+    topic = (params.get("topic") or title).strip()
+    try:
+        import slides as slides_mod
+        if isinstance(slides_in, list) and slides_in:
+            deck = slides_mod._normalize({"title": title or topic or "スライド", "slides": slides_in}, title or topic or "スライド")
+        elif topic:
+            deck = slides_mod.generate_deck(topic, params.get("n") or 6)
+        else:
+            return "スライドのテーマ(topic)か内容(slides)が必要です。"
+    except Exception as e:
+        return f"スライドの生成に失敗しました：{e}"
+    if isinstance(deck, dict) and deck.get("error"):
+        return f"スライドの生成に失敗しました：{deck['error']}"
+    try:
+        import artifacts
+        artifacts.create("slides", deck.get("title", "スライド"), _json.dumps(deck, ensure_ascii=False), "application/json")
+    except Exception:
+        pass
+    n = len(deck.get("slides") or [])
+    return f"スライド資料「{deck.get('title')}」を作成しました（{n}枚）。HOMEの『生成物』で表示・PDF/Googleスライド化できます。"
+
+
+def _do_create_google_slides(params: dict) -> str:
+    """Googleスライドを作成する。topic からの生成、または slides(配列) 直接指定。"""
+    title = (params.get("title") or "").strip()
+    slides_in = params.get("slides")
+    topic = (params.get("topic") or title).strip()
+    try:
+        import slides as slides_mod
+        if isinstance(slides_in, list) and slides_in:
+            deck = slides_mod._normalize({"title": title or topic, "slides": slides_in}, title or topic or "スライド")
+        elif topic:
+            deck = slides_mod.generate_deck(topic, params.get("n") or 6)
+        else:
+            return "スライドのテーマ(topic)か内容(slides)が必要です。"
+        if deck.get("error"):
+            return f"スライドの生成に失敗しました：{deck['error']}"
+        import gservice
+        res = gservice.create_presentation(deck.get("title", "無題"), deck.get("slides") or [])
+    except Exception as e:
+        return f"Googleスライドの作成に失敗しました：{e}"
+    if not res.get("ok"):
+        return f"Googleスライドを作成できませんでした：{res.get('error')}"
+    return f"Googleスライド「{deck.get('title')}」を作成しました：{res.get('url')}"
+
+
 def _do_google_sheet(params: dict) -> str:
     """Google スプレッドシートを作成して rows を書き込み、共有URLを返す。"""
     title = (params.get("title") or "").strip()
@@ -801,6 +858,8 @@ _DISPATCH = {
     "list_state": _do_list_state,
     "create_document": _do_create_document,
     "create_spreadsheet": _do_create_spreadsheet,
+    "create_slides": _do_create_slides,
+    "create_google_slides": _do_create_google_slides,
     "google_sheet": _do_google_sheet,
     "google_doc": _do_google_doc,
     "calendar_add": _do_calendar_add,
