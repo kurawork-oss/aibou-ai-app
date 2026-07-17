@@ -506,7 +506,7 @@ export async function agentExecute(tool: string, params: Record<string, unknown>
   return data.result ?? "";
 }
 
-/* ---------------- Whiteboard (Miro-style board) ---------------- */
+/* ---------------- Whiteboard (Miro-style, multi-board) ---------------- */
 export interface BoardNode {
   id: string;
   x: number;
@@ -514,25 +514,70 @@ export interface BoardNode {
   text: string;
   color: string;   // yellow | cyan | green | pink | purple | orange
   w?: number;
+  h?: number;      // 0/undefined = auto height
+  kind?: "sticky" | "text" | "frame";
 }
 export interface BoardEdge { id: string; from: string; to: string }
 export interface BoardData { nodes: BoardNode[]; edges: BoardEdge[] }
+export interface BoardMeta { id: string; name: string; updated_at?: string; count?: number }
 
-/** GET /board — the shared whiteboard. */
-export async function boardGet(): Promise<BoardData> {
-  const res = await fetch(`${requireApiUrl()}/board`, { headers: authHeaders(), cache: "no-store" });
-  if (!res.ok) throw new Error(`Board failed (${res.status})`);
-  const data = (await res.json().catch(() => ({ nodes: [], edges: [] }))) as BoardData;
-  return { nodes: data.nodes ?? [], edges: data.edges ?? [] };
+/** GET /boards — board list (meta only, newest first; creates a default when empty). */
+export async function boardsList(): Promise<BoardMeta[]> {
+  const res = await fetch(`${requireApiUrl()}/boards`, { headers: authHeaders(), cache: "no-store" });
+  if (!res.ok) throw new Error(`Boards failed (${res.status})`);
+  const data = (await res.json().catch(() => ({ items: [] }))) as { items?: BoardMeta[] };
+  return data.items ?? [];
 }
 
-/** POST /board — save the whiteboard (full replace; call debounced). */
-export async function boardSave(data: BoardData): Promise<boolean> {
-  const res = await fetch(`${requireApiUrl()}/board`, {
+/** POST /boards — create a board. */
+export async function boardCreate(name = ""): Promise<BoardMeta> {
+  const res = await fetch(`${requireApiUrl()}/boards`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) throw new Error(`Board create failed (${res.status})`);
+  return (await res.json()) as BoardMeta;
+}
+
+/** GET /boards/{id} — one board with content. */
+export async function boardGetById(id: string): Promise<BoardData & BoardMeta> {
+  const res = await fetch(`${requireApiUrl()}/boards/${id}`, { headers: authHeaders(), cache: "no-store" });
+  if (!res.ok) throw new Error(`Board failed (${res.status})`);
+  const d = (await res.json()) as BoardData & BoardMeta;
+  return { ...d, nodes: d.nodes ?? [], edges: d.edges ?? [] };
+}
+
+/** POST /boards/{id} — save one board (full replace; call debounced). */
+export async function boardSaveById(id: string, data: BoardData): Promise<boolean> {
+  const res = await fetch(`${requireApiUrl()}/boards/${id}`, {
     method: "POST",
     headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(data),
   });
+  return res.ok;
+}
+
+/** PATCH /boards/{id} — rename. */
+export async function boardRename(id: string, name: string): Promise<boolean> {
+  const res = await fetch(`${requireApiUrl()}/boards/${id}`, {
+    method: "PATCH",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ name }),
+  });
+  return res.ok;
+}
+
+/** POST /boards/{id}/duplicate — copy a board. */
+export async function boardDuplicate(id: string): Promise<BoardMeta> {
+  const res = await fetch(`${requireApiUrl()}/boards/${id}/duplicate`, { method: "POST", headers: authHeaders() });
+  if (!res.ok) throw new Error(`Board duplicate failed (${res.status})`);
+  return (await res.json()) as BoardMeta;
+}
+
+/** DELETE /boards/{id}. */
+export async function boardDelete(id: string): Promise<boolean> {
+  const res = await fetch(`${requireApiUrl()}/boards/${id}`, { method: "DELETE", headers: authHeaders() });
   return res.ok;
 }
 

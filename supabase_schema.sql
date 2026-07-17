@@ -33,13 +33,16 @@ CREATE TABLE IF NOT EXISTS vault_notebooks (
   updated_at timestamp DEFAULT now()
 );
 
--- 【Phase 2】Dashboard（Miroボード）の永続化
+-- 【Phase 2】Dashboard（Miroボード）の永続化 — 1行=1ボード（複数ボード対応）
 CREATE TABLE IF NOT EXISTS dashboard_boards (
   id         uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  name       text DEFAULT 'ボード',
   nodes      jsonb DEFAULT '[]'::jsonb,
   edges      jsonb DEFAULT '[]'::jsonb,
   updated_at timestamp DEFAULT now()
 );
+-- 既存テーブルへの後方互換アップグレード（自動マイグレーションで反映）
+ALTER TABLE dashboard_boards ADD COLUMN IF NOT EXISTS name text DEFAULT 'ボード';
 
 -- 【Phase 2】App Archive（生成ミニアプリ）の永続化（Streamlit Cloud対応）
 CREATE TABLE IF NOT EXISTS forge_apps (

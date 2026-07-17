@@ -57,6 +57,68 @@ def test_tool_board_add_note():
     assert "付箋" in r and "BOARD" in r
 
 
+# ── 複数ボード ───────────────────────────────────────────────────────
+def test_multi_board_crud():
+    b1 = board.create_board("企画ボード")
+    b2 = board.create_board("開発ボード")
+    metas = board.list_boards()
+    names = [m["name"] for m in metas]
+    assert "企画ボード" in names and "開発ボード" in names
+
+    # 保存はボードごとに独立
+    board.save_board([{"id": "k1", "x": 0, "y": 0, "text": "企画メモ", "color": "cyan"}], [], b1["id"])
+    assert any(n["text"] == "企画メモ" for n in board.get_board(b1["id"])["nodes"])
+    assert not any(n.get("text") == "企画メモ" for n in board.get_board(b2["id"])["nodes"])
+
+    # rename / duplicate / delete
+    board.rename_board(b2["id"], "開発2")
+    assert board.get_board(b2["id"])["name"] == "開発2"
+    dup = board.duplicate_board(b1["id"])
+    assert dup["ok"] and "copy" in dup["name"]
+    assert any(n["text"] == "企画メモ" for n in board.get_board(dup["id"])["nodes"])
+    for bid in (b1["id"], b2["id"], dup["id"]):
+        board.delete_board(bid)
+    assert board.get_board(b1["id"]).get("error")
+
+
+def test_board_get_missing_returns_error():
+    assert board.get_board("nonexistent-id").get("error")
+
+
+def test_node_kind_and_height_sanitized():
+    res = board.save_board(
+        [{"id": "s1", "x": 0, "y": 0, "text": "枠", "color": "cyan", "kind": "frame", "h": 240},
+         {"id": "s2", "x": 0, "y": 0, "text": "?", "color": "cyan", "kind": "invalid-kind"}],
+        [],
+    )
+    kinds = {n["id"]: n["kind"] for n in res["nodes"]}
+    assert kinds["s1"] == "frame" and kinds["s2"] == "sticky"
+    assert next(n for n in res["nodes"] if n["id"] == "s1")["h"] == 240
+
+
+def test_add_note_targets_named_board():
+    b = board.create_board("ターゲット企画")
+    r = tools.execute_tool("board_add_note", {"text": "狙い撃ちメモ", "board": "ターゲット"})
+    assert "ターゲット企画" in r
+    assert any(n["text"] == "狙い撃ちメモ" for n in board.get_board(b["id"])["nodes"])
+    board.delete_board(b["id"])
+
+
+def test_boards_endpoints_roundtrip():
+    r = client.post("/boards", json={"name": "EPボード"})
+    assert r.status_code == 200
+    bid = r.json()["id"]
+    assert any(m["id"] == bid for m in client.get("/boards").json()["items"])
+    assert client.post(f"/boards/{bid}", json={"nodes": [{"id": "e1", "x": 0, "y": 0, "text": "x", "color": "green"}], "edges": []}).status_code == 200
+    assert client.get(f"/boards/{bid}").json()["nodes"][0]["text"] == "x"
+    assert client.patch(f"/boards/{bid}", json={"name": "EP2"}).status_code == 200
+    dup = client.post(f"/boards/{bid}/duplicate")
+    assert dup.status_code == 200 and dup.json()["ok"]
+    client.delete(f"/boards/{dup.json()['id']}")
+    assert client.delete(f"/boards/{bid}").status_code == 200
+    assert client.get(f"/boards/{bid}").status_code == 404
+
+
 def test_tool_complete_task_by_partial_title():
     tasks.create_task("牛乳を買う（テスト）")
     r = tools.execute_tool("complete_task", {"title": "牛乳"})

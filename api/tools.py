@@ -53,8 +53,8 @@ TOOLS_DOC = (
     '- complete_task: タイトル（部分一致）でタスクを探して完了にする '
     '/ params: { "title": "牛乳" }\n'
     '- board_add_note: Miro風ホワイトボード（BOARD）に付箋を追加する。ブレスト・アイデア整理に使う。'
-    'colorは yellow|cyan|green|pink|purple|orange '
-    '/ params: { "text": "付箋の内容", "color": "yellow" }\n'
+    'colorは yellow|cyan|green|pink|purple|orange、boardでボード名も指定可（省略時は最新のボード） '
+    '/ params: { "text": "付箋の内容", "color": "yellow", "board": "企画" }\n'
     '- add_agenda: 予定（カレンダー）を1件追加する。日付は YYYY-MM-DD、時刻は HH:MM。'
     '相対表現（明日・金曜など）は system に記載の今日の日付を基準に自分で計算して埋める '
     '/ params: { "title": "予定名", "date": "2026-07-17", "time": "15:00" }\n'
@@ -314,18 +314,19 @@ def _do_complete_task(params: dict) -> str:
 
 
 def _do_board_add_note(params: dict) -> str:
-    """Miro風ホワイトボード（BOARD）に付箋を追加する。"""
+    """Miro風ホワイトボード（BOARD）に付箋を追加する。board でボード名を指定可。"""
     text = (params.get("text") or "").strip()
     if not text:
         return "付箋に書く内容(text)が空です。"
     try:
         import board
-        res = board.add_note(text, params.get("color") or "yellow")
+        res = board.add_note(text, params.get("color") or "yellow", params.get("board") or "")
     except Exception as e:
         return f"付箋の追加に失敗しました：{e}"
     if isinstance(res, dict) and res.get("error"):
         return f"付箋の追加に失敗しました：{res['error']}"
-    return f"ホワイトボードに付箋を追加しました（現在 {res.get('count')}枚）。BOARDモードで確認できます。"
+    where = f"「{res.get('board')}」" if res.get("board") else "ホワイトボード"
+    return f"{where}に付箋を追加しました（現在 {res.get('count')}枚）。BOARDモードで確認できます。"
 
 
 def _do_list_state(_params: dict) -> str:

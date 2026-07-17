@@ -308,6 +308,53 @@ test("BOARD whiteboard: add a sticky, type, and it persists across reload", asyn
   await expect(page.getByText("アイデア：新機能X")).toBeVisible({ timeout: 8_000 });
 });
 
+test("BOARD supports multiple boards (create, switch, isolate, persist)", async ({ page }) => {
+  await page.goto("/");
+  await enterApp(page);
+  await goMode(page, "BOARD");
+  // Default board tab exists
+  await expect(page.getByRole("button", { name: /メインボード/ })).toBeVisible({ timeout: 5_000 });
+
+  // Create a second board (prompt → accept with a name)
+  page.once("dialog", (d) => void d.accept("企画ボード"));
+  await page.getByRole("button", { name: "＋ ボード" }).click();
+  await expect(page.getByRole("button", { name: /企画ボード/ })).toBeVisible({ timeout: 5_000 });
+
+  // Add a sticky on board 2
+  await page.getByRole("button", { name: "＋ 付箋" }).click();
+  const ta = page.getByPlaceholder("メモを書く…");
+  await ta.fill("B2だけのメモ");
+  await page.locator("[data-board-canvas]").click({ position: { x: 10, y: 10 } });
+  await expect(page.getByText("B2だけのメモ")).toBeVisible();
+
+  // Switch to board 1 → the note is NOT there; switch back → it is
+  await page.getByRole("button", { name: /メインボード/ }).click();
+  await expect(page.getByText("B2だけのメモ")).toBeHidden({ timeout: 5_000 });
+  await page.getByRole("button", { name: /企画ボード/ }).click();
+  await expect(page.getByText("B2だけのメモ")).toBeVisible({ timeout: 5_000 });
+
+  // Persists across reload (offline → localStorage multi-board store)
+  await page.waitForTimeout(1200);
+  await page.reload();
+  await enterApp(page);
+  await goMode(page, "BOARD");
+  await expect(page.getByText("B2だけのメモ")).toBeVisible({ timeout: 8_000 });
+  await expect(page.getByRole("button", { name: /メインボード/ })).toBeVisible();
+});
+
+test("BOARD whiteboard undo removes the last change (Ctrl+Z)", async ({ page }) => {
+  await page.goto("/");
+  await enterApp(page);
+  await goMode(page, "BOARD");
+  await page.getByRole("button", { name: "＋ 付箋" }).click();
+  const ta = page.getByPlaceholder("メモを書く…");
+  await ta.fill("取り消される運命のメモ");
+  await page.locator("[data-board-canvas]").click({ position: { x: 10, y: 10 } });
+  await expect(page.getByText("取り消される運命のメモ")).toBeVisible();
+  await page.keyboard.press("Control+z");
+  await expect(page.getByText("取り消される運命のメモ")).toBeHidden({ timeout: 5_000 });
+});
+
 test("TASKS kanban view shows status columns with drop zones", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);

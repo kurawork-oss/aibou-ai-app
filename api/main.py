@@ -350,6 +350,14 @@ class BoardSaveRequest(BaseModel):
     edges: list = Field(default_factory=list)
 
 
+class BoardCreateRequest(BaseModel):
+    name: str = ""
+
+
+class BoardRenameRequest(BaseModel):
+    name: str
+
+
 class AiCreateRequest(BaseModel):
     name: str
     persona: str = ""
@@ -1272,20 +1280,66 @@ async def notifications_read(_auth: None = Depends(require_auth)):
     return await loop.run_in_executor(None, notify.mark_all_read)
 
 
-# ── Board（Miro風ホワイトボード） ─────────────────────────────────────
+# ── Board（Miro風ホワイトボード・複数ボード） ─────────────────────────
 
 @app.get("/board")
 async def board_get(_auth: None = Depends(require_auth)):
-    """ホワイトボード（付箋 + 接続）を返す。"""
+    """（旧API互換）最初のボードを返す。"""
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(None, board.get_board)
 
 
 @app.post("/board")
 async def board_save(req: BoardSaveRequest, _auth: None = Depends(require_auth)):
-    """ホワイトボードを保存する（全置換・デバウンス保存前提）。"""
+    """（旧API互換）最初のボードを保存する。"""
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(None, lambda: board.save_board(req.nodes, req.edges))
+
+
+@app.get("/boards")
+async def boards_list(_auth: None = Depends(require_auth)):
+    """ボード一覧（メタのみ・更新順）。"""
+    loop = asyncio.get_event_loop()
+    return {"items": await loop.run_in_executor(None, board.list_boards)}
+
+
+@app.post("/boards")
+async def boards_create(req: BoardCreateRequest, _auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, lambda: board.create_board(req.name))
+
+
+@app.get("/boards/{board_id}")
+async def boards_get(board_id: str, _auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    res = await loop.run_in_executor(None, lambda: board.get_board(board_id))
+    if res.get("error"):
+        return JSONResponse(status_code=404, content=res)
+    return res
+
+
+@app.post("/boards/{board_id}")
+async def boards_save(board_id: str, req: BoardSaveRequest, _auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, lambda: board.save_board(req.nodes, req.edges, board_id))
+
+
+@app.patch("/boards/{board_id}")
+async def boards_rename(board_id: str, req: BoardRenameRequest, _auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, lambda: board.rename_board(board_id, req.name))
+
+
+@app.post("/boards/{board_id}/duplicate")
+async def boards_duplicate(board_id: str, _auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, lambda: board.duplicate_board(board_id))
+
+
+@app.delete("/boards/{board_id}")
+async def boards_delete(board_id: str, _auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, lambda: board.delete_board(board_id))
 
 
 # ── Artifacts（エージェント生成物：ドキュメント / スプレッドシート） ──
