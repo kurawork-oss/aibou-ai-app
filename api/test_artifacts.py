@@ -86,3 +86,20 @@ def test_artifacts_endpoints_roundtrip():
 
 def test_artifact_get_missing_returns_404():
     assert client.get("/artifacts/nonexistent-xyz").status_code == 404
+
+
+def test_artifact_update_content():
+    art = artifacts.create("slides", "デッキ", '{"theme":"midnight","slides":[]}', "application/json")
+    meta = artifacts.update(art["id"], content='{"theme":"sunset","slides":[]}')
+    assert meta.get("id") == art["id"]
+    full = artifacts.get(art["id"])
+    assert '"sunset"' in full["content"]
+    artifacts.delete(art["id"])
+
+
+def test_artifact_update_endpoint():
+    art = artifacts.create("document", "元タイトル", "本文", "text/markdown")
+    r = client.patch(f"/artifacts/{art['id']}", json={"title": "新タイトル"})
+    assert r.status_code == 200
+    assert artifacts.get(art["id"])["title"] == "新タイトル"
+    client.delete(f"/artifacts/{art['id']}")

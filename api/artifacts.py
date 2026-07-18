@@ -130,3 +130,29 @@ def delete(artifact_id: str) -> dict:
         except Exception:
             pass
     return {"ok": True}
+
+
+def update(artifact_id: str, content=None, title=None) -> dict:
+    """既存の成果物の内容/タイトルを更新する（スライドのテーマ変更など）。"""
+    if not artifact_id:
+        return {"error": "id is required"}
+    patch = {}
+    if content is not None:
+        patch["content"] = content[:MAX_CONTENT]
+    if title is not None:
+        patch["title"] = title
+    if not patch:
+        return {"error": "nothing to update"}
+    c = config.get_supabase()
+    if c:
+        try:
+            res = c.table("artifacts").update(patch).eq("id", artifact_id).execute()
+            if res.data:
+                return _meta(res.data[0])
+        except Exception:
+            pass
+    for a in _mem_artifacts:
+        if a.get("id") == artifact_id:
+            a.update(patch)
+            return _meta(a)
+    return {"error": "artifact not found"}

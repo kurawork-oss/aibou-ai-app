@@ -353,6 +353,12 @@ class BoardSaveRequest(BaseModel):
 class SlidesExportRequest(BaseModel):
     title: str = ""
     slides: list = Field(default_factory=list)
+    theme: str = ""
+
+
+class ArtifactUpdateRequest(BaseModel):
+    content: Optional[str] = None
+    title: Optional[str] = None
 
 
 class BoardCreateRequest(BaseModel):
@@ -1366,6 +1372,13 @@ async def artifacts_get(artifact_id: str, _auth: None = Depends(require_auth)):
     return art
 
 
+@app.patch("/artifacts/{artifact_id}")
+async def artifacts_update(artifact_id: str, req: ArtifactUpdateRequest, _auth: None = Depends(require_auth)):
+    """成果物の内容/タイトルを更新（スライドのテーマ変更など）。"""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, lambda: artifacts.update(artifact_id, req.content, req.title))
+
+
 @app.delete("/artifacts/{artifact_id}")
 async def artifacts_delete(artifact_id: str, _auth: None = Depends(require_auth)):
     loop = asyncio.get_event_loop()
@@ -1487,9 +1500,9 @@ async def google_disconnect(_auth: None = Depends(require_auth)):
 
 @app.post("/slides/google")
 async def slides_to_google(req: SlidesExportRequest, _auth: None = Depends(require_auth)):
-    """スライド構成（title + slides[]）を Google スライドに変換して URL を返す。"""
+    """スライド構成（title + slides[] + theme）を Google スライドに変換して URL を返す。"""
     loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, lambda: gservice.create_presentation(req.title, req.slides))
+    return await loop.run_in_executor(None, lambda: gservice.create_presentation(req.title, req.slides, req.theme))
 
 
 # ── Home（コックピット集約サマリー） ──────────────────────────────

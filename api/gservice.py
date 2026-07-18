@@ -188,15 +188,42 @@ def create_doc(title: str, content: str) -> dict:
 
 
 # ── Google Slides ────────────────────────────────────────────────────
-def create_presentation(title: str, slides) -> dict:
-    """Google スライドを作成する。slides=[{title, bullets:[...]}]。{ok, url, id}。"""
+# テーマ名 → スライド背景色（RGB 0-1）。Google スライドにも配色を反映する。
+_THEME_BG = {
+    "midnight": {"red": 0.055, "green": 0.086, "blue": 0.15},
+    "aurora": {"red": 0.024, "green": 0.137, "blue": 0.122},
+    "sunset": {"red": 0.165, "green": 0.063, "blue": 0.125},
+    "forge": {"red": 0.04, "green": 0.055, "blue": 0.086},
+    "mono": {"red": 0.96, "green": 0.96, "blue": 0.97},
+}
+
+
+def _slide_body(s: dict) -> str:
+    """レイアウトに関わらず、本文として見せるテキストを組み立てる。"""
+    parts = []
+    if s.get("subtitle"):
+        parts.append(str(s["subtitle"]))
+    if s.get("stat"):
+        parts.append(str(s["stat"]))
+    for b in (s.get("bullets") or []):
+        if str(b).strip():
+            parts.append(str(b))
+    if s.get("quote"):
+        parts.append(f"“{s['quote']}”")
+    if s.get("author"):
+        parts.append(f"— {s['author']}")
+    return "\n".join(parts)
+
+
+def create_presentation(title: str, slides, theme: str = "") -> dict:
+    """Google スライドを作成する。slides=[{layout,title,bullets,...}]。{ok, url, id}。"""
     tok = _access_token()
     if not tok:
         return _err_not_connected()
     headers = {"Authorization": f"Bearer {tok}", "Content-Type": "application/json"}
     slides = slides or []
+    bg = _THEME_BG.get((theme or "").strip().lower())
     try:
-        # 1) 空のプレゼンを作成（既定で空スライドが1枚できる）。
         r = requests.post("https://slides.googleapis.com/v1/presentations",
                           headers=headers, json={"title": title or "無題のプレゼン"}, timeout=30)
         d = r.json() if r.content else {}
@@ -205,9 +232,9 @@ def create_presentation(title: str, slides) -> dict:
             return {"ok": False, "error": (d.get("error") or {}).get("message") or "作成に失敗しました"}
         first_slide_id = (d.get("slides") or [{}])[0].get("objectId")
 
-        # 2) スライドを TITLE_AND_BODY レイアウトで追加し、テキストを差し込む。
         reqs = []
         for i, s in enumerate(slides[:30]):
+            s = s or {}
             sid, tid, bid = f"s_{i}", f"t_{i}", f"b_{i}"
             reqs.append({
                 "createSlide": {
@@ -219,19 +246,25 @@ def create_presentation(title: str, slides) -> dict:
                     ],
                 }
             })
-            stitle = str((s or {}).get("title") or "")[:150]
+            # 背景色（テーマ）を適用
+            if bg:
+                reqs.append({"updatePageProperties": {
+                    "objectId": sid,
+                    "pageProperties": {"pageBackgroundFill": {"solidFill": {"color": {"rgbColor": bg}}}},
+                    "fields": "pageBackgroundFill.solidFill.color",
+                }})
+            stitle = str(s.get("title") or s.get("quote") or s.get("stat") or "")[:200]
             if stitle:
                 reqs.append({"insertText": {"objectId": tid, "text": stitle}})
-            bullets = (s or {}).get("bullets") or []
-            body = "\n".join(str(b) for b in bullets if str(b).strip())
+            body = _slide_body(s) if (s.get("title") or s.get("subtitle") or s.get("bullets")) else ""
             if body:
                 reqs.append({"insertText": {"objectId": bid, "text": body}})
-                reqs.append({"createParagraphBullets": {
-                    "objectId": bid,
-                    "textRange": {"type": "ALL"},
-                    "bulletPreset": "BULLET_DISC_CIRCLE_SQUARE",
-                }})
-        # 既定の空スライドを削除（ユーザーのスライドが1枚以上あるときのみ）。
+                if s.get("bullets"):
+                    reqs.append({"createParagraphBullets": {
+                        "objectId": bid,
+                        "textRange": {"type": "ALL"},
+                        "bulletPreset": "BULLET_DISC_CIRCLE_SQUARE",
+                    }})
         if first_slide_id and reqs:
             reqs.append({"deleteObject": {"objectId": first_slide_id}})
 

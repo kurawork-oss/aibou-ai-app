@@ -1375,17 +1375,38 @@ export async function artifactDelete(id: string): Promise<boolean> {
 }
 
 /* Slide deck (artifact kind="slides", content = JSON of this shape). */
-export interface Slide { title: string; bullets: string[]; notes?: string }
-export interface SlideDeck { title: string; slides: Slide[] }
+export type SlideLayout = "title" | "section" | "bullets" | "two_col" | "stat" | "quote" | "image";
+export interface Slide {
+  layout?: SlideLayout;
+  title?: string;
+  subtitle?: string;
+  bullets?: string[];
+  stat?: string;
+  quote?: string;
+  author?: string;
+  image?: string;   // URL
+  notes?: string;
+}
+export interface SlideDeck { title: string; theme?: string; slides: Slide[] }
 
 /** POST /slides/google — convert a deck to Google Slides, returns the URL. */
-export async function slidesToGoogle(title: string, deckSlides: Slide[]): Promise<{ ok: boolean; url?: string; error?: string }> {
+export async function slidesToGoogle(title: string, deckSlides: Slide[], theme = ""): Promise<{ ok: boolean; url?: string; error?: string }> {
   const res = await fetch(`${requireApiUrl()}/slides/google`, {
     method: "POST",
     headers: authHeaders({ "Content-Type": "application/json" }),
-    body: JSON.stringify({ title, slides: deckSlides }),
+    body: JSON.stringify({ title, slides: deckSlides, theme }),
   });
   return (await res.json().catch(() => ({ ok: false }))) as { ok: boolean; url?: string; error?: string };
+}
+
+/** PATCH /artifacts/{id} — update an artifact's content/title (e.g. slide theme). */
+export async function artifactUpdate(id: string, patch: { content?: string; title?: string }): Promise<boolean> {
+  const res = await fetch(`${requireApiUrl()}/artifacts/${id}`, {
+    method: "PATCH",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(patch),
+  });
+  return res.ok;
 }
 
 /** Fetch an artifact and trigger a browser download (CSV/Markdown). */

@@ -17,8 +17,41 @@ client = TestClient(app)
 def test_normalize_various_shapes():
     d = slides._normalize({"title": "T", "slides": ["見出しだけ", {"title": "A", "bullets": "単一"}]})
     assert d["title"] == "T"
+    assert d["theme"] == "midnight"  # 既定テーマ
     assert d["slides"][0]["title"] == "見出しだけ"
+    assert d["slides"][0]["layout"] == "bullets"  # 旧形式→bullets
     assert d["slides"][1]["bullets"] == ["単一"]
+
+
+def test_normalize_layouts_and_theme():
+    d = slides._normalize({
+        "title": "P", "theme": "sunset",
+        "slides": [
+            {"layout": "title", "title": "表紙", "subtitle": "副題", "image": "http://x/y.png"},
+            {"layout": "stat", "stat": "+30%", "title": "成長"},
+            {"layout": "quote", "quote": "名言", "author": "誰か"},
+            {"layout": "bogus", "title": "不明レイアウト"},
+        ],
+    })
+    assert d["theme"] == "sunset"
+    assert d["slides"][0]["layout"] == "title" and d["slides"][0]["subtitle"] == "副題"
+    assert d["slides"][1]["stat"] == "+30%"
+    assert d["slides"][2]["quote"] == "名言" and d["slides"][2]["author"] == "誰か"
+    assert d["slides"][3]["layout"] == "bullets"  # 不正レイアウト→bullets
+
+
+def test_normalize_invalid_theme_defaults():
+    assert slides._normalize({"title": "T", "theme": "neon", "slides": [{"title": "a"}]})["theme"] == "midnight"
+
+
+def test_apply_images_converts_prompt_to_url():
+    deck = {"title": "T", "theme": "midnight", "slides": [
+        {"layout": "title", "title": "cover", "image": "a calm mountain lake"},
+        {"layout": "image", "title": "x", "image": "http://already/url.png"},
+    ]}
+    out = slides._apply_images(deck)
+    assert out["slides"][0]["image"].startswith("https://image.pollinations")
+    assert out["slides"][1]["image"] == "http://already/url.png"  # URLはそのまま
 
 
 def test_normalize_empty_gives_placeholder():
@@ -34,9 +67,17 @@ def test_extract_json_from_fence():
 
 def test_generate_deck_mocked(monkeypatch):
     monkeypatch.setattr(slides.llm, "generate_text",
-                        lambda p, **k: '```json\n{"title":"提案","slides":[{"title":"背景","bullets":["市場拡大"]}]}\n```')
-    deck = slides.generate_deck("新規事業")
-    assert deck["title"] == "提案" and deck["slides"][0]["title"] == "背景"
+                        lambda p, **k: '```json\n{"title":"提案","theme":"aurora","slides":[{"layout":"title","title":"背景","image":"city skyline"}]}\n```')
+    deck = slides.generate_deck("新規事業", 5, "", with_images=False)
+    assert deck["title"] == "提案" and deck["theme"] == "aurora"
+    assert deck["slides"][0]["layout"] == "title"
+
+
+def test_generate_deck_theme_override(monkeypatch):
+    monkeypatch.setattr(slides.llm, "generate_text",
+                        lambda p, **k: '{"title":"X","theme":"aurora","slides":[{"title":"a","bullets":["b"]}]}')
+    deck = slides.generate_deck("topic", 4, "sunset", with_images=False)
+    assert deck["theme"] == "sunset"  # 明示指定が優先
 
 
 def test_generate_deck_bad_output_degrades(monkeypatch):

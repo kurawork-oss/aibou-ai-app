@@ -470,17 +470,20 @@ def _do_create_spreadsheet(params: dict) -> str:
 
 
 def _do_create_slides(params: dict) -> str:
-    """スライド資料（プレゼン）を生成して保存する。topic か slides(配列) を受ける。"""
+    """スライド資料（プレゼン）を生成して保存する。topic か slides(配列) を受ける。
+    theme（配色）と自動画像に対応。"""
     import json as _json
     title = (params.get("title") or "").strip()
     slides_in = params.get("slides")
+    theme = (params.get("theme") or "").strip()
     topic = (params.get("topic") or title).strip()
     try:
         import slides as slides_mod
         if isinstance(slides_in, list) and slides_in:
-            deck = slides_mod._normalize({"title": title or topic or "スライド", "slides": slides_in}, title or topic or "スライド")
+            deck = slides_mod._normalize({"title": title or topic or "スライド", "theme": theme, "slides": slides_in}, title or topic or "スライド")
+            deck = slides_mod._apply_images(deck)
         elif topic:
-            deck = slides_mod.generate_deck(topic, params.get("n") or 6)
+            deck = slides_mod.generate_deck(topic, params.get("n") or 6, theme)
         else:
             return "スライドのテーマ(topic)か内容(slides)が必要です。"
     except Exception as e:
