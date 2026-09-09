@@ -58,7 +58,10 @@ def _is_text_path(path: str) -> bool:
 
 
 def _no_token_error() -> dict:
-    return {"error": "GITHUB_TOKEN が未設定です。GitHubでFine-grained PAT（Contents / Pull requests 権限）を作成し、Settings → KEYCHAIN に GITHUB_TOKEN として保存してください。"}
+    # 文中の「GitHub未設定」は、setup_flow が「連携が足りないだけ」と
+    # 見分けるための目印にもなっている（消すと会話での案内が出なくなる）。
+    return {"error": "GitHub未設定です。拡張機能から「GitHubと連携する」を押すと繋がります"
+                     "（手で入れる場合は Fine-grained PAT を GITHUB_TOKEN に保存）。"}
 
 
 def list_repos() -> dict:

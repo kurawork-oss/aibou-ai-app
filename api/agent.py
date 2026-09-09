@@ -143,6 +143,18 @@ def _rules_for_tool(tool: str) -> str:
         return ""
 
 
+def _setup_needed(instruction: str, tool: str, params: dict, result: str):
+    """道具の失敗が「連携が足りないだけ」かを見る。読めなければ None。
+
+    ここが失敗しても会話は続けるべきなので、包んでおく。
+    """
+    try:
+        import setup_flow
+        return setup_flow.blocked(instruction, tool, params, result)
+    except Exception:
+        return None
+
+
 def _stamper():
     """イベントに経過時間を刻む関数を作る。
 
@@ -273,6 +285,24 @@ def run_stream(instruction: str, history=None, name: str = "AIbou", approval: bo
         if _looks_failed(result):
             failed.append((tool, result))
         yield stamp({"phase": "observation", "step": step, "tool": tool, "result": result})
+
+        # 失敗の理由が「まだ連携していない」だけなら、そこで話を終わらせない。
+        # 用事を預かって、繋ぐ入口を出す。繋げたら預けた用事から再開する。
+        # 「設定してきてください」で会話が切れると、戻ってきたときに最初の
+        # 頼みごとを言い直すことになる。それが一番いらない手間。
+        need = _setup_needed(instruction, tool, params, result)
+        if need:
+            yield stamp({"phase": "setup_required", "step": step,
+                         "provider": need.get("provider", ""),
+                         "label": need.get("label", ""),
+                         "connect_path": need.get("connect_path", ""),
+                         "can_connect": bool(need.get("can_connect")),
+                         "needs_owner": bool(need.get("needs_owner")),
+                         "held_id": need.get("held_id", "")})
+            yield stamp({"phase": "final", "text": need.get("message", "")})
+            yield stamp({"phase": "done", "steps": step,
+                         "awaiting_setup": True})
+            return
 
         # 実行の痕跡を会話に足して次のステップへ。
         # 2通りの指示文の両方に積む（途中で落ちる先が変わっても筋が通るように）。

@@ -21,7 +21,7 @@ EXPECTED_TABLES = [
     # あとから足した表。ここに入れ忘れると、実際は欠けているのに
     # 「テーブルは揃っています」と表示されてしまう。
     "conversations", "hooks", "user_connections", "agent_rules",
-    "watch_state", "inbox_messages",
+    "watch_state", "inbox_messages", "setup_sessions",
 ]
 
 _HERE = os.path.dirname(os.path.abspath(__file__))

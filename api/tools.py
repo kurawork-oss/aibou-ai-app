@@ -848,7 +848,8 @@ def _do_notion_add(params: dict) -> str:
     token = (token or keychain.get_key("NOTION_TOKEN") or "").strip()
     parent = (params.get("parent") or keychain.get_key("NOTION_PARENT_ID") or "").strip()
     if not token:
-        return "NOTION_TOKEN が未設定です。KEYCHAIN で設定してください（発行手順は各欄の「?」参照）。"
+        return ("Notion未設定です。拡張機能から「Notionと連携する」を押すと繋がります"
+                "（手で入れる場合は NOTION_TOKEN に保存）。")
     if not parent:
         return "NOTION_PARENT_ID（追記先のページ or データベースID）が未設定です。KEYCHAIN で設定してください。"
 

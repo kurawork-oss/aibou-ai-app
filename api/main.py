@@ -67,6 +67,7 @@ import x_client
 import proactive
 import pseo
 import scheduler
+import setup_flow
 import shellrun
 import slides as slides_mod
 import sns as sns_mod
@@ -3402,6 +3403,45 @@ async def delete_key(name: str, _auth: None = Depends(require_auth)):
     return await loop.run_in_executor(None, lambda: keychain.delete_key(name))
 
 
+# ── 連携が済んだあと、預かった用事に戻る ────────────────────────────
+
+@app.get("/setup/pending")
+async def setup_pending(_auth: None = Depends(require_auth)):
+    """連携待ちで預かっている用事があるか。
+
+    画面は連携から戻ったときにこれを見て、「さっきの続きをやりますか」を
+    出す。ここが無いと、利用者は戻ってきてから同じ頼みごとを言い直す。
+    """
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, setup_flow.status)
+
+
+@app.post("/setup/resume")
+async def setup_resume(_auth: None = Depends(require_auth)):
+    """預かった用事を取り出して返す（実行はしない）。
+
+    実行までここでやらないのは、取り返しのつかない操作（送信・投稿）を
+    「連携したら勝手に動いた」にしないため。画面が受け取って、
+    ふつうの指示として投げ直す。そのとき承認の仕組みも通る。
+    """
+    loop = asyncio.get_event_loop()
+
+    def _work() -> dict:
+        row = setup_flow.pending()
+        if not row:
+            return {"ok": False, "waiting": False,
+                    "message": "預かっている用事はありません"}
+        taken = setup_flow.take(row.get("provider", ""))
+        if not taken:
+            return {"ok": False, "waiting": False,
+                    "message": "預かっている用事はありません"}
+        return {"ok": True, "instruction": taken.get("instruction", ""),
+                "provider": taken.get("provider", ""),
+                "auto": setup_flow.can_auto_resume(taken)}
+
+    return await loop.run_in_executor(None, _work)
+
+
 # ── できること（パックと # コマンド） ────────────────────────────────
 
 class PacksRequest(BaseModel):
@@ -3604,7 +3644,22 @@ async def _connect_finish(provider: str, request: Request, code: str, state: str
             if client is not None or not is_owner:
                 bound = config.bind_request_client(client)
         try:
-            return oauth.finish(provider, code, redirect)
+            out = oauth.finish(provider, code, redirect)
+            # 繋ぐ前に預かった用事があれば、それも一緒に持ち帰る。
+            # ここで拾えないと、利用者は戻ってきてから同じ頼みごとを
+            # もう一度言うことになる。それが設定でいちばんいらない手間。
+            if out.get("ok"):
+                try:
+                    import setup_flow
+                    held = setup_flow.pending(provider)
+                    if held:
+                        out["resume"] = {
+                            "instruction": held.get("instruction", ""),
+                            "auto": setup_flow.can_auto_resume(held),
+                        }
+                except Exception:
+                    pass
+            return out
         finally:
             if bound is not None:
                 config.reset_request_client(bound)
@@ -3616,6 +3671,15 @@ async def _connect_finish(provider: str, request: Request, code: str, state: str
     body = f"{label}{who} と繋がりました。"
     if res.get("warning"):
         body += "<br>" + res["warning"]
+    resume = res.get("resume") or {}
+    if resume.get("instruction"):
+        # 何を続けるのかを、ここで先に見せる。黙って再開すると
+        # 「勝手に動いた」に見える。
+        cont = ("AIbouに戻ると、続きを進めます。"
+                if resume.get("auto") else
+                "AIbouに戻ると、続けてよいか確認します。")
+        body += (f"<br><br>預かっていた用事:<br>"
+                 f"「{resume['instruction'][:120]}」<br>{cont}")
     return _connect_page("連携できました", body, ok=not res.get("warning"))
 
 

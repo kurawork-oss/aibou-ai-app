@@ -207,6 +207,21 @@ CREATE TABLE IF NOT EXISTS inbox_messages (
 CREATE INDEX IF NOT EXISTS idx_inbox_messages_channel ON inbox_messages(channel, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_inbox_messages_external ON inbox_messages(external_id);
 
+-- 🔁 setup_sessions … 連携待ちで預かった用事。
+-- 「Notionから資料探して」→ 未接続 → 連携 → **元の用事に戻る** を成立させる。
+-- ここが無いと、利用者は戻ってきてから同じ頼みごとを言い直すことになる。
+CREATE TABLE IF NOT EXISTS setup_sessions (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  provider    text NOT NULL,           -- google / slack / notion / github
+  instruction text NOT NULL,           -- 預かった頼みごと
+  tool        text DEFAULT '',         -- 途中まで進んでいた道具
+  params      text DEFAULT '',         -- そのときの引数（JSON文字列）
+  status      text DEFAULT 'waiting',  -- waiting / resumed / expired
+  created_at  double precision,
+  updated_at  timestamptz DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_setup_sessions_status ON setup_sessions(status, created_at DESC);
+
 -- あとから足した列。既に watch_state を作ってある人にも当たるようにする
 -- （CREATE TABLE IF NOT EXISTS だけだと、既存の表には列が増えない）。
 ALTER TABLE watch_state ADD COLUMN IF NOT EXISTS items jsonb DEFAULT '[]'::jsonb;
