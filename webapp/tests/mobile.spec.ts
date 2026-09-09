@@ -148,3 +148,46 @@ test("下のナビと本文の文字が、読める大きさである", async ({
     .evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
   expect(navSize).toBeGreaterThanOrEqual(10);
 });
+
+/* ── 畳んだ先（開かないと出てこない所）────────────────────────────
+ *
+ * 上の見張りは「モードを開いて測る」ので、押して初めて出る面は通らない。
+ * ナビを2つに畳んだぶん、行き先はそういう面へ移った——つまり、いちばん
+ * 測れていない所へ移った。ここで開いてから測る。 */
+test("管理タブの「もっと」を開いても、押せるものが44px以上ある", async ({ page }) => {
+  await page.setViewportSize({ width: 393, height: 852 });
+  await page.goto("/");
+  await enterApp(page);
+  await goMode(page, "HOME");
+  await page.getByRole("button", { name: /もっと/ }).click();
+  await page.waitForTimeout(400);
+  // 開いたことを確かめてから測る（閉じたまま測ると、何も無いので必ず通る）
+  await expect(page.getByRole("button", { name: /説明書/ })).toBeVisible();
+
+  const { small, clipped } = await measure(page, MIN_TAP);
+  expect(small.map((s) => `${s.w}x${s.h} 「${s.label}」`),
+    "「もっと」の中に小さすぎる行き先がある").toEqual([]);
+  expect(clipped.map((c) => `枠${c.client}px に中身${c.content}px 「${c.text}」`),
+    "「もっと」の中が横に切れている").toEqual([]);
+});
+
+test("設定を開いても、押せるものが44px以上ある", async ({ page }) => {
+  await page.setViewportSize({ width: 393, height: 852 });
+  await page.goto("/");
+  await enterApp(page);
+  await page.getByLabel("Settings").click();
+  await page.waitForTimeout(600);
+  await expect(page.getByText("CORE SETTINGS")).toBeVisible();
+
+  const bad: string[] = [];
+  for (const t of ["CORE", "PERSONA", "KEYCHAIN", "HF", "DIAGNOSTICS"]) {
+    await page.getByRole("button", { name: t, exact: true }).click();
+    await page.waitForTimeout(400);
+    const { small, clipped } = await measure(page, MIN_TAP);
+    for (const s of small) bad.push(`${t}: ${s.w}x${s.h} 「${s.label}」 class="${s.cls}"`);
+    for (const c of clipped) {
+      bad.push(`${t}: 枠${c.client}px に中身${c.content}px 「${c.text}」`);
+    }
+  }
+  expect(bad, `設定の中で直したい所:\n${bad.join("\n")}`).toEqual([]);
+});

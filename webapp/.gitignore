@@ -32,3 +32,8 @@ next-env.d.ts
 # playwright
 /test-results/
 /playwright-report/
+
+# テスト用の別ビルド（chromium-linked と点検用）
+/.next-linked
+/.next-prod
+/.next-audit

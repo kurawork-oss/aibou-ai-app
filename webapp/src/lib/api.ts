@@ -2160,12 +2160,40 @@ export interface OrphanKey {
   masked: string;
 }
 
+/**
+ * いま飛んでいる /keys の問い合わせ。
+ *
+ * 同じ画面の別々の部品（設定の案内・初回の案内・拡張機能）が、それぞれ
+ * 自分のために鍵の一覧を取る。作りとしては正しいが、開くたびに同じ物を
+ * 2回聞いていた（管理タブで実測）。無料のバックエンドは寝ているので、
+ * 1往復の無駄がそのまま体感の遅さになる。
+ *
+ * **溜め込みはしない。**同じ瞬間に飛んでいる物だけを束ねる。
+ * 少しでも溜めると、鍵を保存した直後に古い一覧を見せることになり、
+ * 「入れたのに未設定に戻る」に逆戻りする。
+ */
+let keysInFlight: Promise<ApiKeyInfo[]> | null = null;
+let keysSeq = 0;
+
 /** GET /keys — masked list of known + stored API keys (full values never returned). */
-export async function listKeys(): Promise<ApiKeyInfo[]> {
-  const res = await fetch(`${requireApiUrl()}/keys`, { headers: authHeaders(), cache: "no-store" });
-  if (!res.ok) throw new Error(`Keys failed (${res.status})`);
-  const data = (await res.json().catch(() => ({ items: [] }))) as { items?: ApiKeyInfo[] };
-  return data.items ?? [];
+export function listKeys(): Promise<ApiKeyInfo[]> {
+  if (keysInFlight) return keysInFlight;
+  const mine = ++keysSeq;
+  const run = (async () => {
+    try {
+      const res = await fetch(`${requireApiUrl()}/keys`, { headers: authHeaders(), cache: "no-store" });
+      if (!res.ok) throw new Error(`Keys failed (${res.status})`);
+      const data = (await res.json().catch(() => ({ items: [] }))) as { items?: ApiKeyInfo[] };
+      return data.items ?? [];
+    } finally {
+      // 決着と同時に手放す。ここを外の .finally() に置くと、片付けが
+      // 1〜2手おくれて、返事が来た直後に聞いた人へ古い約束を渡してしまう。
+      // 失敗も握らない（握ると、次に聞いた人にも同じ失敗を返し続ける）。
+      if (keysSeq === mine) keysInFlight = null;
+    }
+  })();
+  keysInFlight = run;
+  return run;
 }
 
 /**

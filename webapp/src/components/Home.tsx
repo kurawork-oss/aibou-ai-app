@@ -77,18 +77,22 @@ export default function Home({
 
   const refresh = useCallback(async () => {
     if (!API_URL) { setOffline(true); return; }
-    try {
-      const [s, ev, n] = await Promise.all([homeSummary(), agendaList(), notificationsList()]);
-      setSummary(s);
-      setEvents(ev);
-      setNotes(n.items);
-      setOffline(false);
-    } catch {
+    // 4本まとめて出す。生成物だけ「他が終わってから」にしていたので、
+    // 開くたびに1往復ぶん余計に待っていた（実測で +317ms）。
+    // 生成物は古いバックエンドに無いことがあるので、失敗しても他を止めない
+    // ——それを allSettled で受ける（順番に並べる必要は無かった）。
+    const [s, ev, n, arts] = await Promise.allSettled([
+      homeSummary(), agendaList(), notificationsList(), artifactsList(),
+    ]);
+    if (s.status !== "fulfilled" || ev.status !== "fulfilled" || n.status !== "fulfilled") {
       setOffline(true);
       return;
     }
-    // Artifacts are optional (older backends may not have the endpoint yet).
-    try { setArts(await artifactsList()); } catch { /* ignore */ }
+    setSummary(s.value);
+    setEvents(ev.value);
+    setNotes(n.value.items);
+    setOffline(false);
+    if (arts.status === "fulfilled") setArts(arts.value);
   }, []);
 
   useEffect(() => { void refresh(); }, [refresh]);
