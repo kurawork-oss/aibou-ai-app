@@ -22,6 +22,7 @@ import AiProviderSettings from "@/components/AiProviderSettings";
 import HfModels from "@/components/HfModels";
 import { applySkin, readSkin, setSkin, SKINS, type Skin } from "@/lib/skin";
 import { CORE_TYPES, readCoreType, setCoreType, type CoreType } from "@/lib/coreType";
+import FeaturePacks from "@/components/FeaturePacks";
 import IntegrationsSettings from "@/components/IntegrationsSettings";
 import AppArchive from "@/components/AppArchive";
 import Autopilot from "@/components/Autopilot";
@@ -865,6 +866,9 @@ function SettingsPanel({
               <SkinSetting />
               <CoreTypeSetting />
               <AiProviderSettings />
+              {/* 使う機能の入り切り。連携（外と繋ぐ）より先に置く。
+                  「何をする人か」を決めてから、繋ぐ物を選ぶ順のほうが迷わない。 */}
+              <FeaturePacks />
               <IntegrationsSettings />
               <label className="mb-1 block text-[10px] tracking-[0.2em] text-muted label-mono">ASSISTANT NAME</label>
               <input

@@ -45,6 +45,24 @@ export function isView(v: string): v is ShellView {
   return (VIEWS as readonly string[]).includes(v);
 }
 
+/**
+ * 「使う機能」が変わったことを、開いている画面に知らせる合図。
+ *
+ * `#` の候補は会話を開いたときに1回だけ取っている。設定で「開発」を
+ * 切っても、そのまま `#コード` が候補に残っていた——押せば通るので
+ * 壊れてはいないが、切ったのに残っているのは分かりにくい。
+ *
+ * 設定と会話は親子ではないので、間に props を通すよりも
+ * この1本で済ませる（受け側は無ければ何もしない）。
+ */
+export const PACKS_CHANGED = "forge:packs-changed";
+
+export function announcePacksChanged() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(PACKS_CHANGED));
+  }
+}
+
 /** 下のナビ。ここは2つだけにする。 */
 export const TABS = [
   { key: "run" as const, label: "実行", hint: "話して、やってもらう" },

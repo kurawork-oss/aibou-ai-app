@@ -247,6 +247,43 @@ def test_packs_endpoint_round_trip():
     assert "share" not in on
 
 
+def test_switching_off_a_pack_makes_every_round_trip_lighter():
+    """切ると本当に軽くなること（そうでなければ、切る意味が無い）。
+
+    毎リクエストに乗る道具の説明が短くなるかを、字数で見る。
+    「見た目だけ消えて、送る量は同じ」だと、切った人は損しかしない。
+    """
+    cap.set_packs(["core", "make", "share", "dev"])
+    wide = cap.tools_doc(True)
+    wide_tools = cap.enabled_tools(True)
+
+    cap.set_packs([])                       # core だけ残る
+    narrow = cap.tools_doc(True)
+    narrow_tools = cap.enabled_tools(True)
+
+    assert len(narrow) < len(wide), "切っても説明が短くならない"
+    assert narrow_tools < wide_tools, "切っても道具が減らない"
+    # 基本の物は残っている（軽くなったが何もできない、では困る）
+    assert "add_task" in narrow_tools
+
+
+def test_a_refused_save_says_why_instead_of_looking_saved():
+    """保存先が無い人に、切り替わったふりをしないこと。
+
+    黙って成功を返すと、画面は切り替わったように描き、次に開いたら
+    元に戻っている。理由まで返せば、繋ぐという次の手が分かる。
+    """
+    import config
+
+    token = config.bind_request_client(None)   # ログイン済み・保存先なし
+    try:
+        res = cap.set_packs(["core", "dev"])
+        assert res.get("error"), "保存できていないのに ok を返している"
+        assert "接続" in res["error"], f"次に何をすればいいか書いていない: {res}"
+    finally:
+        config.reset_request_client(token)
+
+
 def test_status_tells_the_screen_what_it_needs():
     d = client.get("/capabilities").json()
     assert d["packs"] and d["commands"]

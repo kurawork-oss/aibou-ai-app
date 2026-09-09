@@ -34,6 +34,7 @@ import {
   type ChatTurn, type AgentEvent, type CommandItem, type CommandResult,
 } from "@/lib/api";
 import CommandPalette, { readHashInput } from "@/components/CommandPalette";
+import { PACKS_CHANGED } from "@/lib/shell";
 import { useSpeechRecognition } from "@/lib/voice";
 import { speakCore, stopCoreVoice, type CoreVoiceSettings, type VoiceEngine } from "@/lib/coreVoice";
 import { takeCompleteSentences } from "@/lib/speech";
@@ -696,10 +697,16 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
   useEffect(() => {
     if (!API_URL) return;
     let alive = true;
-    capabilities()
-      .then((d) => { if (alive) setCommands(d.commands); })
-      .catch(() => { /* # が出ないだけ。会話はふつうに動く */ });
-    return () => { alive = false; };
+    const load = () => {
+      capabilities()
+        .then((d) => { if (alive) setCommands(d.commands); })
+        .catch(() => { /* # が出ないだけ。会話はふつうに動く */ });
+    };
+    load();
+    // 設定で「使う機能」を変えたら入れ替える。1回だけ取っていたので、
+    // 「開発」を切ったあとも `#コード` が候補に残っていた。
+    window.addEventListener(PACKS_CHANGED, load);
+    return () => { alive = false; window.removeEventListener(PACKS_CHANGED, load); };
   }, []);
 
   /* ── 連携から戻ってきたとき ──────────────────────────────────

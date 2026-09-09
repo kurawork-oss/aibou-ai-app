@@ -2417,14 +2417,24 @@ export async function capabilities(): Promise<{
   return { packs: asArray<FeaturePack>(d.packs), commands: asArray<CommandItem>(d.commands) };
 }
 
-/** POST /capabilities/packs — 使う機能のかたまりを切り替える。 */
-export async function setPacks(packs: string[]): Promise<boolean> {
+/**
+ * POST /capabilities/packs — 使う機能のかたまりを切り替える。
+ *
+ * 断られた理由をそのまま返す。保存先が無いとき（自分のデータベースを
+ * 繋いでいない）サーバーは 409 とその理由を返すので、握りつぶすと
+ * 画面が「通信を確かめてください」と嘘の案内をすることになる。
+ */
+export async function setPacks(
+  packs: string[],
+): Promise<{ ok: boolean; error?: string }> {
   const res = await fetch(`${requireApiUrl()}/capabilities/packs`, {
     method: "POST",
     headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ packs }),
   });
-  return res.ok;
+  if (res.ok) return { ok: true };
+  const d = (await res.json().catch(() => ({}))) as { error?: string; detail?: string };
+  return { ok: false, error: d.error || d.detail || `保存できませんでした（${res.status}）` };
 }
 
 export interface CommandResult {
