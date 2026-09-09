@@ -201,3 +201,63 @@ def test_status_tells_the_screen_what_it_needs():
     assert core["always"] is True          # 切れないことを画面に伝える
     one = next(c for c in d["commands"] if c["cmd"] == "画像")
     assert one["direct"] is True and one["arg"] and one["label"]
+
+
+# ── 危なさの段階（0 読むだけ 〜 3 取り返せない） ──────────────────────
+def test_every_tool_has_an_explicit_risk_level():
+    """段階の書き忘れが無いこと。
+
+    書き忘れた道具は、実行時には「必ず確認」に回る（安全側）が、
+    害の無い道具で確認が出るのも困る。開発の時点で気づけるようにする。
+    """
+    import risk
+    missing = sorted(set(tools._DISPATCH) - set(risk.LEVELS))
+    assert missing == [], f"段階が書かれていない道具: {missing}"
+
+
+def test_reading_and_local_changes_do_not_interrupt():
+    import risk
+    for t in ("web_search", "watch_report", "email_inbox", "calendar_list"):
+        assert risk.needs_confirmation(t, approval_mode=False) is False
+        assert risk.needs_confirmation(t, approval_mode=True) is False, \
+            f"{t} は読むだけなので、承認モードでも聞く必要がない"
+    for t in ("add_task", "board_add_note", "generate_image"):
+        assert risk.needs_confirmation(t, approval_mode=False) is False
+
+
+def test_changes_that_leave_the_app_ask_in_approval_mode():
+    import risk
+    for t in ("drive_upload", "calendar_add", "notion_add"):
+        assert risk.needs_confirmation(t, approval_mode=False) is False
+        assert risk.needs_confirmation(t, approval_mode=True) is True
+
+
+def test_irreversible_work_always_asks():
+    """ここがこの変更の芯。設定の組み合わせで黙って送られる道を作らない。"""
+    import risk
+    for t in ("send_email", "notify", "enqueue_income", "run_automation"):
+        assert risk.needs_confirmation(t, approval_mode=False) is True
+        assert risk.needs_confirmation(t, approval_mode=True) is True
+        assert risk.describe(t)["always_confirm"] is True
+
+
+def test_an_unclassified_tool_errs_towards_asking():
+    import risk
+    assert risk.needs_confirmation("これから足す道具", approval_mode=False) is True
+
+
+def test_irreversible_tools_explain_what_happens():
+    """確認を出すなら、何が起きるのかまで言うこと。"""
+    import risk
+    for t in ("send_email", "notify", "enqueue_income", "run_automation"):
+        assert risk.describe(t)["why"], f"{t} に説明が無い"
+
+
+def test_risk_endpoint():
+    r = client.get("/risk")
+    assert r.status_code == 200
+    d = r.json()
+    by = {x["tool"]: x for x in d["levels"]}
+    assert by["send_email"]["level"] == 3 and by["send_email"]["always_confirm"] is True
+    assert by["web_search"]["level"] == 0
+    assert d["labels"]["3"] == "取り返せない"

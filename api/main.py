@@ -45,6 +45,7 @@ import forge
 import gh
 import gservice
 import hooks as hooks_mod
+import risk
 import rules
 import guide as guide_mod
 import tenancy
@@ -3450,6 +3451,16 @@ class PacksRequest(BaseModel):
 
 class CommandRequest(BaseModel):
     text: str = ""
+
+
+@app.get("/risk")
+async def risk_table(_auth: None = Depends(require_auth)):
+    """道具ごとの危なさ（0 読むだけ〜3 取り返せない）。
+
+    段階3は承認モードに関わらず必ず確認する。画面がそれを説明できるように、
+    always_confirm も返す。
+    """
+    return {"ok": True, "levels": risk.table(), "labels": risk.LABELS}
 
 
 @app.get("/capabilities")

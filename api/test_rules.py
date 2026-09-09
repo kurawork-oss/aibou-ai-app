@@ -200,28 +200,33 @@ def test_always_rules_are_capped(monkeypatch):
 # ── ツール別ルールが、実行の前に読まれること ──────────────────────
 
 def test_a_tool_rule_is_shown_before_the_tool_runs(monkeypatch):
-    """投稿や送信は取り返しがつかない。実行してから読んでも遅い。"""
+    """実行してからルールを読んでも遅い。呼ぶ前に一度読ませて、直させること。
+
+    使う道具を board_add_note にしてあるのは、notify のような「取り返せない」
+    道具は必ず確認に回る（そこで止まる）ようになったため。ここで見たいのは
+    ルールの差し戻しなので、確認に回らない段階の道具で確かめる。
+    """
     calls = {"n": 0, "executed": []}
 
     def _gen(prompt, **kw):
         calls["n"] += 1
         if calls["n"] == 1:
-            return tools.TOOL_CALL_MARKER + '{"tool":"notify","params":{"message":"やあ🎉"}}'
+            return tools.TOOL_CALL_MARKER + '{"tool":"board_add_note","params":{"text":"やあ🎉"}}'
         if calls["n"] == 2:
             # ルールを読んだあとの呼び直し
             assert "絵文字は使わない" in prompt, "ルールが渡っていない"
-            return tools.TOOL_CALL_MARKER + '{"tool":"notify","params":{"message":"やあ"}}'
-        return "送りました。"
+            return tools.TOOL_CALL_MARKER + '{"tool":"board_add_note","params":{"text":"やあ"}}'
+        return "貼りました。"
 
     monkeypatch.setattr(llm, "generate_text", _gen)
     monkeypatch.setattr(tools, "execute_tool",
-                        lambda n, p: calls["executed"].append(p.get("message")) or "送信しました")
+                        lambda n, p: calls["executed"].append(p.get("text")) or "貼りました")
 
     db = FakeDB()
     with _bound(db):
         rules.replace_all([rules.parse("n.md",
-            "---\n適用: ツール\n対象: notify\n---\n絵文字は使わない")])
-        evs = list(agent.run_stream("通知して"))
+            "---\n適用: ツール\n対象: board_add_note\n---\n絵文字は使わない")])
+        evs = list(agent.run_stream("付箋を貼って"))
 
     assert calls["executed"] == ["やあ"], "ルールを読む前に実行してしまっている"
     prep = [e for e in evs if e["phase"] == "prepare" and "ルール" in (e.get("what") or "")]

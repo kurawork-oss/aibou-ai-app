@@ -32,6 +32,7 @@ import time
 from datetime import datetime, timezone, timedelta
 
 import llm
+import risk
 import toolcall
 import tools
 
@@ -41,6 +42,12 @@ MAX_STEPS = 6
 STEP_MAX_TOKENS = 1200
 
 # 承認モード時、実行前にユーザー確認を挟む「機微な」ツール（外部送信・不可逆な副作用）。
+# 危なさの段階は risk.py が持つ（0 読むだけ / 1 中が変わる / 2 外に残る /
+# 3 取り返せない）。以前はここに平たい集合が1つあり、メール送信とWeb検索が
+# 同じ扱いだったため、承認モードを切ると送信も黙って通った。
+# 段階3は承認モードに関わらず必ず聞く。
+#
+# 後方互換のために名前は残す（外から参照している所がある）。
 SENSITIVE_TOOLS = {"send_email", "notify", "run_automation", "enqueue_income"}
 
 _MARKER = tools.TOOL_CALL_MARKER
@@ -270,10 +277,16 @@ def run_stream(instruction: str, history=None, name: str = "AIbou", approval: bo
             convo_marker += back
             continue
 
-        # 承認モード：機微なツールは実行せず、ユーザーの承認を待つ。
-        if approval and tool in SENSITIVE_TOOLS:
+        # 実行の前に人に聞くべきか。段階3（送る・投稿する・お金が動く）は
+        # 承認モードを切っていても必ず聞く。設定の組み合わせで
+        # 「黙ってメールが飛んだ」が起きないようにする。
+        if risk.needs_confirmation(tool, approval):
+            info = risk.describe(tool)
             yield stamp({"phase": "approval", "step": step, "tool": tool,
-                         "params": params, "note": (preface or "").strip()})
+                         "params": params, "note": (preface or "").strip(),
+                         "level": info["level"], "level_label": info["label"],
+                         "why": info["why"],
+                         "always_confirm": info["always_confirm"]})
             yield stamp({"phase": "done", "steps": step - 1, "awaiting_approval": True})
             return
 

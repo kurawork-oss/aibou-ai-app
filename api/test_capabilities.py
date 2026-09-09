@@ -133,14 +133,35 @@ def test_agent_approval_allows_nonsensitive(monkeypatch):
     assert "tool" in phases and "approval" not in phases
 
 
-def test_agent_no_approval_runs_sensitive_inline(monkeypatch):
+def test_agent_no_approval_still_asks_before_irreversible_work(monkeypatch):
+    """承認モードを切っていても、取り返せない操作は必ず聞くこと。
+
+    以前は SENSITIVE_TOOLS という平たい集合が1つで、承認モードを切ると
+    メール送信も通知も黙って通った。「設定を切っていたから勝手に送られた」
+    を、設定の組み合わせで起こせないようにする。
+    """
     seq = iter(['<<<TOOL_CALL>>>{"tool":"notify","params":{"message":"hi"}}', "通知しました"])
     monkeypatch.setattr(agent.llm, "generate_text", lambda p, **k: next(seq))
     ran = []
     monkeypatch.setattr(agent.tools, "execute_tool", lambda n, pa: ran.append(n) or "ok")
     events = list(agent.run_stream("通知して", approval=False))
     phases = [e["phase"] for e in events]
-    assert "tool" in phases and "approval" not in phases and "notify" in ran
+    assert "approval" in phases and "notify" not in ran
+
+    ask = next(e for e in events if e["phase"] == "approval")
+    assert ask["level"] == 3 and ask["always_confirm"] is True
+    assert "届きます" in ask["why"]          # 何が起きるのかを具体的に言う
+
+
+def test_agent_no_approval_runs_ordinary_work_inline(monkeypatch):
+    """一方、AIbouの中だけが変わる操作は、いちいち聞かないこと。"""
+    seq = iter(['<<<TOOL_CALL>>>{"tool":"add_task","params":{"title":"牛乳"}}', "入れました"])
+    monkeypatch.setattr(agent.llm, "generate_text", lambda p, **k: next(seq))
+    ran = []
+    monkeypatch.setattr(agent.tools, "execute_tool", lambda n, pa: ran.append(n) or "ok")
+    events = list(agent.run_stream("タスク入れて", approval=False))
+    phases = [e["phase"] for e in events]
+    assert "tool" in phases and "approval" not in phases and "add_task" in ran
 
 
 # ── エンドポイント ───────────────────────────────────────────────────
