@@ -12,6 +12,10 @@
  * margin; other modes use the full width with their own centring.
  */
 
+import {
+  MANAGE_SURFACES, MORE_SURFACES, RUN_VIEW, isView, surfaceOf, tabOf,
+  type ShellView,
+} from "@/lib/shell";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AiProviderSettings from "@/components/AiProviderSettings";
@@ -50,7 +54,8 @@ import { listVoices } from "@/lib/voice";
 import { supabase, supabaseEnabled } from "@/lib/supabase";
 import { APP_VERSION } from "@/lib/version";
 
-type View = "chat" | "me" | "sns" | "capture" | "code" | "vault" | "income" | "tasks" | "studio" | "autopilot" | "board" | "archive" | "home" | "guide" | "extend";
+/** 画面の一覧は shell.ts が持つ（2か所に書くと、片方だけ増えても気づけない）。 */
+type View = ShellView;
 
 const LS_NAME = "forge_name";
 const LS_PERSONA = "forge_persona";
@@ -306,7 +311,12 @@ function Hud() {
       <section className="min-h-0 flex-1" style={{ perspective: 1400 }}>
         <motion.div
           key={view}
-          className="h-full min-h-0"
+          /* 縦に積む箱にする。
+             ここには画面本体だけでなく、上の案内（NeedsNotice）や管理タブの
+             切り替えも並ぶ。それらが場所を取るのに画面本体が h-full（＝親の
+             高さ100%）だと、兄弟のぶんだけ下へはみ出す。実測で入力欄の
+             下49pxが下のナビの裏に潜っていて、スマホで押しにくかった。 */
+          className="flex h-full min-h-0 flex-col"
           initial={
             reduceMotion
               ? false
@@ -326,23 +336,40 @@ function Hud() {
             </div>
           )}
 
-          {loaded && view === "home" && <Home settings={settings} onNavigate={setView} />}
-          {loaded && view === "chat" && (
-            <Chat settings={settings} voiceReplies={voiceReplies} onStateChange={setCoreState} />
+          {/* 管理タブの中の切り替え。実行（会話）のときは出さない。 */}
+          {loaded && tabOf(view as ShellView) === "manage" && (
+            <ManageBar view={view} onChange={setView} isOwner={isOwner} />
           )}
-          {loaded && view === "me" && <LifeMode settings={settings} />}
-          {loaded && view === "sns" && <Centered><SnsMode /></Centered>}
-          {loaded && view === "capture" && <Centered><Capture /></Centered>}
-          {loaded && view === "code" && <CodeMode />}
-          {loaded && view === "vault" && <Centered><Vault /></Centered>}
-          {loaded && view === "income" && <Centered><Income /></Centered>}
-          {loaded && view === "tasks" && <Centered><Tasks /></Centered>}
-          {loaded && view === "studio" && <Centered><Workshop /></Centered>}
-          {loaded && view === "autopilot" && <Centered><Autopilot /></Centered>}
-          {loaded && view === "board" && <Centered><Dashboard /></Centered>}
-          {loaded && view === "archive" && <Centered><AppArchive /></Centered>}
-          {loaded && view === "extend" && <Centered><Extensions onNavigate={setView} /></Centered>}
-          {loaded && view === "guide" && <Centered><Guide /></Centered>}
+
+          {/* 画面本体は「残った高さ」を使う。上の案内や切り替えが場所を
+              取っても、はみ出さずに縮む（min-h-0 が無いと縮まない）。 */}
+          <div className="flex min-h-0 flex-1 flex-col">
+            {loaded && view === "home" && <Home settings={settings} onNavigate={setView} />}
+            {loaded && view === "chat" && (
+              <Chat
+                settings={settings}
+                voiceReplies={voiceReplies}
+                onStateChange={setCoreState}
+                /* `#ボード` などの画面ものを、その場で開く。知らない名前は
+                   無視する（サーバー側の名前が先に変わっても、飛び先の
+                   無い所へ飛ばさない）。 */
+                onOpenView={(v) => { if (isView(v)) setView(v); }}
+              />
+            )}
+            {loaded && view === "me" && <LifeMode settings={settings} />}
+            {loaded && view === "sns" && <Centered><SnsMode /></Centered>}
+            {loaded && view === "capture" && <Centered><Capture /></Centered>}
+            {loaded && view === "code" && <CodeMode />}
+            {loaded && view === "vault" && <Centered><Vault /></Centered>}
+            {loaded && view === "income" && <Centered><Income /></Centered>}
+            {loaded && view === "tasks" && <Centered><Tasks /></Centered>}
+            {loaded && view === "studio" && <Centered><Workshop /></Centered>}
+            {loaded && view === "autopilot" && <Centered><Autopilot /></Centered>}
+            {loaded && view === "board" && <Centered><Dashboard /></Centered>}
+            {loaded && view === "archive" && <Centered><AppArchive /></Centered>}
+            {loaded && view === "extend" && <Centered><Extensions onNavigate={setView} /></Centered>}
+            {loaded && view === "guide" && <Centered><Guide /></Centered>}
+          </div>
         </motion.div>
       </section>
 
@@ -360,8 +387,9 @@ function Hud() {
         )}
       </AnimatePresence>
 
-      {/* Mobile thumb-zone nav (hidden on ≥sm; hides while the keyboard is open) */}
-      <MobileNav view={view} onChange={setView} items={visibleNav} />
+      {/* 下のナビ（スマホ）。実行・管理・設定の3つだけ。 */}
+      <MobileNav view={view} onChange={setView}
+                 onSettings={() => setSettingsOpen(true)} />
     </main>
   );
 }
@@ -456,11 +484,23 @@ function WaffleIcon() {
 }
 
 /** Google-apps-style mode launcher: a waffle button → popover grid of modes. */
-/** Bottom thumb-zone nav for phones: 4 primary modes + ⋯ (full grid sheet).
-    Slides away while the software keyboard is open (visualViewport). */
-function MobileNav({ view, onChange, items: navItems }:
-  { view: View; onChange: (v: View) => void; items: { key: View; label: string }[] }) {
-  const [sheetOpen, setSheetOpen] = useState(false);
+/**
+ * 下のナビ。「実行」「管理」の2つと、歯車だけ。
+ *
+ * 以前は4つのモード＋⋯で、⋯の中に14タイルが並んでいた。15個の行き先が
+ * 常に見えていて、開くたびに「どこへ行くか」を決めさせていた。
+ *
+ * 相棒は、行き先を選ばせない物のはず。だから
+ *   実行 … 話して、やってもらう（会話はここ1つ）
+ *   管理 … 残っている物を見る・触る
+ * の2つにして、残りは管理の中と `#` からたどれるようにした。画面は
+ * 1つも消していない（案内する数を減らしただけ）。
+ *
+ * 歯車を下に置いたのは、右上の32pxが片手では届きにくかったため。
+ * キーボードが出ている間は下げる（visualViewport）。
+ */
+function MobileNav({ view, onChange, onSettings }:
+  { view: View; onChange: (v: View) => void; onSettings: () => void }) {
   const [kbOpen, setKbOpen] = useState(false);
 
   useEffect(() => {
@@ -471,94 +511,116 @@ function MobileNav({ view, onChange, items: navItems }:
     return () => vv.removeEventListener("resize", onResize);
   }, []);
 
-  const PRIMARY: View[] = ["home", "chat", "me", "tasks"];
-  const items = navItems.filter((i) => PRIMARY.includes(i.key));
+  const tab = tabOf(view as ShellView);
 
   return (
-    <div className="sm:hidden">
-      {/* Full-grid sheet (all modes) */}
-      <AnimatePresence>
-        {sheetOpen && (
-          <>
-            <button
-              type="button"
-              aria-hidden
-              tabIndex={-1}
-              onClick={() => setSheetOpen(false)}
-              className="fixed inset-0 z-40 bg-black/50"
-            />
-            <motion.nav
-              initial={{ y: 60, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: 60, opacity: 0 }}
-              transition={{ type: "spring", stiffness: 380, damping: 32 }}
-              className="fixed inset-x-3 bottom-20 z-50"
-              aria-label="All modes"
-            >
-              <div className="glass-silver p-3">
-                <div className="grid grid-cols-4 gap-1.5">
-                  {navItems.map((it) => (
-                    <button
-                      key={it.key}
-                      type="button"
-                      onClick={() => { onChange(it.key); setSheetOpen(false); }}
-                      className="flex h-16 flex-col items-center justify-center gap-1 rounded-forge border text-[8px] tracking-[0.04em] label-mono"
-                      style={{
-                        borderColor: it.key === view ? "var(--accent)" : "var(--panel-bd)",
-                        color: it.key === view ? "var(--fg-strong)" : "var(--muted)",
-                      }}
-                    >
-                      <NavIcon name={it.key} />
-                      <span>{it.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </motion.nav>
-          </>
-        )}
-      </AnimatePresence>
+    <nav
+      aria-label="Mobile navigation"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-panel bg-[var(--chrome)] backdrop-blur-md transition-transform duration-200 sm:hidden"
+      style={{
+        paddingBottom: "env(safe-area-inset-bottom)",
+        transform: kbOpen ? "translateY(110%)" : "none",
+      }}
+    >
+      <div className="mx-auto grid max-w-md grid-cols-3">
+        <button
+          type="button"
+          onClick={() => onChange(RUN_VIEW as View)}
+          aria-current={tab === "run" ? "page" : undefined}
+          className="flex min-h-[52px] flex-col items-center justify-center gap-0.5 text-[10px] tracking-[0.06em] label-mono"
+          style={{ color: tab === "run" ? "var(--accent)" : "var(--muted)" }}
+        >
+          <NavIcon name="chat" />
+          <span>実行</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange((surfaceOf(view as ShellView)
+            ? view : MANAGE_SURFACES[0].view) as View)}
+          aria-current={tab === "manage" ? "page" : undefined}
+          className="flex min-h-[52px] flex-col items-center justify-center gap-0.5 text-[10px] tracking-[0.06em] label-mono"
+          style={{ color: tab === "manage" ? "var(--accent)" : "var(--muted)" }}
+        >
+          <NavIcon name="home" />
+          <span>管理</span>
+        </button>
+        <button
+          type="button"
+          onClick={onSettings}
+          aria-label="設定"
+          className="flex min-h-[52px] flex-col items-center justify-center gap-0.5 text-[10px] tracking-[0.06em] text-muted label-mono"
+        >
+          <span className="text-base leading-none">⚙</span>
+          <span>設定</span>
+        </button>
+      </div>
+    </nav>
+  );
+}
 
-      {/* Bar */}
-      <nav
-        aria-label="Mobile navigation"
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-panel bg-[var(--chrome)] backdrop-blur-md transition-transform duration-200"
-        style={{
-          paddingBottom: "env(safe-area-inset-bottom)",
-          transform: kbOpen ? "translateY(110%)" : "none",
-        }}
-      >
-        <div className="mx-auto grid max-w-md grid-cols-5">
-          {items.map((it) => {
-            const active = it.key === view;
-            return (
-              <button
-                key={it.key}
-                type="button"
-                onClick={() => onChange(it.key)}
-                className="flex min-h-[52px] flex-col items-center justify-center gap-0.5 text-[10px] tracking-[0.06em] label-mono"
-                style={{ color: active ? "var(--accent)" : "var(--muted)" }}
-                aria-current={active ? "page" : undefined}
-              >
-                <NavIcon name={it.key} />
-                <span>{it.label}</span>
-              </button>
-            );
-          })}
+
+/**
+ * 管理タブの中の切り替え。よく開く4つと「もっと」。
+ *
+ * 「もっと」に残りを入れてあるのは、`#` を知らない人の行き止まりを
+ * 作らないため。会話から呼べるのと、一覧としてたどれるのは別の話。
+ */
+function ManageBar({ view, onChange, isOwner }:
+  { view: View; onChange: (v: View) => void; isOwner: boolean | null }) {
+  const [moreOpen, setMoreOpen] = useState(false);
+  const here = surfaceOf(view as ShellView);
+  const more = MORE_SURFACES.filter((m) => !(m.ownerOnly && isOwner === false));
+
+  return (
+    <div className="mx-auto w-full max-w-5xl shrink-0">
+      <div className="flex flex-wrap items-center gap-1.5">
+        {MANAGE_SURFACES.map((sf) => (
           <button
+            key={sf.key}
             type="button"
-            onClick={() => setSheetOpen((v) => !v)}
-            className="flex min-h-[52px] flex-col items-center justify-center gap-0.5 text-[10px] tracking-[0.06em] text-muted label-mono"
-            aria-label="More modes"
+            onClick={() => { onChange(sf.view as View); setMoreOpen(false); }}
+            title={sf.hint}
+            className="rounded-forge border px-3 py-2 text-[12px] transition"
+            style={{
+              borderColor: here === sf.key ? "var(--accent)" : "var(--panel-bd)",
+              color: here === sf.key ? "var(--fg-strong)" : "var(--muted)",
+              background: here === sf.key ? "var(--btn-bg)" : "transparent",
+            }}
           >
-            <span className="text-base leading-none">⋯</span>
-            <span>MORE</span>
+            {sf.label}
           </button>
+        ))}
+        <button
+          type="button"
+          onClick={() => setMoreOpen((v) => !v)}
+          aria-expanded={moreOpen}
+          className="rounded-forge border border-panel px-3 py-2 text-[12px] text-muted transition"
+          style={{ color: here === null ? "var(--fg-strong)" : undefined }}
+        >
+          {moreOpen ? "▲ もっと" : "▼ もっと"}
+        </button>
+      </div>
+
+      {moreOpen && (
+        <div className="mt-1.5 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+          {more.map((m) => (
+            <button
+              key={m.key}
+              type="button"
+              onClick={() => { onChange(m.view as View); setMoreOpen(false); }}
+              className="rounded-forge border border-panel px-3 py-2 text-left transition hover:border-[var(--line)]"
+              style={{ borderColor: view === m.view ? "var(--accent)" : undefined }}
+            >
+              <span className="block text-[12px] text-fg-strong">{m.label}</span>
+              <span className="block text-[11px] text-muted">{m.hint}</span>
+            </button>
+          ))}
         </div>
-      </nav>
+      )}
     </div>
   );
 }
+
 
 function ModeLauncher({ view, onChange, items: navItems }:
   { view: View; onChange: (v: View) => void; items: { key: View; label: string }[] }) {

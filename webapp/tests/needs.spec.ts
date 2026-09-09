@@ -73,6 +73,18 @@ test("AIを使う画面には、AIの鍵が必要だと書いてある", () => {
   }
 });
 
+test("鍵が無くても最後まで使える画面は、必要だと言わない", () => {
+  // ホワイトボード（付箋・線・保存）はAIを使わない。それでも画面の頭に
+  // 「先に設定が必要です」と出していて、使える物を使えないと言っていた。
+  // AIを使うのは AUTOMATION タブだけなので、案内はそちらに置く。
+  expect(MODE_NEEDS["board"]).toBeUndefined();
+  expect(MODE_NEEDS["board_auto"]).toContain("GEMINI_API_KEY");
+  // タスク・予定・ファイルも、鍵ではなくバックエンドの話（別の案内が出る）
+  for (const mode of ["tasks", "archive", "board", "extend", "guide"]) {
+    expect(MODE_NEEDS[mode], `${mode} が鍵を要求している`).toBeUndefined();
+  }
+});
+
 test("無くても使える機能は、画面を止めない扱いにする", () => {
   // GitHub連携はCODEの一部。無いだけで画面全体を「使えない」にしない
   expect(NEED.GITHUB_TOKEN.optional).toBeTruthy();

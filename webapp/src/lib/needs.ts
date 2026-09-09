@@ -59,7 +59,11 @@ export const MODE_NEEDS: Record<string, string[]> = {
   sns: ["GEMINI_API_KEY"],
   code: ["GEMINI_API_KEY", "GITHUB_TOKEN"],
   autopilot: ["GEMINI_API_KEY"],
-  board: ["GEMINI_API_KEY"],
+  // board（ホワイトボード）は入れない。付箋・線・保存はAIを使わず、
+  // 鍵が無くても最後まで使える。それでも画面の頭に「先に設定が必要です」
+  // と出していたので、使える物を使えないと言っていた。
+  // AIを使うのは AUTOMATION タブだけなので、案内はそちらに置く。
+  board_auto: ["GEMINI_API_KEY"],
 };
 
 /**

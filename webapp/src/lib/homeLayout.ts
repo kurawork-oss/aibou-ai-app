@@ -25,13 +25,23 @@ export const WIDGET_META: Record<WidgetId, WidgetMeta> = {
   connect: { label: "接続", hint: "各モードへの入口" },
 };
 
-/** 既定の並び（現在の見た目と同じ順序）。 */
+/**
+ * 既定の並び。
+ *
+ * エージェントの欄（agent）は既定から外した。会話は「実行」タブに1つだけ
+ * 置く形にしたので、ここに置くと同じことを2か所でやることになる
+ * （実際、HOMEのエージェント欄と CHAT の司令塔モードで二重になっていた）。
+ * 消してはいないので、カスタマイズから戻せる。
+ */
 export const DEFAULT_ORDER: WidgetId[] = [
-  "agent", "watch", "dials", "agenda", "notifications", "artifacts", "connect",
+  "watch", "dials", "agenda", "notifications", "artifacts", "connect", "agent",
 ];
 
+/** 既定で隠すもの（並びには残すので、カスタマイズから戻せる）。 */
+export const DEFAULT_HIDDEN: WidgetId[] = ["agent"];
+
 /** 既定で横長にするもの（3カラムのうち2つ分）。 */
-const DEFAULT_WIDE: WidgetId[] = ["agent", "agenda"];
+const DEFAULT_WIDE: WidgetId[] = ["watch", "agenda"];
 
 export interface HomeLayout {
   /** 表示順。hidden のものも順序は保持する（戻したとき元の位置に出る）。 */
@@ -43,7 +53,8 @@ export interface HomeLayout {
 export const LS_KEY = "forge_home_layout_v1";
 
 export function defaultLayout(): HomeLayout {
-  return { order: [...DEFAULT_ORDER], hidden: [], wide: [...DEFAULT_WIDE] };
+  return { order: [...DEFAULT_ORDER], hidden: [...DEFAULT_HIDDEN],
+           wide: [...DEFAULT_WIDE] };
 }
 
 const isId = (v: unknown): v is WidgetId =>

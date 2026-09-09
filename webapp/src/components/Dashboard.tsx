@@ -22,6 +22,7 @@ import {
   type AutomationRunResult,
 } from "@/lib/api";
 import Tilt3D from "@/components/Tilt3D";
+import NeedsNotice from "@/components/NeedsNotice";
 import Whiteboard from "@/components/Whiteboard";
 import FlowBuilder from "@/components/FlowBuilder";
 import StepRunnersNote from "@/components/StepRunnersNote";
@@ -79,6 +80,11 @@ export default function Dashboard() {
           </button>
         ))}
       </div>
+
+      {/* 「先に設定が必要です」は、AIを使うこちらのタブにだけ出す。
+          ホワイトボードは鍵が無くても最後まで使えるので、画面の頭に
+          出していると、使える物を使えないと言うことになる。 */}
+      {tab === "auto" && <NeedsNotice mode="board_auto" />}
 
       <div className="min-h-0 flex-1">
         {tab === "board" ? <Whiteboard /> : <AutomationBoard />}

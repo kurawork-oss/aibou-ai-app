@@ -116,6 +116,59 @@ def test_full_width_hash_and_space_work():
     assert got and got["capability"]["cmd"] == "タスク" and got["rest"] == "牛乳を買う"
 
 
+def test_a_command_can_be_typed_in_kana():
+    """日本語入力は必ずかなを通る。
+
+    漢字の前方一致だけだと、「#がぞう」と打った人は変換を確定するまで
+    何も出ない。打ちながら選ぶという使い方そのものが成り立たなくなる。
+    """
+    assert cap.find("がぞう")["cmd"] == "画像"
+    assert cap.find("image")["cmd"] == "画像"          # ローマ字でも
+    got = cap.parse("#がぞう 猫の絵")
+    assert got and got["capability"]["cmd"] == "画像" and got["rest"] == "猫の絵"
+
+
+def test_every_command_can_be_reached_without_conversion():
+    """すべての入口に、かな・英語のよみが付いていること。
+
+    1つでも抜けると、その機能だけ「変換しないと呼べない」ことになる。
+    抜けても他が動くので、静かに使われなくなる壊れ方をする。
+    """
+    missing = [c["cmd"] for c in cap.CAPABILITIES if not (c.get("yomi") or "").strip()]
+    assert missing == [], f"よみが無い: {missing}"
+
+
+def test_an_ambiguous_kana_asks_instead_of_picking_one():
+    """絞れないときに勝手に決めないこと（取り違えて走るほうが困る）。
+
+    どの字が重なるかは中身が増えれば変わるので、実際に重なっている
+    ものを探してから確かめる（決め打ちにすると、増減のたびに嘘になる）。
+    探す先は find() と同じ「いま出せる入口」にする。繋いでいない物を
+    含めて数えると、実際には重なっていない字で落ちる。
+    """
+    heads = [(c.get("yomi") or "").split()[0][:1] for c in cap.available(True)]
+    shared = [h for h in set(heads) if h and heads.count(h) > 1]
+    assert shared, "前提が崩れた（重なるよみが1つも無い）"
+    for h in shared:
+        assert cap.find(h) is None, f"「{h}」で1つに決めてしまっている"
+
+
+def test_two_different_things_do_not_share_a_reading():
+    """よみがまるごと同じ入口を作らないこと。
+
+    「資料」（作る）と「しりょう」（保管庫から答える）が両方あって、
+    #しり まで打つと2つに割れ、どちらも出せなくなっていた。
+    やることが別なら、名前も分ける。
+    """
+    seen: dict[str, str] = {}
+    for c in cap.CAPABILITIES:
+        key = (c.get("yomi") or "").split()[0]
+        if not key:
+            continue
+        assert key not in seen, f"よみが同じ: {seen.get(key)} と {c['cmd']}（{key}）"
+        seen[key] = c["cmd"]
+
+
 def test_an_unknown_command_is_not_executed_but_passed_on():
     """打ち間違いで会話が止まらないこと。"""
     r = client.post("/command", json={"text": "#でたらめ なにか"}).json()

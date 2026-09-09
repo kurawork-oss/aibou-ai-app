@@ -462,7 +462,8 @@ export function codeGenerateStream(
 
 /* ---------------- HOME agent (手足となって動く) ---------------- */
 export interface AgentEvent {
-  phase: "start" | "prepare" | "thinking" | "tool" | "observation" | "approval" | "final" | "done" | "error";
+  phase: "start" | "prepare" | "thinking" | "tool" | "observation" | "approval"
+    | "setup_required" | "final" | "done" | "error";
   step?: number;
   tool?: string;
   params?: Record<string, unknown>;
@@ -478,6 +479,27 @@ export interface AgentEvent {
   ms?: number;
   /** 開始からの合計ミリ秒。 */
   total_ms?: number;
+
+  /* ── approval のとき ── */
+  /** 危なさ（0 読むだけ / 1 中が変わる / 2 外に残る / 3 取り返せない）。 */
+  level?: number;
+  level_label?: string;
+  /** 何が起きるのか（「送ったメールは取り消せません」など）。 */
+  why?: string;
+  /** 承認モードを切っていても必ず聞く操作か。 */
+  always_confirm?: boolean;
+
+  /* ── setup_required のとき ── */
+  /** 足りない連携（google / slack / notion / github）。 */
+  provider?: string;
+  label?: string;
+  /** 同意画面へ向かう入口。 */
+  connect_path?: string;
+  can_connect?: boolean;
+  /** 持ち主のアプリ登録がまだで、利用者では繋げない。 */
+  needs_owner?: boolean;
+  /** 連携待ちで止まっている（用事は預けてある）。 */
+  awaiting_setup?: boolean;
 }
 
 /**
@@ -2356,6 +2378,109 @@ export async function watchInbox(): Promise<{
     secret_set: d.secret_set === true,
     unread: asNumber(d.unread),
   };
+}
+
+
+/* ---------------- できること（# コマンドとパック） ---------------- */
+export interface CommandItem {
+  cmd: string;
+  label: string;
+  arg: string;
+  icon: string;
+  pack: string;
+  /** 読み（かな・英語）。日本語入力はかなを通るので、これで絞れないと窓が使えない。 */
+  yomi?: string;
+  view: string;
+  /** true なら、AIに考えさせず道具へ直行できる。 */
+  direct: boolean;
+}
+
+export interface FeaturePack {
+  key: string;
+  label: string;
+  hint: string;
+  enabled: boolean;
+  /** 切れないパック（切ると相棒がほぼ何もできなくなる）。 */
+  always: boolean;
+}
+
+/** GET /capabilities — # の一覧と、機能パックの状態。 */
+export async function capabilities(): Promise<{
+  packs: FeaturePack[]; commands: CommandItem[];
+}> {
+  const res = await fetch(`${requireApiUrl()}/capabilities`, {
+    headers: authHeaders(), cache: "no-store",
+  });
+  if (!res.ok) return { packs: [], commands: [] };
+  const d = (await res.json().catch(() => ({}))) as
+    { packs?: FeaturePack[]; commands?: CommandItem[] };
+  return { packs: asArray<FeaturePack>(d.packs), commands: asArray<CommandItem>(d.commands) };
+}
+
+/** POST /capabilities/packs — 使う機能のかたまりを切り替える。 */
+export async function setPacks(packs: string[]): Promise<boolean> {
+  const res = await fetch(`${requireApiUrl()}/capabilities/packs`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ packs }),
+  });
+  return res.ok;
+}
+
+export interface CommandResult {
+  ok: boolean;
+  /** done=実行した / view=画面を開く / needs_arg=引数が要る
+   *  / delegate=AIに任せる / unknown=知らないコマンド */
+  kind?: "done" | "view" | "needs_arg" | "delegate";
+  unknown?: boolean;
+  tool?: string;
+  label?: string;
+  view?: string;
+  result?: string;
+  message?: string;
+  cmd?: string;
+  arg?: string;
+}
+
+/**
+ * POST /command — 「#画像 猫の絵」を、AIに考えさせず直行させる。
+ *
+ * kind が delegate / unknown のときは、ふつうの指示としてAIへ投げ直すこと。
+ * # を覚えないと使えないアプリにしないための逃げ道。
+ */
+export async function runCommand(text: string): Promise<CommandResult> {
+  const res = await fetch(`${requireApiUrl()}/command`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ text }),
+  });
+  const d = (await res.json().catch(() => ({ ok: false }))) as CommandResult;
+  return d;
+}
+
+/* ---------------- 連携待ちで預かった用事 ---------------- */
+/** GET /setup/pending — 連携から戻ったときに「続きをやりますか」を出すため。 */
+export async function setupPending(): Promise<{
+  waiting: boolean; provider?: string; instruction?: string; auto_resume?: boolean;
+}> {
+  const res = await fetch(`${requireApiUrl()}/setup/pending`, {
+    headers: authHeaders(), cache: "no-store",
+  });
+  if (!res.ok) return { waiting: false };
+  return (await res.json().catch(() => ({ waiting: false }))) as
+    { waiting: boolean; provider?: string; instruction?: string; auto_resume?: boolean };
+}
+
+/** POST /setup/resume — 預かった用事を取り出す（実行はしない）。 */
+export async function setupResume(): Promise<{
+  ok: boolean; instruction?: string; auto?: boolean;
+}> {
+  const res = await fetch(`${requireApiUrl()}/setup/resume`, {
+    method: "POST", headers: authHeaders(),
+  });
+  if (!res.ok) return { ok: false };
+  return (await res.json().catch(() => ({ ok: false }))) as
+    { ok: boolean; instruction?: string; auto?: boolean };
 }
 
 /* ---------------- Proactive ---------------- */

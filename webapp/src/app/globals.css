@@ -132,6 +132,10 @@ a {
 
 /* Futuristic silver glass frame — translucent fill, a bright silver hairline
    on top, soft depth shadow. Used for the HOME cockpit panels. */
+/* 注意: position:relative を自分で持っている。
+   Tailwind の absolute / fixed を付けても、こちらが後に定義されているため
+   打ち消してしまう（実際、# の候補窓が入力欄の幅まで広がらなかった）。
+   位置を指定したい要素には .panel を使うか、position を明示し直すこと。 */
 .glass-silver {
   position: relative;
   background: linear-gradient(160deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.018));

@@ -7,19 +7,32 @@
 
 import { test, expect } from "@playwright/test";
 import {
-  DEFAULT_ORDER, defaultLayout, normalize, visible, move, toggleHidden, toggleWide, isWide,
+  DEFAULT_HIDDEN, DEFAULT_ORDER, defaultLayout, normalize, visible, move,
+  toggleHidden, toggleWide, isWide,
   type HomeLayout, type WidgetId,
 } from "../src/lib/homeLayout";
 
 test("default layout shows every widget in the documented order", () => {
   const l = defaultLayout();
   expect(l.order).toEqual(DEFAULT_ORDER);
-  expect(l.hidden).toEqual([]);
-  expect(visible(l)).toEqual(DEFAULT_ORDER);
-  // ヒーローと予定は既定で横長
-  expect(isWide(l, "agent")).toBeTruthy();
+  // エージェントの欄は既定で隠す。会話は「実行」タブに1つだけ置く形にしたので、
+  // ここにも置くと同じことを2か所でやることになる（実際そうなっていた）。
+  // 消してはいないので、カスタマイズから戻せる。
+  expect(l.hidden).toEqual(DEFAULT_HIDDEN);
+  expect(visible(l)).toEqual(DEFAULT_ORDER.filter((id) => !DEFAULT_HIDDEN.includes(id)));
+  expect(visible(l)).not.toContain("agent" as WidgetId);
+  // 見張りと予定は既定で横長
+  expect(isWide(l, "watch")).toBeTruthy();
   expect(isWide(l, "agenda")).toBeTruthy();
   expect(isWide(l, "connect")).toBeFalsy();
+});
+
+test("the hidden agent widget can be brought back", () => {
+  // 隠しただけで消していないことを担保する（使いたい人が戻せる）。
+  let l = defaultLayout();
+  expect(visible(l)).not.toContain("agent" as WidgetId);
+  l = toggleHidden(l, "agent");
+  expect(visible(l)).toContain("agent" as WidgetId);
 });
 
 /* ── 保存値の正規化 ─────────────────────────────────────────────── */
@@ -94,7 +107,7 @@ test("hiding then showing restores the original position", () => {
 
 test("every widget can be hidden (empty home is allowed)", () => {
   let l: HomeLayout = defaultLayout();
-  for (const id of DEFAULT_ORDER) l = toggleHidden(l, id);
+  for (const id of visible(l)) l = toggleHidden(l, id);
   expect(visible(l)).toEqual([]);
   expect(l.order).toEqual(DEFAULT_ORDER);   // 戻せるように順序は残す
 });
@@ -104,8 +117,8 @@ test("width toggles independently of order and visibility", () => {
   let l = defaultLayout();
   l = toggleWide(l, "connect");
   expect(isWide(l, "connect")).toBeTruthy();
-  l = toggleWide(l, "agent");
-  expect(isWide(l, "agent")).toBeFalsy();
+  l = toggleWide(l, "watch");
+  expect(isWide(l, "watch")).toBeFalsy();
   // 並びは変わらない
   expect(l.order).toEqual(DEFAULT_ORDER);
 });

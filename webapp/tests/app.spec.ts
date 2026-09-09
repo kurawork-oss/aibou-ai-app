@@ -7,6 +7,7 @@
  */
 
 import { test, expect, type Page } from "@playwright/test";
+import { DEFAULT_HIDDEN, DEFAULT_ORDER } from "../src/lib/homeLayout";
 
 /* ── helpers ────────────────────────────────────────────────────── */
 async function enterApp(page: Page) {
@@ -103,7 +104,9 @@ test("CHAT is the default view; HOME shows the cockpit", async ({ page }) => {
   // Navigating to HOME renders the cockpit
   await goMode(page, "HOME");
   await expect(page.getByText("PERSONAL COCKPIT")).toBeVisible({ timeout: 5_000 });
-  await expect(page.getByText(/AGENT CONSOLE/i)).toBeVisible();
+  // 会話欄はここには置かない。実行タブに1つだけある（同じ物を2か所に
+  // 置くと、どちらで話したか分からなくなる）。隠しただけなので戻せる。
+  await expect(page.getByText(/AGENT CONSOLE/i)).toHaveCount(0);
   await expect(page.getByText("INSTRUMENT CLUSTER")).toBeVisible();
   await expect(page.getByText("予定 — AGENDA")).toBeVisible();
 });
@@ -460,7 +463,10 @@ test("HOME widgets can be reordered, hidden, restored and remembered", async ({ 
   const ids = () => page.locator("[data-widget]").evaluateAll(
     (els) => els.map((e) => e.getAttribute("data-widget")));
   await expect(page.locator("[data-widget]").first()).toBeVisible({ timeout: 8_000 });
-  expect((await ids())[0]).toBe("agent");
+  // 先頭は「既定の並びのうち、隠れていない最初の物」。ウィジェットが
+  // 増減しても壊れないよう、名前を直書きしない。
+  const firstShown = DEFAULT_ORDER.filter((id) => !DEFAULT_HIDDEN.includes(id))[0];
+  expect((await ids())[0]).toBe(firstShown);
 
   // カスタマイズに入る
   await page.getByRole("button", { name: /カスタマイズ/ }).click();
@@ -491,7 +497,7 @@ test("HOME widgets can be reordered, hidden, restored and remembered", async ({ 
   // 既定に戻せる
   await page.getByRole("button", { name: /カスタマイズ/ }).click();
   await page.getByRole("button", { name: /既定の並びに戻す/ }).click();
-  await expect.poll(async () => (await ids())[0]).toBe("agent");
+  await expect.poll(async () => (await ids())[0]).toBe(firstShown);
 });
 
 /* ── ⑩ CHAT: 会話 / 司令塔（実行）の切替（offlineでも切替とヒントは確認できる） ── */
@@ -1058,20 +1064,37 @@ test("Mode switch retints the accent (data-mode)", async ({ page }) => {
   expect(accent).toBe("#ff7a7a");
 });
 
-/* ── Phase A (ui-r15): mobile thumb-zone nav ── */
-test("Mobile bottom nav switches modes and opens the MORE sheet", async ({ page }) => {
+/* ── 下のナビ：実行 / 管理 / 設定 の3つだけ ──
+ *
+ * 以前は4モード＋⋯で、⋯の中に14タイルが並んでいた。行き先が15個あって、
+ * 開くたびに「どこへ行くか」を決めさせていた。いまは2つに畳んで、残りは
+ * 管理タブの「もっと」からたどる。画面は1つも消していないので、
+ * ここでは「畳んだ先に本当に届くか」を見る。 */
+test("下のナビは実行と管理の2つで、残りは管理の「もっと」から届く", async ({ page }) => {
+  await page.setViewportSize({ width: 393, height: 852 });
   await page.goto("/");
   await enterApp(page);
   const nav = page.getByLabel("Mobile navigation");
   await expect(nav).toBeVisible();
-  await nav.getByText("TASKS", { exact: true }).click();
+
+  // 行き先は3つ（実行・管理・設定）だけ
+  await expect(nav.locator("button")).toHaveCount(3);
+  await expect(nav.getByText("実行", { exact: true })).toBeVisible();
+  await expect(nav.getByText("管理", { exact: true })).toBeVisible();
+
+  // 実行タブは会話。会話欄はアプリ全体でここ1つ。
+  await expect(page.getByPlaceholder("AIbou にメッセージ…")).toBeVisible({ timeout: 5_000 });
+
+  // 管理タブ → 「今日」から始まり、切り替えでタスクへ行ける
+  await nav.getByText("管理", { exact: true }).click();
+  await expect(page.getByText("PERSONAL COCKPIT")).toBeVisible({ timeout: 5_000 });
+  await page.getByRole("button", { name: "タスク", exact: true }).click();
   await expect(page.getByText("NEW TASK")).toBeVisible({ timeout: 5_000 });
-  await page.getByLabel("More modes").click();
-  const sheet = page.getByLabel("All modes");
-  await expect(sheet.getByText("BOARD", { exact: true })).toBeVisible({ timeout: 3_000 });
-  await sheet.getByText("BOARD", { exact: true }).click();
-  // BOARD now opens the Miro whiteboard by default.
-  await expect(page.getByRole("button", { name: "＋ 付箋" })).toBeVisible({ timeout: 5_000 });
+
+  // ナビから消した画面も、「もっと」で行き止まりにならない
+  await page.getByRole("button", { name: /もっと/ }).click();
+  await page.getByRole("button", { name: /録音/ }).click();
+  await expect(page.getByText("画面録画・録音")).toBeVisible({ timeout: 5_000 });
 });
 
 /* ── CODE deep mode + AI provider settings (ui-r21) ── */
@@ -1129,11 +1152,22 @@ test("KEYCHAIN includes an email key with its issuance guide", async ({ page }) 
   await expect(page.getByRole("link", { name: /アプリパスワード/ })).toBeVisible({ timeout: 5_000 });
 });
 
-/* ── HOME cockpit: agent console + instrument cluster (ui-r22) ── */
+/* ── HOME cockpit: agent console + instrument cluster (ui-r22) ──
+ *
+ * エージェント欄は既定で隠している（会話は実行タブに1つ）。ただし
+ * **消してはいない**ので、戻した人にはこれまで通り出る必要がある。
+ * ここはその「戻せる」ことの担保も兼ねる。 */
+async function showAgentWidget(page: Page) {
+  await goMode(page, "HOME");
+  await page.getByRole("button", { name: /カスタマイズ/ }).click();
+  await page.getByLabel("エージェントを表示する").click();
+  await page.getByRole("button", { name: /✓ 完了/ }).click();
+}
+
 test("HOME agent console renders with action suggestions", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
-  await goMode(page, "HOME");
+  await showAgentWidget(page);
   await expect(page.getByText("AGENT CONSOLE · 手足となって動く")).toBeVisible({ timeout: 5_000 });
   // Suggestion chips are visible (they drive the agent when connected)
   await expect(page.getByText("新規事業の提案スライドを作って")).toBeVisible();
@@ -1152,7 +1186,7 @@ test("CHAT composer hints screenshot paste", async ({ page }) => {
 test("HOME agent console has a file-attach button", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
-  await goMode(page, "HOME");
+  await showAgentWidget(page);
   await expect(page.getByTitle("ファイルを添付（PDF/テキスト）")).toBeVisible({ timeout: 5_000 });
 });
 

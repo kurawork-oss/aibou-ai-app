@@ -49,89 +49,98 @@ PACK_ORDER = ["core", "make", "share", "dev", "income"]
 
 
 # ── できること1つぶん ────────────────────────────────────────────────
+# cmd   … # のあとに打つ名前
+# yomi  … 読み（かな）と英語。日本語入力はかなを通るので、これが無いと
+#          「#がぞう」と打った人が「画像」を見つけられない
 # tool  … 直行できる道具（tools._DISPATCH の名前）。無い物は画面を開くだけ
 # view  … 開く画面（管理タブの中身、または専用画面）
 # needs … これが繋がっていないと使えない（oauth.PROVIDERS の名前 or 鍵の名前）
 # arg   … # のあとに続けて書く物。説明に出す
 CAPABILITIES: List[dict] = [
     # 仕事の基本
-    {"cmd": "タスク", "label": "タスクを追加", "pack": "core",
+    {"cmd": "タスク", "yomi": "たすく task", "label": "タスクを追加", "pack": "core",
      "tool": "add_task", "arg": "やること", "icon": "✓"},
-    {"cmd": "予定", "label": "予定を追加", "pack": "core",
+    {"cmd": "予定", "yomi": "よてい yotei schedule", "label": "予定を追加", "pack": "core",
      "tool": "add_agenda", "arg": "いつ・何を", "icon": "📅"},
-    {"cmd": "状況", "label": "いまの状況をまとめる", "pack": "core",
+    {"cmd": "状況", "yomi": "じょうきょう status", "label": "いまの状況をまとめる", "pack": "core",
      "tool": "watch_report", "arg": "", "icon": "👀"},
-    {"cmd": "メール", "label": "受信メールを見る", "pack": "core",
+    {"cmd": "メール", "yomi": "めーる mail", "label": "受信メールを見る", "pack": "core",
      "tool": "email_inbox", "arg": "件数", "icon": "✉"},
-    {"cmd": "メール送信", "label": "メールを送る", "pack": "core",
+    {"cmd": "メール送信", "yomi": "めーるそうしん mail send", "label": "メールを送る", "pack": "core",
      "tool": "send_email", "arg": "宛先と用件", "icon": "📤"},
-    {"cmd": "検索", "label": "Webを検索する", "pack": "core",
+    {"cmd": "検索", "yomi": "けんさく search", "label": "Webを検索する", "pack": "core",
      "tool": "web_search", "arg": "調べたいこと", "icon": "🔍"},
-    {"cmd": "読む", "label": "ページを読む", "pack": "core",
+    {"cmd": "読む", "yomi": "よむ read url", "label": "ページを読む", "pack": "core",
      "tool": "web_read", "arg": "URL", "icon": "📖"},
-    {"cmd": "覚えて", "label": "覚えておく", "pack": "core",
+    {"cmd": "覚えて", "yomi": "おぼえて remember", "label": "覚えておく", "pack": "core",
      "tool": "remember", "arg": "覚える内容", "icon": "🧠"},
-    {"cmd": "思い出して", "label": "思い出す", "pack": "core",
+    {"cmd": "思い出して", "yomi": "おもいだして recall", "label": "思い出す", "pack": "core",
      "tool": "recall", "arg": "キーワード", "icon": "💭"},
-    {"cmd": "通知", "label": "通知を送る", "pack": "core",
+    {"cmd": "通知", "yomi": "つうち notify", "label": "通知を送る", "pack": "core",
      "tool": "notify", "arg": "メッセージ", "icon": "🔔"},
-    {"cmd": "定期実行", "label": "決まった時刻に実行する", "pack": "core",
+    {"cmd": "定期実行", "yomi": "ていきじっこう schedule", "label": "決まった時刻に実行する", "pack": "core",
      "tool": "schedule_add", "arg": "何を・何時に", "icon": "⏰"},
-    {"cmd": "付箋", "label": "ボードに付箋を貼る", "pack": "core",
+    {"cmd": "付箋", "yomi": "ふせん sticky note", "label": "ボードに付箋を貼る", "pack": "core",
      "tool": "board_add_note", "arg": "書く内容", "view": "board", "icon": "🗒"},
 
     # つくる
-    {"cmd": "画像", "label": "画像をつくる", "pack": "make",
+    {"cmd": "画像", "yomi": "がぞう image picture", "label": "画像をつくる", "pack": "make",
      "tool": "generate_image", "arg": "どんな絵か", "icon": "🖼"},
-    {"cmd": "スライド", "label": "スライドをつくる", "pack": "make",
+    {"cmd": "スライド", "yomi": "すらいど slide", "label": "スライドをつくる", "pack": "make",
      "tool": "create_slides", "arg": "テーマ", "icon": "📊"},
-    {"cmd": "資料", "label": "ドキュメントをつくる", "pack": "make",
+    {"cmd": "資料", "yomi": "しりょう document doc", "label": "ドキュメントをつくる", "pack": "make",
      "tool": "create_document", "arg": "見出し", "icon": "📄"},
-    {"cmd": "表", "label": "表をつくる", "pack": "make",
+    {"cmd": "表", "yomi": "ひょう table sheet", "label": "表をつくる", "pack": "make",
      "tool": "create_spreadsheet", "arg": "表の名前", "icon": "🧮"},
-    {"cmd": "ノート", "label": "ノートに保存する", "pack": "make",
+    {"cmd": "ノート", "yomi": "のーと note", "label": "ノートに保存する", "pack": "make",
      "tool": "save_note", "arg": "書く内容", "icon": "📓"},
 
     # Google（繋いでいなければ勝手に消える）
-    {"cmd": "ドライブ", "label": "ドライブにファイルを作る", "pack": "make",
+    {"cmd": "ドライブ", "yomi": "どらいぶ drive", "label": "ドライブにファイルを作る", "pack": "make",
      "tool": "drive_upload", "arg": "ファイル名と中身", "needs": "google", "icon": "📁"},
-    {"cmd": "Gドキュメント", "label": "Googleドキュメントを作る", "pack": "make",
+    {"cmd": "Gドキュメント", "yomi": "gどきゅめんと google doc", "label": "Googleドキュメントを作る", "pack": "make",
      "tool": "google_doc", "arg": "見出し", "needs": "google", "icon": "📝"},
-    {"cmd": "Gスプレッドシート", "label": "Googleスプレッドシートを作る", "pack": "make",
+    {"cmd": "Gスプレッドシート", "yomi": "gすぷれっどしーと google sheet", "label": "Googleスプレッドシートを作る", "pack": "make",
      "tool": "google_sheet", "arg": "表の名前", "needs": "google", "icon": "📗"},
-    {"cmd": "Gスライド", "label": "Googleスライドを作る", "pack": "make",
+    {"cmd": "Gスライド", "yomi": "gすらいど google slide", "label": "Googleスライドを作る", "pack": "make",
      "tool": "create_google_slides", "arg": "テーマ", "needs": "google", "icon": "📽"},
-    {"cmd": "カレンダー登録", "label": "Googleカレンダーに入れる", "pack": "core",
+    {"cmd": "カレンダー登録", "yomi": "かれんだーとうろく calendar add", "label": "Googleカレンダーに入れる", "pack": "core",
      "tool": "calendar_add", "arg": "いつ・何を", "needs": "google", "icon": "🗓"},
-    {"cmd": "カレンダー", "label": "Googleカレンダーを見る", "pack": "core",
+    {"cmd": "カレンダー", "yomi": "かれんだー calendar", "label": "Googleカレンダーを見る", "pack": "core",
      "tool": "calendar_list", "arg": "日数", "needs": "google", "icon": "📆"},
 
     # 発信する
-    {"cmd": "Notion", "label": "Notionに書き足す", "pack": "share",
+    {"cmd": "Notion", "yomi": "のーしょん notion", "label": "Notionに書き足す", "pack": "share",
      "tool": "notion_add", "arg": "見出し", "needs": "notion", "icon": "🗃"},
 
     # 自動化・開発・副業
-    {"cmd": "自動化", "label": "自動化フローを作る", "pack": "dev",
+    {"cmd": "自動化", "yomi": "じどうか automation", "label": "自動化フローを作る", "pack": "dev",
      "tool": "create_automation", "arg": "フロー名", "icon": "⚡"},
-    {"cmd": "自動化実行", "label": "自動化フローを動かす", "pack": "dev",
+    {"cmd": "自動化実行", "yomi": "じどうかじっこう run automation", "label": "自動化フローを動かす", "pack": "dev",
      "tool": "run_automation", "arg": "フロー名", "icon": "▶"},
-    {"cmd": "ゴール", "label": "ゴールを分解して進める", "pack": "dev",
+    {"cmd": "ゴール", "yomi": "ごーる goal mission", "label": "ゴールを分解して進める", "pack": "dev",
      "tool": "create_mission", "arg": "達成したいこと", "icon": "🎯"},
-    {"cmd": "副業", "label": "副業ジョブを積む", "pack": "income",
+    {"cmd": "副業", "yomi": "ふくぎょう income", "label": "副業ジョブを積む", "pack": "income",
      "tool": "enqueue_income", "arg": "テーマ", "icon": "💰"},
-    {"cmd": "副業状況", "label": "副業の状況を見る", "pack": "income",
+    {"cmd": "副業状況", "yomi": "ふくぎょうじょうきょう income status", "label": "副業の状況を見る", "pack": "income",
      "tool": "income_status", "arg": "", "icon": "📈"},
 
-    # 画面を開くだけ（道具ではない）
-    {"cmd": "ボード", "label": "ホワイトボードを開く", "pack": "core",
+    # 画面を開くだけ（道具ではない）。
+    # "view" は画面側の View 名をそのまま書く。ここが実在しない名前だと
+    # 押しても何も起きないが、エラーにもならないので静かに壊れる。
+    # webapp/tests/shell.spec.ts で実在するか突き合わせている。
+    {"cmd": "ボード", "yomi": "ぼーど board whiteboard", "label": "ホワイトボードを開く", "pack": "core",
      "view": "board", "arg": "", "icon": "🧩"},
-    {"cmd": "コード", "label": "コードの作業場を開く", "pack": "dev",
+    {"cmd": "コード", "yomi": "こーど code", "label": "コードの作業場を開く", "pack": "dev",
      "view": "code", "arg": "", "icon": "⌨"},
-    {"cmd": "ファイル", "label": "作った物を見る", "pack": "core",
-     "view": "files", "arg": "", "icon": "🗂"},
-    {"cmd": "録音", "label": "録音・文字起こし", "pack": "make",
+    {"cmd": "ファイル", "yomi": "ふぁいる file", "label": "作った物を見る", "pack": "core",
+     "view": "archive", "arg": "", "icon": "🗂"},
+    {"cmd": "録音", "yomi": "ろくおん record capture", "label": "録音・文字起こし", "pack": "make",
      "view": "capture", "arg": "", "icon": "🎙"},
-    {"cmd": "しりょう", "label": "資料から答える（保管庫）", "pack": "make",
+    # 名前が「資料」だと、資料をつくる側（create_document）とよみが同じに
+    # なる。#しり まで打った時点で2つに割れて、どちらも出せなくなっていた。
+    # やることは別物（作る／入れた物から答える）なので、名前で分ける。
+    {"cmd": "保管庫", "yomi": "ほかんこ vault library", "label": "入れた資料から答える", "pack": "make",
      "view": "vault", "arg": "", "icon": "📚"},
 ]
 
@@ -240,16 +249,29 @@ def tools_doc(is_owner: bool = True) -> str:
 
 # ── # コマンドの解釈 ─────────────────────────────────────────────────
 def find(cmd: str, is_owner: bool = True) -> Optional[dict]:
-    """コマンド名から、できることを引く。前方一致も許す。"""
+    """コマンド名から、できることを引く。
+
+    前方一致とよみ（かな・英語）でも引ける。日本語入力はかなを通るので、
+    漢字の前方一致だけだと「#がぞう」と打った人が「画像」を見つけられない。
+    候補が1つに絞れないときは None（勝手に決めない）。
+    """
     name = (cmd or "").strip().lstrip("#＃")
     if not name:
         return None
     items = available(is_owner)
+    low = name.lower()
     for c in items:
         if c["cmd"] == name:
             return c
-    hits = [c for c in items if c["cmd"].startswith(name)]
-    return hits[0] if len(hits) == 1 else None
+    for pick in (lambda c: c["cmd"].lower().startswith(low),
+                 lambda c: (c.get("yomi") or "").lower().startswith(low),
+                 lambda c: low in (c.get("yomi") or "").lower()):
+        hits = [c for c in items if pick(c)]
+        if len(hits) == 1:
+            return hits[0]
+        if hits:
+            return None       # 絞れないなら決めない（取り違えるより聞く）
+    return None
 
 
 def parse(text: str, is_owner: bool = True) -> Optional[dict]:
@@ -287,7 +309,7 @@ def status(is_owner: bool = True) -> dict:
         "packs": packs,
         "commands": [
             {"cmd": c["cmd"], "label": c["label"], "arg": c.get("arg", ""),
-             "icon": c.get("icon", ""), "pack": c["pack"],
+             "icon": c.get("icon", ""), "pack": c["pack"], "yomi": c.get("yomi", ""),
              "view": c.get("view", ""), "direct": bool(c.get("tool"))}
             for c in available(is_owner)
         ],

@@ -143,7 +143,8 @@ test("下のナビと本文の文字が、読める大きさである", async ({
   expect(tiny, `10px未満の本文:\n${tiny.join("\n")}`).toEqual([]);
 
   // 下のナビは HUD ラベルだが、行き先そのものなので読める大きさが要る
-  const navSize = await page.getByRole("button", { name: "TASKS", exact: true }).first()
+  const navSize = await page.getByLabel("Mobile navigation")
+    .getByText("管理", { exact: true })
     .evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
   expect(navSize).toBeGreaterThanOrEqual(10);
 });

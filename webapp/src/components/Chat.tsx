@@ -30,8 +30,10 @@ import {
   API_URL,
   streamChat, vision, agentActStream, agentExecute,
   conversationsList, conversationGet, conversationSave, conversationDelete,
-  type ChatTurn, type AgentEvent,
+  capabilities, runCommand, setupPending, setupResume,
+  type ChatTurn, type AgentEvent, type CommandItem, type CommandResult,
 } from "@/lib/api";
+import CommandPalette, { readHashInput } from "@/components/CommandPalette";
 import { useSpeechRecognition } from "@/lib/voice";
 import { speakCore, stopCoreVoice, type CoreVoiceSettings, type VoiceEngine } from "@/lib/coreVoice";
 import { takeCompleteSentences } from "@/lib/speech";
@@ -58,7 +60,32 @@ export interface ChatSettings {
 export type AgentStep = TraceStep;
 
 /** 承認待ちの操作（メール送信など、取り消せないもの）。 */
-interface PendingAct { tool: string; params: Record<string, unknown>; note?: string }
+interface PendingAct {
+  tool: string;
+  params: Record<string, unknown>;
+  note?: string;
+  /** 危なさ（0 読むだけ / 1 中が変わる / 2 外に残る / 3 取り返せない）。 */
+  level?: number;
+  levelLabel?: string;
+  /** 何が起きるのか（「送ったメールは取り消せません」など）。 */
+  why?: string;
+  /** 承認モードを切っていても必ず聞く操作か。 */
+  alwaysConfirm?: boolean;
+}
+
+/**
+ * 連携が足りなくて止まったときの案内。
+ *
+ * ここで会話を終わらせないのが肝。用事はサーバー側で預かってあるので、
+ * 繋いで戻れば続きから進む。
+ */
+interface NeedSetup {
+  provider: string;
+  label: string;
+  connectPath: string;
+  canConnect: boolean;
+  needsOwner: boolean;
+}
 
 interface Message {
   id: string;
@@ -66,6 +93,8 @@ interface Message {
   content: string;
   /** Optional preview for an attached image (data URL). */
   image?: string;
+  /** 連携が足りなくて止まったとき、その案内。 */
+  need?: NeedSetup;
   pending?: boolean;
   error?: boolean;
   /** エージェントとして動いたターンの実行記録（会話ターンでは undefined）。 */
@@ -82,6 +111,14 @@ export interface ChatProps {
   onStateChange?: (state: CoreState) => void;
   /** Whether spoken replies are enabled (TTS). */
   voiceReplies?: boolean;
+  /**
+   * `#ボード` のように「画面を開く」近道を押されたときの行き先。
+   *
+   * これが無いと、`#` は画面ものには使えず「管理タブから探してください」と
+   * 返すだけになる。案内を出すために近道を作ったわけではないので、
+   * ここは実際に開く。
+   */
+  onOpenView?: (view: string) => void;
 }
 
 const HISTORY_LIMIT = 12;
@@ -132,10 +169,13 @@ function saveConvos(convos: Convo[]): void {
   }
 }
 
-export default function Chat({ settings, onStateChange, voiceReplies = true }: ChatProps) {
+export default function Chat({ settings, onStateChange, voiceReplies = true, onOpenView }: ChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
+  // # の候補と、直行したときの一言
+  const [commands, setCommands] = useState<CommandItem[]>([]);
+  const [note, setNote] = useState("");
   // 司令塔モード：会話ではなく、道具を使って実際に動く（HOMEのエージェントと同じ）
   const [agentMode, setAgentMode] = useState(false);
   const [approval, setApproval] = useState(true);   // 取り消せない操作は実行前に確認
@@ -491,7 +531,24 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
               case "approval":
                 setSteps((s) => s.filter((x) => x.kind !== "thinking"));
                 setMessages((prev) => prev.map((m) => (m.id === assistantId
-                  ? { ...m, await: { tool: ev.tool || "", params: ev.params || {}, note: ev.note }, pending: false }
+                  ? { ...m, pending: false, await: {
+                      tool: ev.tool || "", params: ev.params || {}, note: ev.note,
+                      level: ev.level, levelLabel: ev.level_label, why: ev.why,
+                      alwaysConfirm: ev.always_confirm,
+                    } }
+                  : m)));
+                break;
+              case "setup_required":
+                // 「設定してきてください」で終わらせない。繋ぐボタンを出す。
+                // 用事はサーバーが預かっているので、戻れば続きから進む。
+                setSteps((s) => s.filter((x) => x.kind !== "thinking"));
+                setMessages((prev) => prev.map((m) => (m.id === assistantId
+                  ? { ...m, pending: false, need: {
+                      provider: ev.provider || "", label: ev.label || "",
+                      connectPath: ev.connect_path || "",
+                      canConnect: Boolean(ev.can_connect),
+                      needsOwner: Boolean(ev.needs_owner),
+                    } }
                   : m)));
                 break;
               case "error":
@@ -594,9 +651,95 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
   }, []);
 
   /** Send a text turn (optionally with an attached image → /vision). */
+  /* ── # の近道 ──────────────────────────────────────────────
+     ふつうに「猫の絵を描いて」と書くとAIが道具を選ぶ。融通は利くが一手待つ。
+     `#画像 猫の絵` はその一手を飛ばして直行する。速くて結果が読める。
+     ただし # は近道であって必須ではない。知らないコマンドや、1つの文から
+     機械的に割れない物（#予定 明日15時に歯医者）は、ふつうの頼みごととして
+     AIへ回す。ここが崩れると「呪文を覚えないと使えないアプリ」になる。 */
+  const hash = readHashInput(input);
+
+  const runShortcut = useCallback(async (text: string): Promise<boolean> => {
+    let res: CommandResult;
+    try {
+      res = await runCommand(text);
+    } catch {
+      return false;                      // 通信が駄目ならAIに回す
+    }
+    if (res.unknown || res.kind === "delegate") return false;
+
+    if (res.kind === "needs_arg") {
+      setInput(`${text.replace(/[\s　]+$/, "")} `);
+      setNote(res.message ?? "");
+      return true;
+    }
+    if (res.kind === "view") {
+      // 画面ものは、その場で開く。開けないときだけ在り処を言う
+      // （近道が「探してください」で終わるなら、近道ではない）。
+      if (res.view && onOpenView) {
+        setInput("");
+        setNote("");
+        onOpenView(res.view);
+      } else {
+        setNote(`「${res.label}」は管理タブから開けます。`);
+      }
+      return true;
+    }
+    // 直行できた。会話にも残す（あとから何をしたか読み返せるように）
+    setMessages((prev) => [...prev,
+      { id: uid(), role: "user", content: text },
+      { id: uid(), role: "assistant", content: res.result ?? "" }]);
+    setInput("");
+    return true;
+  }, [onOpenView]);
+
+  useEffect(() => {
+    if (!API_URL) return;
+    let alive = true;
+    capabilities()
+      .then((d) => { if (alive) setCommands(d.commands); })
+      .catch(() => { /* # が出ないだけ。会話はふつうに動く */ });
+    return () => { alive = false; };
+  }, []);
+
+  /* ── 連携から戻ってきたとき ──────────────────────────────────
+     別のタブで許可して戻ってくると、サーバーには用事が預かってある。
+     ここで拾って「続きをやりますか」を出す。拾わないと、利用者は
+     さきほどの頼みごとをもう一度言うことになる。それが設定でいちばん
+     いらない手間だった。
+
+     勝手に実行はしない。送信のような取り返せない操作が、繋いだ瞬間に
+     黙って走るのがいちばん怖いので、押してもらう。 */
+  const [held, setHeld] = useState<{ instruction: string } | null>(null);
+
+  useEffect(() => {
+    if (!API_URL) return;
+    let alive = true;
+    const check = () => {
+      setupPending()
+        .then((d) => { if (alive) setHeld(d.waiting && d.instruction ? { instruction: d.instruction } : null); })
+        .catch(() => { /* 拾えなくても会話は動く */ });
+    };
+    check();
+    // 別のタブで許可して戻ってきた瞬間に気づけるように
+    const onFocus = () => check();
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      alive = false;
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
+  }, []);
+
   const send = useCallback(async () => {
     const text = input.trim();
     if ((!text && !pendingImage) || streaming) return;
+
+    // # で始まるなら、まず直行を試す。駄目ならそのままAIへ。
+    if (!pendingImage && (text.startsWith("#") || text.startsWith("＃"))) {
+      if (await runShortcut(text)) return;
+    }
 
     if (listening) stopMic();
     resetMic();
@@ -619,7 +762,8 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
 
     const history = buildHistory();
     await runTurn(text, image ? { base64: image.base64, mime: image.mime } : null, assistantMsg.id, history);
-  }, [input, pendingImage, streaming, listening, stopMic, resetMic, buildHistory, runTurn, stopReply]);
+  }, [input, pendingImage, streaming, listening, stopMic, resetMic, buildHistory,
+      runTurn, stopReply, runShortcut]);
 
   /** 会話モード開始：マイクを開き、以後は 無音→自動送信→読み上げ→再びマイク のループ。 */
   const enterVoiceMode = useCallback(() => {
@@ -883,7 +1027,46 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
           </div>
         )}
 
-        <div className="panel flex items-end gap-1.5 p-2">
+        {/* 連携待ちで預かった用事。押すと、言い直さずに続きから進む。 */}
+        {held && (
+          <div className="mb-1.5 flex flex-wrap items-center gap-2 rounded-forge border p-2"
+               style={{ borderColor: "var(--accent)", background: "var(--tint)" }}>
+            <span className="min-w-0 flex-1 text-[11px] leading-relaxed text-fg">
+              預かっていた用事があります:「{held.instruction}」
+            </span>
+            <button
+              type="button"
+              onClick={async () => {
+                const got = await setupResume().catch(() => null);
+                setHeld(null);
+                if (got?.ok && got.instruction) {
+                  setInput(got.instruction);
+                  // 入力欄に戻すだけ。送信は本人に押してもらう。
+                  setNote("続きを入れました。送信すると進めます。");
+                }
+              }}
+              className="shrink-0 rounded-forge border px-3 py-2 text-[11px] label-mono"
+              style={{ borderColor: "var(--accent)", color: "var(--fg-strong)",
+                       background: "var(--btn-bg)" }}
+            >
+              続きを出す
+            </button>
+            <button
+              type="button"
+              onClick={() => { void setupResume().catch(() => null); setHeld(null); }}
+              className="shrink-0 rounded-forge border border-panel px-3 py-2 text-[11px] text-muted label-mono"
+            >
+              やめる
+            </button>
+          </div>
+        )}
+
+        {note && (
+          <p role="status" aria-live="polite"
+             className="mb-1 text-[11px] leading-relaxed text-muted">{note}</p>
+        )}
+
+        <div className="panel relative flex items-end gap-1.5 p-2">
           {/* Image attach */}
           <button
             type="button"
@@ -904,6 +1087,22 @@ export default function Chat({ settings, onStateChange, voiceReplies = true }: C
             className="hidden"
             onChange={onPickImage}
           />
+
+          {/* # の候補。打ちながら絞る（一覧メニューにしない）。 */}
+          {hash.active && commands.length > 0 && (
+            <CommandPalette
+              items={commands}
+              query={hash.query}
+              onPick={(c) => {
+                // 引数が要る物は、名前まで入れて続きを打たせる。
+                // 要らない物はそのまま送る。
+                const next = `#${c.cmd}${c.arg ? " " : ""}`;
+                setInput(next);
+                if (!c.arg) void runShortcut(next.trim());
+              }}
+              onClose={() => setInput("")}
+            />
+          )}
 
           {/* Text input */}
           <textarea
@@ -1355,10 +1554,61 @@ function MessageBubble({ message, onRegenerate, onApprove, onReject }: {
           </div>
         )}
 
+        {/* 連携が足りなくて止まった — ここで会話を終わらせない。
+            用事はサーバーが預かっているので、繋いで戻れば続きから進む。 */}
+        {message.need && (
+          <div className="mb-2 rounded-forge border p-2.5"
+               style={{ borderColor: "var(--accent)", background: "var(--tint)" }}>
+            <div className="text-[10px] text-[var(--accent)] label-mono">
+              {message.need.label}との連携が必要
+            </div>
+            {message.need.canConnect ? (
+              <>
+                <a
+                  href={`${API_URL}${message.need.connectPath}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-1.5 inline-flex min-h-[44px] items-center rounded-forge border px-3.5 text-[12px] label-mono"
+                  style={{ borderColor: "var(--accent)", color: "var(--fg-strong)",
+                           background: "var(--btn-bg)" }}
+                >
+                  {message.need.label}と連携する
+                </a>
+                <p className="mt-1.5 text-[11px] leading-relaxed text-muted">
+                  許可して戻ってくると、さきほどの用事から続けます。
+                  言い直す必要はありません。
+                </p>
+              </>
+            ) : message.need.needsOwner ? (
+              <p className="mt-1 text-[11px] leading-relaxed text-muted">
+                このアプリの持ち主が{message.need.label}へのアプリ登録を
+                まだ済ませていないため、いまは繋げません。
+              </p>
+            ) : null}
+          </div>
+        )}
+
         {/* 承認待ち — 取り消せない操作は必ず確認してから実行する */}
         {message.await && (
           <div className="mb-2 rounded-forge border border-[#ffd06055] bg-[rgba(255,208,96,0.06)] p-2">
-            <div className="text-[10px] text-[#ffd060] label-mono">確認が必要な操作</div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[10px] text-[#ffd060] label-mono">確認が必要な操作</span>
+              {message.await.levelLabel && (
+                <span className="rounded-full border border-[#ffd06055] px-2 py-0.5 text-[10px] text-[#ffd060]">
+                  {message.await.levelLabel}
+                </span>
+              )}
+              {/* 承認モードを切っていても聞く操作は、そう言っておく。
+                  「設定を切ったのに確認が出る」を不具合と思われないため。 */}
+              {message.await.alwaysConfirm && (
+                <span className="text-[10px] text-muted">設定に関わらず必ず確認します</span>
+              )}
+            </div>
+            {message.await.why && (
+              <div className="mt-1 text-[11px] leading-relaxed text-[#ffd060]">
+                {message.await.why}
+              </div>
+            )}
             <div className="mt-0.5 text-[11px] text-fg-strong">
               {message.await.tool}{message.await.note ? ` — ${message.await.note}` : ""}
             </div>
