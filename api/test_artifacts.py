@@ -66,7 +66,24 @@ def test_create_spreadsheet_quotes_commas():
 
 
 def test_create_spreadsheet_requires_data():
-    assert "空" in tools.execute_tool("create_spreadsheet", {"title": "x"})
+    """データ抜きで呼ばれたら、何が足りないのかを名指しで返すこと。
+
+    これを読むのはAIで、読んだあと直して呼び直す。だから「空です」ではなく
+    「rows が足りない・二次元配列で渡す」と、引数名と形まで言う。
+    """
+    msg = tools.execute_tool("create_spreadsheet", {"title": "x"})
+    assert "rows" in msg and "二次元配列" in msg
+
+
+def test_a_wrong_shape_is_explained_rather_than_crashing():
+    """形が違うときも、例外ではなく直し方が返ること。
+
+    以前は引数を素通ししていたので、道具の中で例外になり
+    「ツール実行エラー（...）」という読めない文が届いていた。
+    """
+    msg = tools.execute_tool("add_task", {"title": "x", "priority": "とても高い"})
+    assert "priority" in msg and "high" in msg
+    assert "エラー" not in msg
 
 
 # ── エンドポイント ───────────────────────────────────────────────────

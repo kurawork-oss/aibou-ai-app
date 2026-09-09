@@ -1016,6 +1016,19 @@ def execute_tool(name: str, params: dict) -> str:
         return f"不明なツールです：{name}"
     if key in _TOOLS_THAT_PERSIST and _storage_missing():
         return _NO_STORAGE_MSG
+
+    # 引数を先に確かめる。これまでは素通しで、AIが形を間違えても道具の中で
+    # 例外になり、「ツール実行エラー」という読めない文が利用者に届いていた。
+    # ここで止めれば、何が足りないのかをAIに返せて、AIが直して呼び直せる。
+    try:
+        import toolschema
+        checked, problem = toolschema.validate(key, params)
+        if problem:
+            return f"引数が足りないか、形が違います（{key}）：{problem}"
+        params = checked
+    except Exception:
+        pass          # 検証の仕組みが壊れても、道具そのものは動かす
+
     try:
         return handler(params)
     except Exception as e:

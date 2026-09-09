@@ -217,21 +217,32 @@ def _resolve_model(key: str = "") -> str:
     return fallback
 
 
-def get_gemini_model(model_name: str | None = None, key: str | None = None):
+def get_gemini_model(model_name: str | None = None, key: str | None = None,
+                     tools=None):
     """GenerativeModel を返す。未設定なら None（絶対にraiseしない）。
     model_name 未指定なら、その鍵で使える最適なモデルを自動選択する。
-    鍵をgenaiへ入れるところまで含むので、必ず錠の中から呼ぶこと。"""
+    鍵をgenaiへ入れるところまで含むので、必ず錠の中から呼ぶこと。
+
+    tools を渡すと、モデルに関数の宣言を持たせる（正式な function calling）。
+    これまでは「返答の1行目に目印を書いてくれ」と文章で頼み、その文字列を
+    text から探していた。書き忘れ・崩れ・引数のJSON破損が普通に起きるので、
+    モデルが正式に備えている口を使う。
+    """
     k = key if key is not None else current_gemini_key()
     if not _apply_key(k):
         return None
     try:
         import google.generativeai as genai
-        return genai.GenerativeModel(model_name or _resolve_model(k))
+        name = model_name or _resolve_model(k)
+        if tools:
+            return genai.GenerativeModel(name, tools=tools)
+        return genai.GenerativeModel(name)
     except Exception:
         return None
 
 
-def generate_resilient(prompt, stream: bool = False, model_name: str | None = None):
+def generate_resilient(prompt, stream: bool = False, model_name: str | None = None,
+                       tools=None):
     """generate_content の quota-0 429 に強いラッパー。
     使えないモデル（無料枠0）に当たったらブラックリスト→次候補で1度だけ再試行する。
     Gemini未設定なら None。その他の例外はそのまま raise（呼び出し元の整形を維持）。
@@ -244,7 +255,7 @@ def generate_resilient(prompt, stream: bool = False, model_name: str | None = No
     if not key:
         return None
     with _gemini_lock:
-        model = get_gemini_model(model_name, key=key)
+        model = get_gemini_model(model_name, key=key, tools=tools)
         if model is None:
             return None
         try:
@@ -254,7 +265,7 @@ def generate_resilient(prompt, stream: bool = False, model_name: str | None = No
                 raise
             used = (getattr(model, "model_name", "") or "").replace("models/", "")
             mark_model_unavailable(used)
-            model2 = get_gemini_model(model_name, key=key)
+            model2 = get_gemini_model(model_name, key=key, tools=tools)
             if model2 is None:
                 raise
             return model2.generate_content(prompt, stream=stream)

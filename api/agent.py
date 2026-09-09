@@ -32,6 +32,7 @@ import time
 from datetime import datetime, timezone, timedelta
 
 import llm
+import toolcall
 import tools
 
 # ツールを何回まで連鎖できるか（無限ループ / 無駄呼び出しの安全弁）。
@@ -55,6 +56,19 @@ def _today_str() -> str:
         return ""
 
 
+def _tool_names():
+    """AIに選ばせる道具の名前。説明文と同じ絞り込みを使う。
+
+    説明だけ絞って宣言は全部渡す、という食い違いを作らないため、
+    どちらもここから引く。
+    """
+    try:
+        import capabilities
+        return capabilities.enabled_tools()
+    except Exception:
+        return set(tools.TOOL_DOCS)
+
+
 def _tools_doc() -> str:
     """AIに渡す道具の説明。パックと連携の状況で絞る。
 
@@ -69,22 +83,38 @@ def _tools_doc() -> str:
 
 
 def _system_prompt(name: str) -> str:
+    """いつも渡す指示。道具の一覧と呼び方は、ここには入れない。
+
+    道具をどう呼ばせるかは2通りある（正式な function calling と、文章に
+    目印を書かせる方式）。両方の説明を混ぜて渡すと、正式な口が使えるときに
+    モデルが目印を書いてしまう。使う方式のぶんだけを、後から足す。
+    """
     assistant = (name or "AIbou").strip() or "AIbou"
     return (
         f"あなたは「{assistant}」。THE FORGE OS のホーム・エージェントであり、"
         "ユーザーの手足となって“会話だけで終わらせず実際に手を動かす”自律エージェントです。\n"
         f"今日の日付: {_today_str()}\n\n"
-        # 使う物だけを渡す。全部渡すと毎回3,900文字が乗るうえ、選択肢が
-        # 多いほど道具の選び間違いが増える。
-        + _tools_doc() + "\n\n"
-        "【行動プロトコル（厳守）】\n"
-        "1. 目的の達成に行動が必要なら、返答の一番最初の行に必ず次の形式を“1行だけ”出力する：\n"
-        f'   {_MARKER}{{"tool":"ツール名","params":{{...}}}}\n'
-        "2. ツールの実行結果は次の行で <<<TOOL_RESULT>>> として渡される。それを踏まえ、"
-        "まだ必要なら次のツールを（同じ形式で）1つ呼ぶ。\n"
+        "【行動の原則】\n"
+        "1. 目的の達成に行動が必要なら、道具を1つ呼ぶ。一度に呼ぶのは必ず1つ。\n"
+        "2. 道具の結果を踏まえ、まだ必要なら次の道具を呼ぶ。\n"
         "3. 状況が曖昧なときは、まず list_state で現状を把握してから動く。\n"
-        "4. すべて完了したら、ツール記法は一切使わず、実行した内容と結果を日本語で簡潔に報告する。\n"
-        "5. 一度に呼ぶツールは必ず1つ。無駄な呼び出しはしない。行動が不要な質問には普通に答える。"
+        "4. すべて完了したら、実行した内容と結果を日本語で簡潔に報告する。\n"
+        "5. 無駄な呼び出しはしない。行動が不要な質問には普通に答える。"
+    )
+
+
+def _marker_protocol() -> str:
+    """正式な function calling が使えないモデル向けの、これまでの頼み方。
+
+    道具の説明もここに入れる。正式な口では宣言として渡すので要らない。
+    """
+    return (
+        "\n\n" + _tools_doc() + "\n\n"
+        "【ツールの呼び方】\n"
+        "行動が必要なら、返答の一番最初の行に必ず次の形式を“1行だけ”出力する：\n"
+        f'   {_MARKER}{{"tool":"ツール名","params":{{...}}}}\n'
+        "実行結果は次の行で <<<TOOL_RESULT>>> として渡される。\n"
+        "完了したらツール記法は一切使わず、日本語で報告する。"
     )
 
 
@@ -174,6 +204,8 @@ def run_stream(instruction: str, history=None, name: str = "AIbou", approval: bo
                      "detail": f"{len(always) + len(topic):,}字"})
 
     convo = _build_convo(system_prompt, history, instruction)
+    # 正式な口が使えないモデルに落ちたとき用。道具の説明と目印の頼み方が入る。
+    convo_marker = _build_convo(system_prompt + _marker_protocol(), history, instruction)
     yield stamp({"phase": "prepare", "what": "指示文の組み立て",
                  "detail": f"{len(convo):,}字"})
 
@@ -184,16 +216,22 @@ def run_stream(instruction: str, history=None, name: str = "AIbou", approval: bo
     for step in range(1, MAX_STEPS + 1):
         yield stamp({"phase": "thinking", "step": step})
         try:
-            text = llm.generate_text(convo + "\nアシスタント:", max_tokens=STEP_MAX_TOKENS)
+            # 道具の選択は、モデルが正式に備えている口（function calling）で行う。
+            # 使えないモデルでは、これまでどおり文章から目印を拾う方式に落ちる。
+            decision = toolcall.decide(
+                convo + "\nアシスタント:",
+                convo_marker + "\nアシスタント:",
+                _tool_names(), tools.TOOL_DOCS)
         except Exception as e:
             yield stamp({"phase": "error", "detail": _friendly_error(e)})
             yield stamp({"phase": "done", "steps": step - 1})
             return
 
-        call, preface = tools.extract_tool_call(text or "")
+        call = decision.get("call")
+        preface = decision.get("text") or ""
         if not call:
-            # ツール呼び出し無し＝最終報告。
-            final = (text or "").strip() or _fallback_report(executed, failed)
+            # 道具を呼ばなかった＝最終報告。
+            final = preface.strip() or _fallback_report(executed, failed)
             yield stamp({"phase": "final", "text": final})
             yield stamp({"phase": "done", "steps": step - 1})
             return
@@ -210,12 +248,14 @@ def run_stream(instruction: str, history=None, name: str = "AIbou", approval: bo
             rules_shown.add(tool)
             yield stamp({"phase": "prepare", "what": f"{tool} のルールを確認",
                          "detail": f"{len(rule_text):,}字"})
-            convo += (
+            back = (
                 f"\nアシスタント: {_MARKER}{json.dumps(call, ensure_ascii=False)}"
                 f"\n<<<TOOL_RESULT>>> {rule_text}\n"
                 "（まだ実行していません。上のルールに沿って内容を直し、"
                 "同じツールをもう一度呼んでください）"
             )
+            convo += back
+            convo_marker += back
             continue
 
         # 承認モード：機微なツールは実行せず、ユーザーの承認を待つ。
@@ -235,10 +275,13 @@ def run_stream(instruction: str, history=None, name: str = "AIbou", approval: bo
         yield stamp({"phase": "observation", "step": step, "tool": tool, "result": result})
 
         # 実行の痕跡を会話に足して次のステップへ。
-        convo += (
+        # 2通りの指示文の両方に積む（途中で落ちる先が変わっても筋が通るように）。
+        trace = (
             f"\nアシスタント: {_MARKER}{json.dumps(call, ensure_ascii=False)}"
             f"\n<<<TOOL_RESULT>>> {result}"
         )
+        convo += trace
+        convo_marker += trace
 
     # ステップ上限に到達 → ツール無しで最終報告を促す。
     try:
