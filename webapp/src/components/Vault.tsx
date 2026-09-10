@@ -26,6 +26,8 @@ import {
   vaultUpload,
   vaultDocs,
   vaultDocDelete,
+  myDatabase,
+  API_URL,
   type VaultNotebook,
   type VaultDoc,
   type VaultAnswer,
@@ -38,6 +40,23 @@ export default function Vault() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  /* 保存先が繋がっているか。"unknown" のうちは何も言わない——
+     分からない状態で「残りません」と出すと、繋いである人にも
+     嘘の警告を出すことになる。 */
+  const [storage, setStorage] = useState<"unknown" | "ok" | "none">("unknown");
+  useEffect(() => {
+    if (!API_URL) return;
+    let alive = true;
+    myDatabase()
+      .then((d) => {
+        if (!alive) return;
+        // 持ち主はサーバー既定のDBに保存される。そこで「無い」と言うと嘘になる。
+        setStorage(d.connected || d.using_server_db ? "ok" : "none");
+      })
+      .catch(() => { /* 分からないままにする（憶測で警告しない） */ });
+    return () => { alive = false; };
+  }, []);
 
   // new notebook
   const [newName, setNewName] = useState("");
@@ -301,10 +320,20 @@ export default function Vault() {
               例：「社内規程」「商品マニュアル」「議事録」。
               テーマごとに分けておくと、聞いたときに関係ない資料が混ざりません。
             </p>
-            <p className="mt-1 text-[10px] text-muted/70">
-              ※ 保存先がまだ決まっていないと、作った入れ物は残りません
-              （拡張機能 → Supabase）。
-            </p>
+            {/* 「決まっていないと残りません」だと、自分がどちらなのか
+                分からないまま作ることになる。**いまどうなっているか**を
+                言い切る。分かるまでは何も出さない（急かさない）。 */}
+            {storage === "none" && (
+              <p className="mt-1 text-[10px] leading-relaxed" style={{ color: "#ff9b9b" }}>
+                ※ いま保存先が繋がっていないので、作っても残りません
+                （拡張機能 → Supabase から繋いでください）。
+              </p>
+            )}
+            {storage === "ok" && (
+              <p className="mt-1 text-[10px] text-muted/70">
+                ※ 保存先は繋がっています。作った入れ物はそのまま残ります。
+              </p>
+            )}
           </div>
         ) : (
           <div className="flex flex-wrap gap-2">

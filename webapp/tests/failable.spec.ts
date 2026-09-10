@@ -117,3 +117,44 @@ test("サーバーが error で返す口も、これまで通り読める", asyn
     restore();
   }
 });
+
+/* ── 投げる側（throw）にも、同じ理由が残ること ────────────────────
+ *
+ * 一覧を取る口などは、失敗したら例外を投げる作りになっている。そちらも
+ * `data.error` だけを見ていたので、FastAPI の detail が捨てられ、
+ *
+ *   409 {"detail": "保存先がつながっていないため…接続してください。"}
+ *   → 「Create mission failed (409)」
+ *
+ * と、次の手が書いてある文が英字1行に化けていた。 */
+test("投げるときも、サーバーの理由をそのまま載せる", async () => {
+  const { autopilotCreate } = await import("../src/lib/api");
+  const restore = reply(409, {
+    detail: "保存先がつながっていないため、保存できませんでした。拡張機能（EXTEND）→ Supabase から接続してください。",
+  });
+  try {
+    await expect(autopilotCreate("提案資料を仕上げる")).rejects.toThrow(/Supabase から接続/);
+  } finally {
+    restore();
+  }
+});
+
+test("理由が無いときは、せめて何が失敗したかを残す", async () => {
+  const { autopilotCreate } = await import("../src/lib/api");
+  const restore = reply(500, {});
+  try {
+    await expect(autopilotCreate("x")).rejects.toThrow(/Create mission failed \(500\)/);
+  } finally {
+    restore();
+  }
+});
+
+test("error で返す口も、これまで通り読める（投げる側）", async () => {
+  const { autopilotCreate } = await import("../src/lib/api");
+  const restore = reply(400, { error: "ゴールが空です" });
+  try {
+    await expect(autopilotCreate("")).rejects.toThrow("ゴールが空です");
+  } finally {
+    restore();
+  }
+});

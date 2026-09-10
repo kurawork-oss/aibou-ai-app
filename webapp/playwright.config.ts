@@ -62,6 +62,11 @@ export default defineConfig({
     {
       // 繋がっているときの画面用。接続先は page.route で受けるので、
       // このアドレスに本物が居る必要はない（居ないほうが確実）。
+      //
+      // 注意: reuseExistingServer が効くので、**3100 で自分でサーバーを
+      // 立てないこと**。立てたまま .next-linked を作り直すと、Playwright は
+      // その古いサーバーを使い回し、直したはずの所が直っていないように
+      // 見える（何度かこれで時間を使った）。手で見るときは別のポートで。
       command: "npx next build && npx next start -p 3100",
       port: 3100,
       timeout: 180_000,

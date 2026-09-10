@@ -345,7 +345,7 @@ function Hud() {
           {/* 画面本体は「残った高さ」を使う。上の案内や切り替えが場所を
               取っても、はみ出さずに縮む（min-h-0 が無いと縮まない）。 */}
           <div className="flex min-h-0 flex-1 flex-col">
-            {loaded && view === "home" && <Home settings={settings} onNavigate={setView} />}
+            {loaded && view === "home" && <Home settings={settings} onNavigate={setView} isOwner={isOwner} />}
             {loaded && view === "chat" && (
               <Chat
                 settings={settings}

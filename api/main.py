@@ -1440,7 +1440,14 @@ async def code_shell_run(req: ShellRunRequest, _auth: None = Depends(require_aut
 
 @app.get("/code/scaffold")
 async def code_scaffold(kind: str = "web", _auth: None = Depends(require_auth)):
-    """CODE：スターターワークスペース（web | python | empty）。"""
+    """CODE：スターターワークスペース（web | python | empty）。
+
+    画面はこれを呼ばず、同じひな形を自分で持っている。**わざと**そうして
+    ある——バックエンドが寝ていても「作りはじめる」ところまでは進めたい
+    ので、ただの定型文のために1往復待たせない。
+    ここは外から叩く口として残す（中身が2か所にあるので、直すときは
+    webapp の CodeMode.tsx も見ること）。
+    """
     return code_agent.scaffold(kind)
 
 

@@ -59,9 +59,16 @@ function greeting(): string {
 export default function Home({
   settings,
   onNavigate,
+  isOwner = null,
 }: {
   settings: ChatSettings;
   onNavigate: (v: View) => void;
+  /**
+   * 持ち主かどうか。持ち主専用の計器（副業）を出すかを決める。
+   * null は「まだ分からない」。分かるまでは出す側に倒す——
+   * 持ち主の画面から一瞬消えるほうが分かりにくいので。
+   */
+  isOwner?: boolean | null;
 }) {
   const [summary, setSummary] = useState<HomeSummary | null>(null);
   const [events, setEvents] = useState<AgendaEvent[]>([]);
@@ -103,7 +110,11 @@ export default function Home({
         { label: "タスク", value: summary.tasks.open, onClick: () => onNavigate("tasks") },
         { label: "ミッション", value: summary.missions.active, onClick: () => onNavigate("autopilot") },
         { label: "自動化", value: summary.automations.total, onClick: () => onNavigate("board") },
-        { label: "副業", value: summary.income.pending, onClick: () => onNavigate("income") },
+        // 副業は持ち主だけの画面。他の人に出すと、押した先で断られる。
+        // ナビの「もっと」からも同じ理由で外してある。
+        ...(isOwner === false ? [] : [
+          { label: "副業", value: summary.income.pending, onClick: () => onNavigate("income") },
+        ]),
         { label: "予定", value: summary.events.total, onClick: () => scrollTo("home-agenda") },
         { label: "通知", value: summary.notifications.unread, onClick: () => scrollTo("home-notifications") },
       ]

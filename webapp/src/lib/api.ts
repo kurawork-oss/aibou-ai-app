@@ -110,6 +110,27 @@ function requireApiUrl(): string {
  * 直し方を1か所にしたのは、同じ間違いが今後も足されるため——
  * 呼ぶ側の作法を変えるより、返す形を正しくするほうが崩れない。
  */
+/**
+ * 応答の中から「サーバーが書いた理由」を取り出す。
+ *
+ * FastAPI は `{"detail": …}`、こちらで足した口は `{"error": …}` を返す。
+ * どちらか片方しか見ないと、たとえば
+ *
+ *   409 {"detail": "保存先がつながっていないため…接続してください。"}
+ *   → 画面「Create mission failed (409)」
+ *
+ * のように、次の手が書いてある文を捨てて英字だけを残すことになる。
+ */
+function reason(body: unknown): string | undefined {
+  if (!body || typeof body !== "object") return undefined;
+  const d = body as Record<string, unknown>;
+  const v = d.error ?? d.detail;
+  if (typeof v === "string" && v.trim()) return v;
+  // FastAPI の入力検査は配列で返る。そのまま出しても読めない。
+  if (Array.isArray(v)) return "送った内容の形が正しくありません";
+  return undefined;
+}
+
 async function failable<T>(res: Response, fallback: string): Promise<T> {
   const body = (await res.json().catch(() => null)) as Record<string, unknown> | null;
   if (res.ok) {
@@ -326,7 +347,7 @@ export async function vision(params: VisionParams): Promise<string> {
   });
   const data = (await res.json().catch(() => ({}))) as { text?: string; error?: string };
   if (!res.ok || data.error) {
-    throw new Error(data.error || `Vision failed (${res.status})`);
+    throw new Error(reason(data) ?? `Vision failed (${res.status})`);
   }
   return data.text ?? "";
 }
@@ -341,7 +362,7 @@ export async function tts(params: TTSParams): Promise<string> {
     }),
   });
   const data = (await res.json().catch(() => ({}))) as { audio_base64?: string; error?: string };
-  if (!res.ok) throw new Error(data.error || `TTS failed (${res.status})`);
+  if (!res.ok) throw new Error(reason(data) ?? `TTS failed (${res.status})`);
   return data.audio_base64 ?? "";
 }
 
@@ -421,15 +442,6 @@ export async function codeGenerate(
 }
 
 /** GET /code/scaffold — starter workspace (web | python | empty). */
-export async function codeScaffold(kind: "web" | "python" | "empty"): Promise<CodeFile[]> {
-  const res = await fetch(`${requireApiUrl()}/code/scaffold?kind=${kind}`, {
-    headers: authHeaders(),
-    cache: "no-store",
-  });
-  const data = (await res.json().catch(() => ({ files: [] }))) as { files?: CodeFile[] };
-  return data.files ?? [];
-}
-
 export interface CodeProgress {
   phase: string;
   detail?: string;
@@ -1321,7 +1333,7 @@ export async function lifeAdd(category: string, content: string, entryDate = "")
     body: JSON.stringify({ category, content, entry_date: entryDate }),
   });
   const data = (await res.json().catch(() => ({}))) as LifeEntry & { error?: string };
-  if (!res.ok || data.error) throw new Error(data.error ?? `Life add failed (${res.status})`);
+  if (!res.ok || data.error) throw new Error(reason(data) ?? `Life add failed (${res.status})`);
   return data;
 }
 
@@ -1342,7 +1354,7 @@ export async function lifeExtract(turns: ChatTurn[]): Promise<{ category: string
     body: JSON.stringify({ turns }),
   });
   const data = (await res.json().catch(() => ({}))) as { entries?: { category: string; content: string }[]; error?: string };
-  if (data.error) throw new Error(data.error);
+  if (data.error) throw new Error(reason(data) ?? "失敗しました");
   return data.entries ?? [];
 }
 
@@ -1359,7 +1371,7 @@ export interface GhRepo {
 export async function ghRepos(): Promise<GhRepo[]> {
   const res = await fetch(`${requireApiUrl()}/github/repos`, { headers: authHeaders(), cache: "no-store" });
   const data = (await res.json().catch(() => ({}))) as { items?: GhRepo[]; error?: string };
-  if (data.error) throw new Error(data.error);
+  if (data.error) throw new Error(reason(data) ?? "失敗しました");
   if (!res.ok) throw new Error(`GitHub repos failed (${res.status})`);
   return data.items ?? [];
 }
@@ -1372,7 +1384,7 @@ export async function ghImport(repo: string, ref = "", path = ""): Promise<{ rep
     body: JSON.stringify({ repo, ref, path }),
   });
   const data = (await res.json().catch(() => ({}))) as { repo: string; ref: string; files: CodeFile[]; skipped: number; error?: string };
-  if (data.error) throw new Error(data.error);
+  if (data.error) throw new Error(reason(data) ?? "失敗しました");
   if (!res.ok) throw new Error(`GitHub import failed (${res.status})`);
   return data;
 }
@@ -1388,7 +1400,7 @@ export async function ghPush(payload: {
     body: JSON.stringify({ create_pr: true, ...payload }),
   });
   const data = (await res.json().catch(() => ({}))) as { ok?: boolean; branch?: string; commit?: string; pr_url?: string; note?: string; error?: string };
-  if (data.error) throw new Error(data.error);
+  if (data.error) throw new Error(reason(data) ?? "失敗しました");
   if (!res.ok) throw new Error(`GitHub push failed (${res.status})`);
   return data;
 }
@@ -1557,7 +1569,7 @@ export async function vaultGenerateDoc(notebookId: string, instruction: string):
   });
   const data = (await res.json().catch(() => ({}))) as { markdown?: string; error?: string };
   if (!res.ok && !data.error) throw new Error(`Doc generation failed (${res.status})`);
-  if (data.error) throw new Error(data.error);
+  if (data.error) throw new Error(reason(data) ?? "失敗しました");
   return { markdown: data.markdown ?? "" };
 }
 
@@ -1570,7 +1582,7 @@ export async function vaultGenerateDiagram(notebookId: string, kind = "tree"): P
   });
   const data = (await res.json().catch(() => ({}))) as { mermaid?: string; kind?: string; error?: string };
   if (!res.ok && !data.error) throw new Error(`Diagram generation failed (${res.status})`);
-  if (data.error) throw new Error(data.error);
+  if (data.error) throw new Error(reason(data) ?? "失敗しました");
   return { mermaid: data.mermaid ?? "", kind: data.kind ?? kind };
 }
 
@@ -1613,7 +1625,7 @@ export async function createTask(
     body: JSON.stringify({ title, content, status, ...extra }),
   });
   const data = (await res.json().catch(() => ({}))) as Task & { error?: string };
-  if (!res.ok) throw new Error(data.error ?? `Create task failed (${res.status})`);
+  if (!res.ok) throw new Error(reason(data) ?? `Create task failed (${res.status})`);
   return data;
 }
 
@@ -1625,7 +1637,7 @@ export async function updateTask(id: string, updates: { status?: string; respons
     body: JSON.stringify(updates),
   });
   const data = (await res.json().catch(() => ({}))) as Task & { error?: string };
-  if (!res.ok) throw new Error(data.error ?? `Update task failed (${res.status})`);
+  if (!res.ok) throw new Error(reason(data) ?? `Update task failed (${res.status})`);
   return data;
 }
 
@@ -1702,7 +1714,7 @@ export async function studioCreateAI(ai: { name: string; persona?: string; model
     body: JSON.stringify(ai),
   });
   const data = (await res.json().catch(() => ({}))) as StudioAI & { error?: string };
-  if (!res.ok) throw new Error(data.error ?? `Create AI failed (${res.status})`);
+  if (!res.ok) throw new Error(reason(data) ?? `Create AI failed (${res.status})`);
   return data;
 }
 
@@ -1725,7 +1737,7 @@ export async function studioCreateWorkflow(name: string, steps: WorkflowStep[]):
     body: JSON.stringify({ name, steps }),
   });
   const data = (await res.json().catch(() => ({}))) as StudioWorkflow & { error?: string };
-  if (!res.ok) throw new Error(data.error ?? `Create workflow failed (${res.status})`);
+  if (!res.ok) throw new Error(reason(data) ?? `Create workflow failed (${res.status})`);
   return data;
 }
 
@@ -1741,7 +1753,7 @@ export async function studioRunWorkflow(id: string, input = ""): Promise<Workflo
     body: JSON.stringify({ input }),
   });
   const data = (await res.json().catch(() => ({}))) as WorkflowResult & { error?: string };
-  if (!res.ok) throw new Error(data.error ?? `Run workflow failed (${res.status})`);
+  if (!res.ok) throw new Error(reason(data) ?? `Run workflow failed (${res.status})`);
   return data;
 }
 
@@ -1850,7 +1862,7 @@ export async function autopilotCreate(goal: string, notify = true): Promise<Miss
     body: JSON.stringify({ goal, notify }),
   });
   const data = (await res.json().catch(() => ({}))) as Mission & { error?: string };
-  if (!res.ok) throw new Error(data.error ?? `Create mission failed (${res.status})`);
+  if (!res.ok) throw new Error(reason(data) ?? `Create mission failed (${res.status})`);
   return data;
 }
 
@@ -1860,7 +1872,7 @@ export async function autopilotStep(id: string): Promise<StepResult> {
     headers: authHeaders({ "Content-Type": "application/json" }),
   });
   const data = (await res.json().catch(() => ({}))) as StepResult;
-  if (!res.ok && !data.mission) throw new Error(data.error ?? `Step failed (${res.status})`);
+  if (!res.ok && !data.mission) throw new Error(reason(data) ?? `Step failed (${res.status})`);
   return data;
 }
 
@@ -1953,7 +1965,7 @@ export async function automationsCreate(name: string, steps: AutomationStep[], t
     body: JSON.stringify({ name, steps, trigger }),
   });
   const data = (await res.json().catch(() => ({}))) as Automation & { error?: string };
-  if (!res.ok) throw new Error(data.error ?? `Create automation failed (${res.status})`);
+  if (!res.ok) throw new Error(reason(data) ?? `Create automation failed (${res.status})`);
   return data;
 }
 
@@ -1970,7 +1982,7 @@ export async function automationsRun(id: string, input = ""): Promise<Automation
     body: JSON.stringify({ input }),
   });
   const data = (await res.json().catch(() => ({}))) as AutomationRunResult & { error?: string };
-  if (!res.ok) throw new Error(data.error ?? `Run automation failed (${res.status})`);
+  if (!res.ok) throw new Error(reason(data) ?? `Run automation failed (${res.status})`);
   return data;
 }
 
@@ -2039,7 +2051,7 @@ export async function agendaAdd(title: string, date = "", time = "", note = ""):
     body: JSON.stringify({ title, date, time, note }),
   });
   const data = (await res.json().catch(() => ({}))) as AgendaEvent & { error?: string };
-  if (!res.ok) throw new Error(data.error ?? `Add event failed (${res.status})`);
+  if (!res.ok) throw new Error(reason(data) ?? `Add event failed (${res.status})`);
   return data;
 }
 
@@ -2051,7 +2063,7 @@ export async function agendaParse(text: string, today = ""): Promise<AgendaEvent
     body: JSON.stringify({ text, today }),
   });
   const data = (await res.json().catch(() => ({}))) as AgendaEvent & { error?: string };
-  if (!res.ok) throw new Error(data.error ?? `Parse event failed (${res.status})`);
+  if (!res.ok) throw new Error(reason(data) ?? `Parse event failed (${res.status})`);
   return data;
 }
 
@@ -2205,7 +2217,7 @@ export async function evolvePropose(instruction: string): Promise<EvolveProposal
     body: JSON.stringify({ instruction }),
   });
   const data = (await res.json().catch(() => ({}))) as EvolveProposal & { error?: string };
-  if (!res.ok || data.error) throw new Error(data.error ?? `Evolve failed (${res.status})`);
+  if (!res.ok || data.error) throw new Error(reason(data) ?? `Evolve failed (${res.status})`);
   return data;
 }
 
@@ -2288,7 +2300,7 @@ export async function setKey(
   const data = (await res.json().catch(() => ({}))) as {
     ok?: boolean; masked?: string; error?: string; persisted?: boolean; warning?: string;
   };
-  if (!res.ok) throw new Error(data.error ?? `Set key failed (${res.status})`);
+  if (!res.ok) throw new Error(reason(data) ?? `Set key failed (${res.status})`);
   return {
     ok: Boolean(data.ok),
     masked: data.masked,
@@ -2316,7 +2328,7 @@ export async function keyRescue(names: string[] = []): Promise<{ moved: string[]
   });
   const data = (await res.json().catch(() => ({}))) as
     { moved?: string[]; count?: number; error?: string };
-  if (!res.ok) throw new Error(data.error ?? `Rescue failed (${res.status})`);
+  if (!res.ok) throw new Error(reason(data) ?? `Rescue failed (${res.status})`);
   return { moved: asArray<string>(data.moved), count: asNumber(data.count) };
 }
 
@@ -2364,7 +2376,7 @@ export async function rulesSync(repo = "", path = ""): Promise<{
     count?: number; persisted?: boolean; warning?: string; error?: string;
     by_applies?: Record<string, number>;
   };
-  if (!res.ok) throw new Error(d.error ?? `Rules sync failed (${res.status})`);
+  if (!res.ok) throw new Error(reason(d) ?? `Rules sync failed (${res.status})`);
   return {
     count: asNumber(d.count),
     persisted: d.persisted !== false,
