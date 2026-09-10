@@ -34,7 +34,7 @@
  * ないので、古い物は落とす（保存済みなので失われない）。
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -98,12 +98,19 @@ export default function Canvas({
   const here = items[Math.min(at, items.length - 1)];
 
   // Escで閉じる。かぶせる面は、必ず戻れるようにする。
+  //
+  // onClose を最新のまま持っておいて、**貼り替えない**。呼ぶ側が
+  // その場で作った関数を渡すと、描き直しのたびに聞き耳を外して付け直す
+  // ことになり、その隙にEscを押すと反応しない（テストが並列で走ると
+  // ときどき落ちて気づいた）。
+  const closeRef = useRef(onClose);
+  useEffect(() => { closeRef.current = onClose; }, [onClose]);
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") closeRef.current(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [open]);
 
   // 画面の外へ出してから描く。会話の側は動きのある箱（transform）の中に
   // あり、その中では position:fixed が画面ではなく**その箱**を基準にする。
@@ -113,10 +120,13 @@ export default function Canvas({
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
 
-  if (!open || !here || !mounted) return null;
+  if (!mounted) return null;
 
+  // 出す・引っこめるの判断は AnimatePresence の中でする。外で null を
+  // 返すと、閉じた瞬間に丸ごと消えて、引っこむ動きが出ない。
   return createPortal(
     <AnimatePresence>
+      {open && here && (
       <motion.aside
         key="canvas"
         aria-label="作った物"
@@ -196,6 +206,7 @@ export default function Canvas({
           </div>
         )}
       </motion.aside>
+      )}
     </AnimatePresence>,
     document.body,
   );

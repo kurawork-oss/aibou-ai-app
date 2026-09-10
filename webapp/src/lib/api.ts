@@ -92,6 +92,41 @@ function requireApiUrl(): string {
 }
 
 /**
+ * 失敗した応答を、画面が見ている形（`{ error }`）に揃える。
+ *
+ * なぜ要るか
+ * ----------
+ * サーバー（FastAPI）は失敗を `{"detail": "…"}` で返す。ところが画面の
+ * 多くは `.error` だけを見て、無ければ成功として扱っていた。つまり
+ *
+ *   POST /vault/upload → 409 {"detail": "保存先がつながっていないため…"}
+ *   画面 → 「✓ a.txt を取り込みました（0字）」
+ *
+ * サーバーは正しく断り、理由まで書いているのに、画面が「入りました」と
+ * 言っていた。本物のバックエンドで再現して確かめた。同じ形が9か所
+ * あった（資料・LP・スライド修正・ナレーション・DB移行・HFモデル…）。
+ *
+ * ここで揃えるので、呼ぶ側は今まで通り `.error` を見ればよい。
+ * 直し方を1か所にしたのは、同じ間違いが今後も足されるため——
+ * 呼ぶ側の作法を変えるより、返す形を正しくするほうが崩れない。
+ */
+async function failable<T>(res: Response, fallback: string): Promise<T> {
+  const body = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+  if (res.ok) {
+    // 200 なのに中身が読めない＝壊れた応答。成功として通さない。
+    if (body === null) return { error: `${fallback}（応答を読めませんでした）` } as T;
+    return body as T;
+  }
+  const detail = body?.detail ?? body?.error;
+  const msg =
+    typeof detail === "string" && detail.trim() ? detail
+      // FastAPI の入力検査は配列で返る。そのまま出しても読めない。
+      : Array.isArray(detail) ? "送った内容の形が正しくありません"
+        : `${fallback}（${res.status}）`;
+  return { ...(body ?? {}), error: msg } as T;
+}
+
+/**
  * GET /diagnose — うまく動かないときに、サーバー自身に理由を答えさせる。
  *
  * 認証不要。ログインしている場合はその資格情報も一緒に送るので、
@@ -638,7 +673,7 @@ export async function captureTranscribe(blob: Blob, name = "rec.webm", engine = 
   const res = await fetch(`${requireApiUrl()}/capture/transcribe`, {
     method: "POST", headers: authHeaders(), body: form,
   });
-  return (await res.json().catch(() => ({ error: "文字起こしに失敗しました" })));
+  return failable(res, "文字起こしに失敗しました");
 }
 
 /** POST /capture/narrate — 文字起こし/メモから読み上げ台本を作る。 */
@@ -653,7 +688,7 @@ export async function captureNarrate(opts: {
       seconds: Math.round(opts.seconds ?? 0), instruction: opts.instruction ?? "",
     }),
   });
-  return (await res.json().catch(() => ({ error: "台本の生成に失敗しました" })));
+  return failable(res, "台本の生成に失敗しました");
 }
 
 /** POST /capture/voiceover — 台本を読み上げて録画に重ねた mp4 を返す。 */
@@ -667,7 +702,7 @@ export async function captureVoiceover(opts: {
   const res = await fetch(`${requireApiUrl()}/capture/voiceover`, {
     method: "POST", headers: authHeaders(), body: form,
   });
-  return (await res.json().catch(() => ({ error: "ナレーションの合成に失敗しました" })));
+  return failable(res, "ナレーションの合成に失敗しました");
 }
 
 /* ---------------- CODE: server-side command run (opt-in) ---------------- */
@@ -700,7 +735,7 @@ export async function codeShellRun(
     headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ command, files, timeout }),
   });
-  return (await res.json().catch(() => ({ error: "実行に失敗しました" }))) as ShellResult;
+  return failable<ShellResult>(res, "実行に失敗しました");
 }
 
 /* ---------------- Whiteboard (Miro-style, multi-board) ---------------- */
@@ -1060,7 +1095,7 @@ export async function lpGenerate(opts: {
       save: !!opts.save, kind: opts.kind ?? "lp",
     }),
   });
-  return (await res.json().catch(() => ({ error: "生成に失敗しました" }))) as LpResult;
+  return failable<LpResult>(res, "生成に失敗しました");
 }
 
 /* ---------------- Image studio (multi-variant) ---------------- */
@@ -1103,7 +1138,7 @@ export async function imageGenerate(opts: {
       engine: opts.engine ?? "auto",
     }),
   });
-  return (await res.json().catch(() => ({ error: "生成に失敗しました" }))) as ImageResult;
+  return failable<ImageResult>(res, "生成に失敗しました");
 }
 
 /* ---------------- SNS post support ---------------- */
@@ -1134,7 +1169,7 @@ export async function snsGenerate(opts: {
       promo: !!opts.promo, thread: !!opts.thread, with_images: !!opts.withImages,
     }),
   });
-  return (await res.json().catch(() => ({ error: "生成に失敗しました" }))) as SnsResult;
+  return failable<SnsResult>(res, "生成に失敗しました");
 }
 
 /* ---------------- Newsletter (list building + broadcast) ---------------- */
@@ -1510,7 +1545,7 @@ export async function vaultUpload(notebookId: string, file: File, title = ""):
     headers: authHeaders(),   // Content-Type は FormData に任せる（boundary付与のため）
     body: form,
   });
-  return (await res.json().catch(() => ({ error: "取り込みに失敗しました" })));
+  return failable(res, "取り込みに失敗しました");
 }
 
 /** POST /vault/generate — author a Markdown document grounded in the notebook. */
@@ -1771,7 +1806,7 @@ export async function videoStoryboard(opts: {
       tone: opts.tone ?? "friendly", style: opts.style ?? "",
     }),
   });
-  return (await res.json().catch(() => ({ error: "絵コンテの生成に失敗しました" }))) as StoryboardResult;
+  return failable<StoryboardResult>(res, "絵コンテの生成に失敗しました");
 }
 
 /* ---------------- Autopilot (goal-based autonomous missions) ---------------- */
@@ -2113,7 +2148,7 @@ export async function slideRevise(opts: {
       deck_title: opts.deckTitle ?? "", layout: opts.layout ?? "", context: opts.context ?? "",
     }),
   });
-  return (await res.json().catch(() => ({ error: "修正に失敗しました" }))) as { ok?: boolean; slide?: Slide; error?: string };
+  return failable<{ ok?: boolean; slide?: Slide; error?: string }>(res, "修正に失敗しました");
 }
 
 /** POST /slides/google — convert a deck to Google Slides, returns the URL. */
@@ -2642,7 +2677,7 @@ export async function hfModelAdd(opts: { model: string; task: string; label?: st
     headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ model: opts.model, task: opts.task, label: opts.label ?? "", note: opts.note ?? "" }),
   });
-  return (await res.json().catch(() => ({ error: "登録に失敗しました" })));
+  return failable(res, "登録に失敗しました");
 }
 
 /** DELETE /hf/models/{id} — 台帳から削除（割り当ても外れる）。 */
@@ -2658,7 +2693,7 @@ export async function hfModelTest(id: string): Promise<HfTestResult> {
   const res = await fetch(`${requireApiUrl()}/hf/models/${encodeURIComponent(id)}/test`, {
     method: "POST", headers: authHeaders(),
   });
-  return (await res.json().catch(() => ({ error: "テストに失敗しました" })));
+  return failable(res, "テストに失敗しました");
 }
 
 /** POST /hf/test — 登録前にモデルIDとタスクの組み合わせを試す。 */
@@ -2668,7 +2703,7 @@ export async function hfTest(model: string, task: string): Promise<HfTestResult>
     headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ model, task }),
   });
-  return (await res.json().catch(() => ({ error: "テストに失敗しました" })));
+  return failable(res, "テストに失敗しました");
 }
 
 /** POST /hf/assign — 役割にモデルを割り当てる（空文字で解除）。 */
@@ -2679,7 +2714,7 @@ export async function hfAssign(role: string, model: string):
     headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ role, model }),
   });
-  return (await res.json().catch(() => ({ error: "割り当てに失敗しました" })));
+  return failable(res, "割り当てに失敗しました");
 }
 
 /** GET /hf/search — HuggingFace Hub からモデルを探す。 */
@@ -2688,7 +2723,7 @@ export async function hfSearch(q: string, task: string, limit = 12):
             error?: string; suggested?: string[] }> {
   const p = new URLSearchParams({ q, task, limit: String(limit) });
   const res = await fetch(`${requireApiUrl()}/hf/search?${p}`, { headers: authHeaders(), cache: "no-store" });
-  return (await res.json().catch(() => ({ error: "検索に失敗しました" })));
+  return failable(res, "検索に失敗しました");
 }
 
 /** POST /hf/run — お試し実行（結果はテキスト/画像URL/ラベル/ベクトル）。 */
@@ -2699,7 +2734,7 @@ export async function hfRun(opts: { model: string; task: string; text?: string; 
     headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ model: opts.model, task: opts.task, text: opts.text ?? "", labels: opts.labels ?? null }),
   });
-  return (await res.json().catch(() => ({ error: "実行に失敗しました" })));
+  return failable(res, "実行に失敗しました");
 }
 
 /* ---------------- 使い方ガイド ---------------- */
@@ -2815,7 +2850,7 @@ export async function myDatabaseTest(body: { url: string; service_key: string })
     headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(body),
   });
-  return (await res.json().catch(() => ({ error: "接続を確認できませんでした" })));
+  return failable(res, "接続を確認できませんでした");
 }
 
 /** POST /account/database — 接続して保存する。 */
@@ -2836,7 +2871,7 @@ export async function myDatabaseConnect(body: {
     headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ ...body, db_url: body.db_url ?? "", label: body.label ?? "" }),
   });
-  return (await res.json().catch(() => ({ error: "接続に失敗しました" })));
+  return failable(res, "接続に失敗しました");
 }
 
 /** POST /account/database/migrate — 自分のDBに必要なテーブルを作る。 */
@@ -2845,7 +2880,7 @@ export async function myDatabaseMigrate():
   const res = await fetch(`${requireApiUrl()}/account/database/migrate`, {
     method: "POST", headers: authHeaders(),
   });
-  return (await res.json().catch(() => ({ error: "テーブル作成に失敗しました" })));
+  return failable(res, "テーブル作成に失敗しました");
 }
 
 /** DELETE /account/database — 接続を外す。 */
@@ -2853,7 +2888,7 @@ export async function myDatabaseDisconnect(): Promise<{ ok?: boolean; error?: st
   const res = await fetch(`${requireApiUrl()}/account/database`, {
     method: "DELETE", headers: authHeaders(),
   });
-  return (await res.json().catch(() => ({ error: "解除に失敗しました" })));
+  return failable(res, "解除に失敗しました");
 }
 
 /* ---------------- Calendar (app agenda + Google merged) ---------------- */
@@ -2910,8 +2945,7 @@ export async function xPost(text: string): Promise<{ ok?: boolean; id?: string; 
     headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ text }),
   });
-  return (await res.json().catch(() => ({ error: "投稿できませんでした" }))) as
-    { ok?: boolean; id?: string; url?: string; error?: string };
+  return failable<{ ok?: boolean; id?: string; url?: string; error?: string }>(res, "投稿できませんでした");
 }
 
 /** Xの数え方に合わせた長さ（日本語は1文字＝2）。画面で事前に出すため。 */
