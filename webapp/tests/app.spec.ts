@@ -132,49 +132,92 @@ test("Chat: history toggle opens the panel", async ({ page }) => {
 
 
 /* ── 見た目（スキン）の切り替え ─────────────────────────────────── */
-test("Settings CORE has the theme picker with both skins", async ({ page }) => {
+test("Settings CORE has the theme picker with every skin", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
   await page.getByLabel("Settings").click();
   await expect(page.getByText("見た目（テーマ）")).toBeVisible({ timeout: 5_000 });
-  await expect(page.getByRole("button", { name: /FORGE（ダーク）/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /AIbou（ライト）/ })).toBeVisible();
+  for (const name of [/CYBER（紺）/, /EMERALD（緑）/, /FORGE（宇宙）/, /AIbou（ライト）/]) {
+    await expect(page.getByRole("button", { name })).toBeVisible();
+  }
 });
 
-test("Switching to the AIbou skin repaints the app light", async ({ page }) => {
+test("既定は CYBER（紺）", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
-  // 既定はダーク
-  expect(await page.evaluate(() => document.documentElement.dataset.skin)).toBe("forge");
-  await page.getByLabel("Settings").click();
-  await page.getByRole("button", { name: /AIbou（ライト）/ }).click();
-  const after = await page.evaluate(() => ({
+  const got = await page.evaluate(() => ({
     skin: document.documentElement.dataset.skin,
     bg: getComputedStyle(document.documentElement).backgroundColor,
     theme: document.querySelector('meta[name="theme-color"]')?.getAttribute("content"),
   }));
-  expect(after.skin).toBe("aibou");
-  expect(after.bg).toBe("rgb(244, 245, 253)");   // 明るい背景に変わっている
-  expect(after.theme).toBe("#f4f5fd");           // ブラウザのUI色も合わせる
-  // 戻せる
-  await page.getByRole("button", { name: /FORGE（ダーク）/ }).click();
-  expect(await page.evaluate(() => document.documentElement.dataset.skin)).toBe("forge");
+  expect(got.skin).toBe("cyber");
+  expect(got.bg).toBe("rgb(8, 14, 32)");
+  expect(got.theme).toBe("#080e20");
 });
 
-test("The chosen skin survives a reload and is applied before React mounts", async ({ page }) => {
+test("4つのスキンを切り替えると、地の色も文字色も変わる", async ({ page }) => {
   await page.goto("/");
-  await page.evaluate(() => localStorage.setItem("forge_skin", "aibou"));
-  await page.reload({ waitUntil: "commit" });
-  // <head> のスクリプトで立てているので、ハイドレーション前から aibou
-  await expect.poll(async () =>
-    page.evaluate(() => document.documentElement.dataset.skin), { timeout: 5_000 }).toBe("aibou");
+  await enterApp(page);
+  await page.getByLabel("Settings").click();
+
+  const look = () => page.evaluate(() => {
+    const cs = getComputedStyle(document.documentElement);
+    return {
+      skin: document.documentElement.dataset.skin,
+      bg: cs.backgroundColor,
+      theme: document.querySelector('meta[name="theme-color"]')?.getAttribute("content"),
+      fgStrong: cs.getPropertyValue("--fg-strong").trim(),
+    };
+  });
+
+  for (const [name, key, bg, theme] of [
+    [/EMERALD（緑）/, "emerald", "rgb(4, 36, 29)", "#04241d"],
+    [/FORGE（宇宙）/, "forge", "rgb(10, 11, 15)", "#0a0b0f"],
+    [/AIbou（ライト）/, "aibou", "rgb(244, 245, 253)", "#f4f5fd"],
+    [/CYBER（紺）/, "cyber", "rgb(8, 14, 32)", "#080e20"],
+  ] as const) {
+    await page.getByRole("button", { name }).click();
+    const got = await look();
+    expect(got.skin, String(name)).toBe(key);
+    expect(got.bg, String(name)).toBe(bg);
+    expect(got.theme, String(name)).toBe(theme);   // ブラウザのUI色も合わせる
+  }
+});
+
+test("暗い3つは、文字が白（頼まれた通り）", async ({ page }) => {
+  // 「文字は白色」は3つとも共通の指定。見た目の好みではなく約束なので固定する。
+  await page.goto("/");
+  await enterApp(page);
+  await page.getByLabel("Settings").click();
+  for (const name of [/CYBER（紺）/, /EMERALD（緑）/]) {
+    await page.getByRole("button", { name }).click();
+    const fg = await page.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue("--fg-strong").trim());
+    expect(fg, String(name)).toBe("#ffffff");
+  }
+});
+
+test("紺（CYBER）の影と枠はシルバー（青の差し色を使わない）", async ({ page }) => {
+  // 「枠やパネルの影はシルバー」がこのスキンの肝。青が残っていると
+  // ただの暗い青テーマになる。
+  await page.goto("/");
+  await enterApp(page);
+  const v = await page.evaluate(() => {
+    const cs = getComputedStyle(document.documentElement);
+    const read = (k: string) => cs.getPropertyValue(k).trim();
+    return { glow: read("--glow"), accent: read("--accent"), line: read("--line") };
+  });
+  // シルバー＝R,G,B が近い。青だけ突出していないことを見る。
+  const rgb = v.glow.match(/\d+/g)!.map(Number).slice(0, 3);
+  expect(Math.max(...rgb) - Math.min(...rgb), `--glow=${v.glow}`).toBeLessThan(40);
+  expect(v.accent.toLowerCase()).toBe("#cfd8ea");
 });
 
 test("A broken saved skin falls back to the default", async ({ page }) => {
   await page.goto("/");
   await page.evaluate(() => localStorage.setItem("forge_skin", "nonsense"));
   await page.reload({ waitUntil: "domcontentloaded" });
-  expect(await page.evaluate(() => document.documentElement.dataset.skin)).toBe("forge");
+  expect(await page.evaluate(() => document.documentElement.dataset.skin)).toBe("cyber");
 });
 
 

@@ -810,3 +810,93 @@ html[data-skin="aibou"] .forge-backdrop { display: none; }
 @media (min-width: 1024px) {
   .canvas-sheet { bottom: 0 !important; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   CYBER（紺・既定）— 紺の地にサイバーな模様、シルバーに光るコア。
+
+   影と枠をシルバーにするのがこのスキンの肝。--glow を青ではなく
+   灰白にすると、パネルの縁が金属的に立ち上がる。
+   文字は白（--fg も白寄りにして、本文と見出しの差は太さで出す）。
+
+   コアの光そのものは canvas なので、色は lib/coreSkin.ts が持つ。
+   ═══════════════════════════════════════════════════════════════════ */
+html[data-skin="cyber"] {
+  --bg: #080e20;               /* 紺 */
+  --bg2: #0b1430;
+  --panel: rgba(190, 205, 235, 0.07);
+  --panel-bd: rgba(200, 212, 235, 0.30);
+  --fg: #eaeef7;               /* 本文＝ほぼ白 */
+  --fg-strong: #ffffff;
+  --muted: #9fadc6;
+  --muted-rgb: 159 173 198;
+  --line: #c6cfe0;             /* シルバーの線 */
+  --glow: rgba(206, 216, 234, 0.26);        /* 影＝シルバー */
+  --glow-strong: rgba(226, 234, 248, 0.38);
+  --accent: #cfd8ea;           /* 強調もシルバー（青の差し色を使わない） */
+  --input-bg: rgba(190, 205, 235, 0.07);
+  --input-bd: rgba(200, 212, 235, 0.34);
+  --btn-bg: rgba(200, 214, 240, 0.10);
+  --btn-bd: rgba(206, 218, 240, 0.42);
+  --shadow: rgba(0, 0, 0, 0.60);
+  --chrome: rgba(8, 14, 32, 0.86);
+  --chrome-2: rgba(10, 17, 38, 0.92);
+  --tint: rgba(206, 216, 234, 0.09);
+
+  background-color: var(--bg);
+  /* 模様：細い格子＋斜めの走査線＋上下のにじみ。
+     格子だけだと方眼紙になるので、斜線を薄く重ねて回路っぽさを出す。 */
+  background-image:
+    linear-gradient(rgba(160, 180, 215, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(160, 180, 215, 0.05) 1px, transparent 1px),
+    repeating-linear-gradient(115deg,
+      rgba(190, 206, 236, 0.045) 0 1px, transparent 1px 58px),
+    radial-gradient(1200px 700px at 50% -18%, rgba(150, 175, 220, 0.16), transparent 64%),
+    radial-gradient(900px 520px at 50% 116%, rgba(120, 150, 200, 0.10), transparent 60%);
+  background-size: 44px 44px, 44px 44px, auto, auto, auto;
+  background-attachment: fixed;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   EMERALD（緑）— エメラルドの地に、白く光るコア。
+
+   コアを白のままにするので、地は白と喧嘩しない深さまで落とす。
+   明るい緑にすると、白い光が沈んで「光っていない」ように見える。
+   ═══════════════════════════════════════════════════════════════════ */
+html[data-skin="emerald"] {
+  --bg: #04241d;               /* 深いエメラルド */
+  --bg2: #063028;
+  --panel: rgba(180, 255, 226, 0.07);
+  --panel-bd: rgba(150, 240, 208, 0.28);
+  --fg: #e9fff6;               /* 本文＝ほぼ白 */
+  --fg-strong: #ffffff;
+  --muted: #9fd8c2;
+  --muted-rgb: 159 216 194;
+  --line: #bff3dc;
+  --glow: rgba(160, 255, 214, 0.22);
+  --glow-strong: rgba(200, 255, 232, 0.34);
+  --accent: #7cf0c4;           /* エメラルドの差し色（文字は白のまま） */
+  --input-bg: rgba(180, 255, 226, 0.07);
+  --input-bd: rgba(150, 240, 208, 0.32);
+  --btn-bg: rgba(160, 250, 214, 0.10);
+  --btn-bd: rgba(160, 245, 210, 0.40);
+  --shadow: rgba(0, 20, 14, 0.55);
+  --chrome: rgba(4, 36, 29, 0.86);
+  --chrome-2: rgba(6, 44, 35, 0.92);
+  --tint: rgba(124, 240, 196, 0.10);
+
+  background-color: var(--bg);
+  /* 模様：菱形の綾（斜め2本の重ね）＋やわらかいにじみ。
+     格子ではなく綾にしたのは、サイバーとの違いを模様で出すため。 */
+  background-image:
+    repeating-linear-gradient(45deg,
+      rgba(140, 240, 200, 0.05) 0 1px, transparent 1px 34px),
+    repeating-linear-gradient(-45deg,
+      rgba(140, 240, 200, 0.05) 0 1px, transparent 1px 34px),
+    radial-gradient(1100px 640px at 50% -16%, rgba(80, 220, 170, 0.20), transparent 62%),
+    radial-gradient(880px 520px at 50% 118%, rgba(40, 160, 130, 0.16), transparent 58%);
+  background-attachment: fixed;
+}
+
+/* 星空のバックドロップは、模様を持つスキンでは描かない（重なると濁る）。
+   JS側（Backdrop3D）でも同じ判定で描画を止めている。 */
+html[data-skin="emerald"] .forge-backdrop { display: none; }

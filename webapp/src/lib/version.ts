@@ -5,4 +5,4 @@
  * glance whether the live site is serving the latest deployment (vs. a cached
  * old build or a stale immutable deployment URL).
  */
-export const APP_VERSION = "2026.09.10 · ui-r102 SCREENS COVERED";
+export const APP_VERSION = "2026.09.10 · ui-r103 SKINS x4";

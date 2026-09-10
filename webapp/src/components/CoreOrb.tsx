@@ -18,6 +18,8 @@
 import { useEffect, useRef, useState } from "react";
 import { SHAPE_DRAWERS, type ShapeCtx } from "@/lib/coreShapes";
 import { CORE_TYPE_EVENT, readCoreType, type CoreType } from "@/lib/coreType";
+import { corePalette } from "@/lib/coreSkin";
+import { DEFAULT_SKIN, type Skin } from "@/lib/skin";
 
 export type CoreState = "idle" | "listening" | "speaking" | "thinking";
 
@@ -83,6 +85,20 @@ export default function CoreOrb({ size = 140, state = "idle", className = "", ty
   }, [type]);
   const kind: CoreType = type ?? saved;
 
+  /* コアの光の色。CSS変数は canvas に届かないので、スキンごとの配色を
+     ここで1回選ぶ（毎フレーム getComputedStyle を呼ぶと、描画のたびに
+     版組みが走る）。スキンを切り替えたら選び直す。 */
+  const [skin, setSkinName] = useState<Skin>(DEFAULT_SKIN);
+  useEffect(() => {
+    const read = () => setSkinName(
+      (document.documentElement.dataset.skin as Skin) || DEFAULT_SKIN);
+    read();
+    // data-skin は setSkin() が書き換えるだけなので、属性を見張る
+    const mo = new MutationObserver(read);
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-skin"] });
+    return () => mo.disconnect();
+  }, []);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -94,6 +110,7 @@ export default function CoreOrb({ size = 140, state = "idle", className = "", ty
 
     // Canvas paints on a stage larger than the layout box so ring tracers and
     // bloom aren't clipped at the edges.
+    const pal = corePalette(skin);
     const stage = Math.ceil(size * 1.4);
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = stage * dpr;
@@ -173,15 +190,15 @@ export default function CoreOrb({ size = 140, state = "idle", className = "", ty
 
       /* 1 — wide bloom */
       const bloom = ctx.createRadialGradient(cx, cy, coreR * 0.3, cx, cy, size * 0.68);
-      bloom.addColorStop(0, `rgba(150,200,255,${(live.glow * 0.55).toFixed(3)})`);
-      bloom.addColorStop(0.55, `rgba(120,180,255,${(live.glow * 0.16).toFixed(3)})`);
-      bloom.addColorStop(1, "rgba(120,180,255,0)");
+      bloom.addColorStop(0, `rgba(${pal.bloomIn},${(live.glow * 0.55).toFixed(3)})`);
+      bloom.addColorStop(0.55, `rgba(${pal.bloomMid},${(live.glow * 0.16).toFixed(3)})`);
+      bloom.addColorStop(1, `rgba(${pal.bloomOut},0)`);
       ctx.fillStyle = bloom;
       ctx.fillRect(0, 0, stage, stage);
       if (live.cyan > 0.02) {
         const cb = ctx.createRadialGradient(cx, cy, coreR * 0.4, cx, cy, size * 0.52);
-        cb.addColorStop(0, `rgba(0,243,255,${(live.cyan * 0.22).toFixed(3)})`);
-        cb.addColorStop(1, "rgba(0,243,255,0)");
+        cb.addColorStop(0, `rgba(${pal.ping},${(live.cyan * 0.22).toFixed(3)})`);
+        cb.addColorStop(1, `rgba(${pal.ping},0)`);
         ctx.fillStyle = cb;
         ctx.fillRect(0, 0, stage, stage);
       }
@@ -190,14 +207,14 @@ export default function CoreOrb({ size = 140, state = "idle", className = "", ty
       const pingPhase = (t % live.ping) / live.ping;
       ctx.beginPath();
       ctx.arc(cx, cy, size * (0.42 + pingPhase * 0.30), 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(150,200,255,${(0.45 * (1 - pingPhase)).toFixed(3)})`;
+      ctx.strokeStyle = `rgba(${pal.bloomIn},${(0.45 * (1 - pingPhase)).toFixed(3)})`;
       ctx.lineWidth = 1;
       ctx.stroke();
       if (live.cyan > 0.05) {
         const p2 = ((t + live.ping / 2) % live.ping) / live.ping;
         ctx.beginPath();
         ctx.arc(cx, cy, size * (0.44 + p2 * 0.34), 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(0,243,255,${(live.cyan * (1 - p2)).toFixed(3)})`;
+        ctx.strokeStyle = `rgba(${pal.ping},${(live.cyan * (1 - p2)).toFixed(3)})`;
         ctx.stroke();
       }
 
@@ -208,7 +225,7 @@ export default function CoreOrb({ size = 140, state = "idle", className = "", ty
         const d = (q.z + 1) / 2; // 0 far → 0.5 mid
         const a = 0.05 + d * 0.30;
         const tw = 0.75 + 0.25 * Math.sin(t * 2 + p.tw * Math.PI * 2);
-        ctx.fillStyle = `rgba(140,185,250,${(a * tw).toFixed(3)})`;
+        ctx.fillStyle = `rgba(${pal.shell},${(a * tw * 0.72).toFixed(3)})`;
         ctx.beginPath();
         ctx.arc(q.sx, q.sy, Math.max(0.4, size * 0.006 * q.s), 0, Math.PI * 2);
         ctx.fill();
@@ -220,12 +237,8 @@ export default function CoreOrb({ size = 140, state = "idle", className = "", ty
         cx - bodyR * 0.24, cy - bodyR * 0.36, bodyR * 0.08,
         cx, cy, bodyR,
       );
-      body.addColorStop(0, "rgba(255,255,255,0.98)");
-      body.addColorStop(0.2, "rgba(214,234,255,0.95)");
-      body.addColorStop(0.44, "rgba(158,198,245,0.72)");
-      body.addColorStop(0.68, "rgba(70,118,190,0.60)");
-      body.addColorStop(0.86, "rgba(22,44,86,0.78)");
-      body.addColorStop(1, "rgba(6,12,30,0.95)");
+      const STOPS = [0, 0.2, 0.44, 0.68, 0.86, 1];
+      pal.body.forEach((c, i) => body.addColorStop(STOPS[i], c));
       ctx.fillStyle = body;
       ctx.beginPath();
       ctx.arc(cx, cy, bodyR, 0, Math.PI * 2);
@@ -244,7 +257,7 @@ export default function CoreOrb({ size = 140, state = "idle", className = "", ty
       ctx.fill();
       ctx.beginPath();
       ctx.arc(cx, cy, size * 0.37, 0, Math.PI * 2);
-      ctx.strokeStyle = "rgba(197,198,199,0.28)";
+      ctx.strokeStyle = `rgba(${pal.ring},0.28)`;
       ctx.lineWidth = 1;
       ctx.stroke();
 
@@ -257,8 +270,8 @@ export default function CoreOrb({ size = 140, state = "idle", className = "", ty
         const a = (0.25 + d * 0.65) * tw;
         const cyanMix = live.cyan > 0.1 && p.tw > 0.6;
         ctx.fillStyle = cyanMix
-          ? `rgba(120,240,255,${a.toFixed(3)})`
-          : `rgba(225,240,255,${a.toFixed(3)})`;
+          ? `rgba(${pal.shellHot},${a.toFixed(3)})`
+          : `rgba(${pal.shell},${a.toFixed(3)})`;
         ctx.beginPath();
         ctx.arc(q.sx, q.sy, Math.max(0.5, size * 0.0085 * q.s), 0, Math.PI * 2);
         ctx.fill();
@@ -284,7 +297,7 @@ export default function CoreOrb({ size = 140, state = "idle", className = "", ty
           const q = ringPt((i / SEG) * Math.PI * 2);
           const depth = (q.z + prev.z) / 2;
           const a = ring.alpha * (0.22 + ((depth + 1) / 2) * 0.78);
-          ctx.strokeStyle = `rgba(200,222,255,${a.toFixed(3)})`;
+          ctx.strokeStyle = `rgba(${pal.ringLight},${a.toFixed(3)})`;
           ctx.lineWidth = depth > 0 ? 1.1 : 0.7;
           ctx.beginPath();
           ctx.moveTo(prev.sx, prev.sy);
@@ -297,8 +310,8 @@ export default function CoreOrb({ size = 140, state = "idle", className = "", ty
         const tr = Math.max(1.5, size * 0.02 * tp.s);
         const tg = ctx.createRadialGradient(tp.sx, tp.sy, 0, tp.sx, tp.sy, tr * 3.2);
         tg.addColorStop(0, "rgba(255,255,255,0.95)");
-        tg.addColorStop(0.35, "rgba(190,230,255,0.5)");
-        tg.addColorStop(1, "rgba(0,243,255,0)");
+        tg.addColorStop(0.35, `rgba(${pal.ringLight},0.5)`);
+        tg.addColorStop(1, `rgba(${pal.ringLight},0)`);
         ctx.fillStyle = tg;
         ctx.beginPath();
         ctx.arc(tp.sx, tp.sy, tr * 3.2, 0, Math.PI * 2);
@@ -332,7 +345,7 @@ export default function CoreOrb({ size = 140, state = "idle", className = "", ty
       document.removeEventListener("visibilitychange", onVis);
       window.removeEventListener("pointermove", onPointer);
     };
-  }, [size, kind]);
+  }, [size, kind, skin]);
 
   const stagePx = Math.ceil(size * 1.4);
   return (

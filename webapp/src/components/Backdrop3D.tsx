@@ -63,6 +63,25 @@ interface Meteor {
   born: number; life: number; len: number; big: boolean;
 }
 
+/**
+ * 星空とグリッドの色。
+ *
+ * cyber は「シルバーで光る」ことがそのスキンの肝なので、青みを抜いて
+ * 灰白へ寄せる。ここを青のままにすると、コアだけシルバーで背景が青くなり、
+ * ちぐはぐに見える。
+ */
+function backdropTint(skin: string | undefined) {
+  const silver = skin === "cyber";
+  return {
+    star: silver ? "228,235,248" : "205,225,255",
+    starHot: silver ? "255,255,255" : "0,243,255",
+    grid: silver ? "170,186,212" : "120,170,230",
+    gridNear: silver ? "198,210,232" : "140,190,245",
+    haze: silver ? "206,216,234" : "0,243,255",
+    ray: silver ? "216,226,244" : "175,212,255",
+  };
+}
+
 export default function Backdrop3D() {
   const ref = useRef<HTMLCanvasElement | null>(null);
 
@@ -149,7 +168,7 @@ export default function Backdrop3D() {
       });
     };
 
-    const drawConstellation = () => {
+    const drawConstellation = (tone: ReturnType<typeof backdropTint>) => {
       if (!activeConst) return;
       const c = activeConst;
       const age = t - c.born;
@@ -169,7 +188,7 @@ export default function Backdrop3D() {
         };
       });
       // Connecting lines.
-      ctx.strokeStyle = `rgba(175,212,255,${(0.16 * env).toFixed(3)})`;
+      ctx.strokeStyle = `rgba(${tone.ray},${(0.16 * env).toFixed(3)})`;
       ctx.lineWidth = 1;
       for (const [a, b] of c.shape.edges) {
         ctx.beginPath();
@@ -226,13 +245,17 @@ export default function Backdrop3D() {
     };
 
     const draw = (now: number) => {
-      // AIbou（ライト）では星空・グリッドは描かない。白い背景に星を撒くと
-      // ゴミのように見えるため、1枚消してから抜ける（CSS側でも隠している）。
-      if (document.documentElement.dataset.skin === "aibou") {
+      // 模様や白地を持つスキンでは、星空・グリッドを描かない。
+      //   aibou   … 白地に星を撒くとゴミのように見える
+      //   emerald … CSS の綾模様と重なって濁る
+      // 1枚消してから抜ける（CSS側でも .forge-backdrop を隠している）。
+      const skin = document.documentElement.dataset.skin;
+      if (skin === "aibou" || skin === "emerald") {
         ctx.clearRect(0, 0, w, h);
         last = now;
         return;
       }
+      const tone = backdropTint(skin);
       const dt = Math.min((now - last) / 1000, 0.05);
       last = now;
       t += dt;
@@ -250,8 +273,8 @@ export default function Backdrop3D() {
         const tw = 0.55 + 0.45 * Math.sin(t * (0.6 + s.tw) + s.tw * Math.PI * 2);
         const a = (0.16 + s.z * 0.42) * tw;
         ctx.fillStyle = s.cyan
-          ? `rgba(0,243,255,${(a * 0.9).toFixed(3)})`
-          : `rgba(205,225,255,${a.toFixed(3)})`;
+          ? `rgba(${tone.starHot},${(a * 0.9).toFixed(3)})`
+          : `rgba(${tone.star},${a.toFixed(3)})`;
         const r = 0.5 + s.z * 1.1;
         ctx.beginPath();
         ctx.arc(((sx % w) + w) % w, sy, r, 0, Math.PI * 2);
@@ -266,7 +289,7 @@ export default function Backdrop3D() {
           nextMeteorAt = t + 4 + Math.random() * 7;
         }
       }
-      drawConstellation();
+      drawConstellation(tone);
       drawMeteors(dt);
 
       /* Perspective grid floor (bottom of the viewport). */
@@ -280,8 +303,8 @@ export default function Backdrop3D() {
         const xb = w / 2 + (i / COLS) * w * 1.15; // where it meets the bottom
         const a = 0.13 * (1 - Math.abs(i) / (COLS + 2));
         const grad = ctx.createLinearGradient(0, horizon, 0, h);
-        grad.addColorStop(0, "rgba(120,170,230,0)");
-        grad.addColorStop(1, `rgba(120,170,230,${a.toFixed(3)})`);
+        grad.addColorStop(0, `rgba(${tone.grid},0)`);
+        grad.addColorStop(1, `rgba(${tone.grid},${a.toFixed(3)})`);
         ctx.strokeStyle = grad;
         ctx.lineWidth = 1;
         ctx.beginPath();
@@ -298,7 +321,7 @@ export default function Backdrop3D() {
         if (d > 1) continue;
         const y = horizon + Math.pow(d, 2.1) * floorH;
         const a = 0.03 + Math.pow(d, 2) * 0.14;
-        ctx.strokeStyle = `rgba(140,190,245,${a.toFixed(3)})`;
+        ctx.strokeStyle = `rgba(${tone.gridNear},${a.toFixed(3)})`;
         ctx.beginPath();
         ctx.moveTo(0, y);
         ctx.lineTo(w, y);
@@ -307,9 +330,9 @@ export default function Backdrop3D() {
 
       // Faint cyan glow along the horizon line.
       const hg = ctx.createLinearGradient(0, horizon - 40, 0, horizon + 30);
-      hg.addColorStop(0, "rgba(0,243,255,0)");
-      hg.addColorStop(0.55, "rgba(0,243,255,0.08)");
-      hg.addColorStop(1, "rgba(0,243,255,0)");
+      hg.addColorStop(0, `rgba(${tone.haze},0)`);
+      hg.addColorStop(0.55, `rgba(${tone.haze},0.08)`);
+      hg.addColorStop(1, `rgba(${tone.haze},0)`);
       ctx.fillStyle = hg;
       ctx.fillRect(0, horizon - 40, w, 70);
     };

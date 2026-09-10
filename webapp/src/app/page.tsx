@@ -1291,7 +1291,10 @@ function SkinSetting() {
     setSkinState(setSkin(next));
   };
 
+  // 見本の色は、実際のトークンと同じ値を並べる（見本と中身がずれないように）
   const SWATCH: Record<Skin, { bg: string; card: string; bd: string; ink: string; accent: string }> = {
+    cyber: { bg: "#080e20", card: "#111a33", bd: "#3d4a68", ink: "#ffffff", accent: "#cfd8ea" },
+    emerald: { bg: "#04241d", card: "#0a3a2e", bd: "#2c6b58", ink: "#ffffff", accent: "#7cf0c4" },
     forge: { bg: "#0a0b0f", card: "#171a21", bd: "#3a3d45", ink: "#e8eaee", accent: "#00f3ff" },
     aibou: { bg: "#f4f5fd", card: "#ffffff", bd: "#e3e6f5", ink: "#1b2440", accent: "#3b5bfd" },
   };
