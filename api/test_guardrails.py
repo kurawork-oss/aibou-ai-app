@@ -153,3 +153,64 @@ def test_an_old_state_expires(signed):
         json.dumps(data, separators=(",", ":")).encode()).decode().rstrip("=")
     sig = hmac.new(("x" * 32).encode(), nb.encode(), hashlib.sha256).hexdigest()[:32]
     assert "error" in signed.verify_state(f"{nb}.{sig}", "google")
+
+
+# ── ⑥ 自己診断が、秘密を出さずに残りの手順を教える ──────────────────
+def test_diagnose_shows_what_is_left_without_leaking_it(monkeypatch):
+    """「あと何をすればいいか」を、値を出さずに数えられること。
+
+    残りの設定はサーバーの環境変数を見ないと分からず、利用者からは
+    「押しても繋がらない」としか見えなかった。ここに出す。
+    ただし値そのものは絶対に出さない（診断は認証なしで読めるため）。
+    """
+    from fastapi.testclient import TestClient
+
+    from main import app
+
+    client = TestClient(app)
+
+    # まだ登録していないうちは、何を入れればいいかを名前で出す
+    for k in ("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"):
+        monkeypatch.delenv(k, raising=False)
+    body = client.get("/diagnose").text
+    assert "押すだけで繋げる連携" in body
+    assert "CONNECT_SETUP.md" in body
+    assert "GOOGLE_CLIENT_ID" in body, "何を入れればいいかが分からない"
+
+    # 登録したら残りから消える。値そのものは出さない。
+    monkeypatch.setenv("GOOGLE_CLIENT_ID", "cid-super-secret")
+    monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "csec-super-secret")
+    body = client.get("/diagnose").text
+    assert "cid-super-secret" not in body
+    assert "csec-super-secret" not in body
+    got = client.get("/diagnose").json()["押すだけで繋げる連携"]
+    assert got["登録済み"]["Google"] is True, got
+
+
+def test_diagnose_never_leaks_any_configured_secret(monkeypatch):
+    """診断は認証なしで読める。ここから鍵が読めては元も子もない。"""
+    from fastapi.testclient import TestClient
+
+    from main import app
+
+    secrets = {
+        "APP_TOKEN": "tok-secret-1", "SUPABASE_SERVICE_KEY": "svc-secret-2",
+        "SUPABASE_JWT_SECRET": "jwt-secret-3", "GEMINI_API_KEY": "sk-secret-4",
+        "KEYCHAIN_SECRET": "kc-secret-5",
+    }
+    for k, v in secrets.items():
+        monkeypatch.setenv(k, v)
+
+    body = TestClient(app).get("/diagnose").text
+    leaked = [k for k, v in secrets.items() if v in body]
+    assert leaked == [], f"診断から漏れている: {leaked}"
+
+
+def test_the_build_marker_moves_with_the_code():
+    """「直したはずなのに直らない」ときに、届いているかを確かめる目印。
+
+    止まっていると、その用を成さない（実際 8月のまま止まっていた）。
+    ここでは形だけを見る——日付と版が入っていること。
+    """
+    import main
+    assert re.match(r"^\d{4}\.\d{2}\.\d{2} · api-r\d+", main.APP_VERSION), main.APP_VERSION

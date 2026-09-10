@@ -97,20 +97,28 @@ export default function Canvas({
 
   const here = items[Math.min(at, items.length - 1)];
 
-  // Escで閉じる。かぶせる面は、必ず戻れるようにする。
-  //
-  // onClose を最新のまま持っておいて、**貼り替えない**。呼ぶ側が
-  // その場で作った関数を渡すと、描き直しのたびに聞き耳を外して付け直す
-  // ことになり、その隙にEscを押すと反応しない（テストが並列で走ると
-  // ときどき落ちて気づいた）。
+  /* Escで閉じる。かぶせる面は、必ず戻れるようにする。
+   *
+   * 聞き耳は**最初に1度だけ**立てて、あとは貼り替えない。理由が2つある。
+   *
+   *  ・呼ぶ側がその場で作った関数を渡すと、描き直しのたびに外して付け直す
+   *    ことになり、その隙に押すと反応しない
+   *  ・「開いたら付ける」にすると、付けるのが**描き終わったあと**になる。
+   *    出た瞬間に押した人の Esc が落ちる（6回に1回ほど落ちて気づいた）
+   *
+   * 開いているかと閉じ方は、描画のたびに ref へ写す。effect で写すと
+   * また1手おくれるので、ここは描画中に代入する。 */
   const closeRef = useRef(onClose);
-  useEffect(() => { closeRef.current = onClose; }, [onClose]);
+  const openRef = useRef(open);
+  closeRef.current = onClose;
+  openRef.current = open;
   useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") closeRef.current(); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && openRef.current) closeRef.current();
+    };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open]);
+  }, []);
 
   // 画面の外へ出してから描く。会話の側は動きのある箱（transform）の中に
   // あり、その中では position:fixed が画面ではなく**その箱**を基準にする。

@@ -124,7 +124,7 @@ async def _lifespan(_app: "FastAPI"):
 
 # サーバー側のビルド目印。/diagnose で返す。
 # 「直したはずなのに直らない」ときに、デプロイが届いているかを一目で確かめる。
-APP_VERSION = "2026.08.21 · api-r8 JWT BOTH METHODS"
+APP_VERSION = "2026.09.10 · api-r9 CANVAS & GUARDRAILS"
 
 app = FastAPI(
     title="AIbou Brain API",
@@ -838,6 +838,33 @@ async def health():
     return {"status": "ok"}
 
 
+def _oauth_report() -> dict:
+    """「押すだけ」で繋げる連携が、いま何本用意できているか。
+
+    持ち主が提供元にアプリを1つ登録して client_id / secret をここへ置くと、
+    利用者は押すだけで繋げるようになる（CONNECT_SETUP.md）。その作業が
+    どこまで済んだのかは、サーバーの環境変数を見ないと分からなかった。
+    残りの手順を数えられるように、ここに出す。
+
+    値そのものは出さない（設定済みかどうかだけ）。
+    """
+    try:
+        import oauth
+    except Exception:
+        return {"状態": "確認できませんでした"}
+    ready, todo = {}, []
+    for key, p in oauth.PROVIDERS.items():
+        done = oauth.configured(key)
+        ready[p.get("label", key)] = done
+        if not done:
+            todo.append(f"{p.get('label', key)}（{p['client_id_env']} と {p['client_secret_env']}）")
+    return {
+        "登録済み": ready,
+        "残り": todo or "なし（すべて押すだけで繋げます）",
+        "手順": "CONNECT_SETUP.md",
+    }
+
+
 def _scheduler_report() -> dict:
     """定期実行が生きているか。無料プランで寝ていると、朝の予約が飛ぶ。"""
     last = scheduler.last_tick()
@@ -962,6 +989,7 @@ async def diagnose(authorization: Optional[str] = Header(default=None),
             "AIの鍵(GEMINI_API_KEY)": bool(config.current_gemini_key()),
         },
         "あなたのデータの保存先": _storage_report(bearer, (x_supabase_token or "").strip()),
+        "押すだけで繋げる連携": _oauth_report(),
         "定期実行の見回り": _scheduler_report(),
         "ログインの方式": _login_method_report(),
         "受け取ったもの": got,
