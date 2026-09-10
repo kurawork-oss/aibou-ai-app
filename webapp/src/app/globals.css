@@ -802,3 +802,11 @@ html[data-skin="aibou"] [data-mode="me"]        { --accent: #d1417a; --glow: rgb
 
 /* 星空のバックドロップはライトでは出さない（JS側でも描画を止めている） */
 html[data-skin="aibou"] .forge-backdrop { display: none; }
+
+/* キャンバス（作った物を出す面）
+   スマホでは入力欄のぶんを空けて上にかぶせる（高さは実測して inline で
+   入る）。PCでは左右に並ぶので、その inline の bottom を打ち消して
+   画面の高さいっぱいにする。 */
+@media (min-width: 1024px) {
+  .canvas-sheet { bottom: 0 !important; }
+}

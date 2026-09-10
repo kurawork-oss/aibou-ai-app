@@ -91,6 +91,11 @@ TOOL_DOCS: Dict[str, str] = {
         '指定URLのページ本文を読み取る（記事や資料の要約に使う） / params: { "url": "https://example.com/article" }',
     "generate_image":
         'プロンプトから画像を生成する（HOMEの生成物に保存される） / params: { "prompt": "夕焼けの富士山、油絵風" }',
+    "draw_diagram":
+        '説明を図にして見せる。手順・関係・構成のように、言葉で並べると長くなるものに使う。'
+        'sourceは mermaid の記法（flowchart / sequenceDiagram / mindmap など）。'
+        '文章で足りるものには使わないこと / params: { "title": "頼んでから届くまで", '
+        '"source": "flowchart TD\n  A[話しかける] --> B[道具を選ぶ]\n  B --> C[実行]" }',
     "schedule_add":
         'きまった時刻に指示を自動実行する定期タスクを登録する。daysは "daily"（毎日）か "mon,wed,fri" のような曜日カンマ区切り / params: { "instruction": "AIニュースを検索してメールで送る", "time": "07:00", "days": "daily" }',
     "schedule_list":
@@ -468,6 +473,20 @@ def _rows_to_csv(rows) -> str:
     return buf.getvalue()
 
 
+def _present(item: dict) -> None:
+    """作った物を、会話の隣に出す口へ置く（present.py 参照）。
+
+    道具の戻り値は変えない。あれはAIに読ませる文章で、人に見せる物とは
+    役目が違う。見せる物はこちらに置き、画面がキャンバスに描く。
+    置けなくても道具は成功として扱う（見せ方の都合で作業を落とさない）。
+    """
+    try:
+        import present
+        present.show(item)
+    except Exception:
+        pass
+
+
 def _where_saved_note() -> str:
     """AIbouの中に保存したときの但し書き。
 
@@ -496,8 +515,10 @@ def _do_create_document(params: dict) -> str:
         art = artifacts.create("document", title or "ドキュメント", content, "text/markdown")
     except Exception as e:
         return f"ドキュメントの作成に失敗しました：{e}"
-    return (f"ドキュメント「{art.get('title')}」をAIbou内に保存しました"
-            f"（HOMEの『生成物』からダウンロードできます）。{_where_saved_note()}")
+    _present({"kind": "document", "artifact_id": art.get("id"),
+              "title": art.get("title"), "content": content})
+    return (f"ドキュメント「{art.get('title')}」をAIbou内に保存しました。"
+            f"{_where_saved_note()}")
 
 
 def _do_drive_upload(params: dict) -> str:
@@ -516,6 +537,8 @@ def _do_drive_upload(params: dict) -> str:
     if not res.get("ok"):
         return f"Googleドライブに作成できませんでした：{res.get('error')}"
     who = f"（{res['account']} のドライブ）" if res.get("account") else ""
+    _present({"kind": "link", "url": res.get("url"), "title": res.get("name", "無題"),
+              "where": "Googleドライブ"})
     return (f"Googleドライブに「{res.get('name')}」を作成し、"
             f"実在を確認しました{who}：{res.get('url')}")
 
@@ -535,8 +558,10 @@ def _do_create_spreadsheet(params: dict) -> str:
     except Exception as e:
         return f"スプレッドシートの作成に失敗しました：{e}"
     n = csv_text.strip().count("\n") + 1
-    return (f"スプレッドシート「{art.get('title')}」をAIbou内に保存しました（{n}行・CSV。"
-            f"HOMEの『生成物』からダウンロードできます）。{_where_saved_note()}")
+    _present({"kind": "table", "artifact_id": art.get("id"),
+              "title": art.get("title"), "content": csv_text})
+    return (f"スプレッドシート「{art.get('title')}」をAIbou内に保存しました（{n}行・CSV）。"
+            f"{_where_saved_note()}")
 
 
 def _do_create_slides(params: dict) -> str:
@@ -560,13 +585,16 @@ def _do_create_slides(params: dict) -> str:
         return f"スライドの生成に失敗しました：{e}"
     if isinstance(deck, dict) and deck.get("error"):
         return f"スライドの生成に失敗しました：{deck['error']}"
+    art = {}
     try:
         import artifacts
-        artifacts.create("slides", deck.get("title", "スライド"), _json.dumps(deck, ensure_ascii=False), "application/json")
+        art = artifacts.create("slides", deck.get("title", "スライド"), _json.dumps(deck, ensure_ascii=False), "application/json") or {}
     except Exception:
         pass
     n = len(deck.get("slides") or [])
-    return f"スライド資料「{deck.get('title')}」を作成しました（{n}枚）。HOMEの『生成物』で表示・PDF/Googleスライド化できます。"
+    _present({"kind": "slides", "artifact_id": art.get("id"),
+              "title": deck.get("title", "スライド"), "deck": deck})
+    return f"スライド資料「{deck.get('title')}」を作成しました（{n}枚）。PDF・Googleスライド化もできます。"
 
 
 def _do_create_google_slides(params: dict) -> str:
@@ -593,6 +621,8 @@ def _do_create_google_slides(params: dict) -> str:
     if res.get("warning"):
         return f"Googleスライド「{deck.get('title')}」：{res['warning']} {res.get('url')}"
     who = f"（{res['account']} のドライブ）" if res.get("account") else ""
+    _present({"kind": "link", "url": res.get("url"), "title": deck.get("title", "無題"),
+              "where": "Googleスライド"})
     return (f"Googleスライド「{deck.get('title')}」を作成し、"
             f"実在を確認しました{who}：{res.get('url')}")
 
@@ -613,6 +643,8 @@ def _do_google_sheet(params: dict) -> str:
     if res.get("warning"):
         return f"Googleスプレッドシート「{title or '無題'}」：{res['warning']} {res.get('url')}"
     who = f"（{res['account']} のドライブ）" if res.get("account") else ""
+    _present({"kind": "link", "url": res.get("url"), "title": title or "無題",
+              "where": "Googleスプレッドシート"})
     return (f"Googleスプレッドシート「{title or '無題'}」を作成し、"
             f"実在を確認しました{who}：{res.get('url')}")
 
@@ -633,6 +665,8 @@ def _do_google_doc(params: dict) -> str:
     if res.get("warning"):
         return f"Googleドキュメント「{title or '無題'}」：{res['warning']} {res.get('url')}"
     who = f"（{res['account']} のドライブ）" if res.get("account") else ""
+    _present({"kind": "link", "url": res.get("url"), "title": title or "無題",
+              "where": "Googleドキュメント"})
     return (f"Googleドキュメント「{title or '無題'}」を作成し、"
             f"実在を確認しました{who}：{res.get('url')}")
 
@@ -718,9 +752,14 @@ def _do_web_search(params: dict) -> str:
         return f"Web検索に失敗しました：{e}"
     if not res.get("ok"):
         return f"Web検索できませんでした：{res.get('error')}"
+    hits = res.get("results") or []
     lines = []
-    for i, r in enumerate(res.get("results", []), start=1):
+    for i, r in enumerate(hits, start=1):
         lines.append(f"{i}. {r.get('title', '')}\n   {r.get('url', '')}\n   {r.get('snippet', '')}")
+    # 押せる形でも出す。文字列のURLは、スマホでは選んで貼り直すしかない。
+    _present({"kind": "search", "query": query, "title": f"「{query}」の検索結果",
+              "results": [{"title": r.get("title", ""), "url": r.get("url", ""),
+                           "snippet": r.get("snippet", "")} for r in hits]})
     return f"「{query}」の検索結果：\n" + "\n".join(lines)
 
 
@@ -737,7 +776,10 @@ def _do_web_read(params: dict) -> str:
     if not res.get("ok"):
         return f"ページを取得できませんでした：{res.get('error')}"
     title = res.get("title") or ""
-    return f"【{title}】\n{res.get('text', '')}"
+    text = res.get("text", "")
+    # 「どこを読んだのか」を出す。AIの要約だけだと、元を当たれない。
+    _present({"kind": "page", "url": url, "title": title or url, "text": text})
+    return f"【{title}】\n{text}"
 
 
 def _do_generate_image(params: dict) -> str:
@@ -758,7 +800,39 @@ def _do_generate_image(params: dict) -> str:
         artifacts.create("image", prompt[:60], url, "image/url")
     except Exception:
         pass
-    return f"画像を生成しました：{url}（HOMEの『生成物』からも見られます）"
+    _present({"kind": "image", "url": url, "title": prompt[:60]})
+    return f"画像を生成しました：{url}"
+
+
+def _do_draw_diagram(params: dict) -> str:
+    """説明を図にして見せる（mermaid）。
+
+    言葉で並べると長くなるもの——手順・関係・構成——を、AI自身が
+    「これは図のほうが早い」と判断して描けるようにする。
+
+    描画は画面側で行う。ここでやるのは、渡された記法が図として
+    成り立つかの、ごく浅い確認だけ。厳密に検査しようとすると
+    mermaid の文法を丸ごと持つことになり、本家が更新されるたびに
+    こちらが古びて、描ける図を弾くようになる。
+    """
+    source = (params.get("source") or "").strip()
+    title = (params.get("title") or "図").strip()
+    if not source:
+        return "図の中身(source)が空です。"
+
+    # 先頭が図の種類になっているかだけ見る。ここが無いと mermaid は
+    # 必ず失敗するので、描く前に言えたほうが早い。
+    head = source.lstrip().split()[0].lower() if source.strip() else ""
+    kinds = ("flowchart", "graph", "sequencediagram", "classdiagram", "statediagram",
+             "statediagram-v2", "erdiagram", "journey", "gantt", "pie", "mindmap",
+             "timeline", "quadrantchart", "gitgraph", "c4context", "sankey-beta",
+             "xychart-beta", "block-beta", "packet-beta", "architecture-beta")
+    if head not in kinds:
+        return (f"図の種類が分かりません（1行目が「{head or '空'}」）。"
+                f"flowchart TD / sequenceDiagram / mindmap などで始めてください。")
+
+    _present({"kind": "diagram", "title": title, "source": source})
+    return f"図「{title}」を描いて、会話の横に出しました。"
 
 
 _DAY_JP = {"mon": "月", "tue": "火", "wed": "水", "thu": "木", "fri": "金", "sat": "土", "sun": "日"}
@@ -963,6 +1037,7 @@ _DISPATCH = {
     "web_search": _do_web_search,
     "web_read": _do_web_read,
     "generate_image": _do_generate_image,
+    "draw_diagram": _do_draw_diagram,
     "schedule_add": _do_schedule_add,
     "schedule_list": _do_schedule_list,
     "notion_add": _do_notion_add,

@@ -86,6 +86,9 @@ CAPABILITIES: List[dict] = [
     # つくる
     {"cmd": "画像", "yomi": "がぞう image picture", "label": "画像をつくる", "pack": "make",
      "tool": "generate_image", "arg": "どんな絵か", "icon": "🖼"},
+    # よみは「ず」ではなく「ずかい」。1文字だと、ほかの物と当たりやすい。
+    {"cmd": "図解", "yomi": "ずかい diagram chart", "label": "図にして説明する", "pack": "make",
+     "tool": "draw_diagram", "arg": "何を図にするか", "icon": "🗺"},
     {"cmd": "スライド", "yomi": "すらいど slide", "label": "スライドをつくる", "pack": "make",
      "tool": "create_slides", "arg": "テーマ", "icon": "📊"},
     {"cmd": "資料", "yomi": "しりょう document doc", "label": "ドキュメントをつくる", "pack": "make",

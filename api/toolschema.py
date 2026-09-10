@@ -101,6 +101,10 @@ SCHEMAS: Dict[str, Dict[str, Any]] = {
     "generate_image": {"fields": {
         "prompt": ("str", True, "どんな絵にするか"),
     }},
+    "draw_diagram": {"fields": {
+        "source": ("str", True, "mermaid の記法（flowchart / sequenceDiagram など）"),
+        "title": ("str", False, "図の題名"),
+    }},
     "save_note": {"fields": {
         "content": ("str", True, "本文"),
         "notebook": ("str", False, "保存先のノートブック名"),

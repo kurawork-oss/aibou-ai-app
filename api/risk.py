@@ -57,6 +57,8 @@ LEVELS: Dict[str, int] = {
     "create_spreadsheet": 1,
     "create_slides": 1,
     "generate_image": 1,
+    # 図は描いて見せるだけ。どこにも残らないので、いちばん軽い。
+    "draw_diagram": 0,
     "schedule_add": 1,
     "create_automation": 1,
     "create_mission": 1,

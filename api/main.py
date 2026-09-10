@@ -45,6 +45,7 @@ import forge
 import gh
 import gservice
 import hooks as hooks_mod
+import present
 import risk
 import rules
 import guide as guide_mod
@@ -1178,8 +1179,18 @@ async def agent_act(req: AgentActRequest, _auth: None = Depends(require_auth)):
 async def agent_execute(req: AgentExecuteRequest, _auth: None = Depends(require_auth)):
     """承認された単一ツールを実行する（承認モードの『承認』ボタン用）。"""
     loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(None, lambda: tools.execute_tool(req.tool, req.params or {}))
-    return {"result": result}
+
+    def _work() -> dict:
+        token = present.begin()
+        try:
+            out = tools.execute_tool(req.tool, req.params or {})
+            # 承認して実行した物も、そのまま隣に出す。押したあとに
+            # 「どこへ行けば見られるか」を探させない。
+            return {"result": out, "show": present.take()}
+        finally:
+            present.end(token)
+
+    return await loop.run_in_executor(None, _work)
 
 
 @app.post("/vision")
@@ -3523,9 +3534,16 @@ async def run_command(req: CommandRequest, claims: dict = Depends(current_claims
             # 自由文から埋めきれない道具は、AIに任せたほうが早い
             return {"ok": False, "kind": "delegate",
                     "message": "この指示はAIに任せます"}
-        out = tools.execute_tool(cap["tool"], params)
+        # 近道で作った物も、会話の隣に出す（AI経由と扱いを揃える）。
+        token = present.begin()
+        try:
+            out = tools.execute_tool(cap["tool"], params)
+            made = present.take()
+        finally:
+            present.end(token)
         return {"ok": True, "kind": "done", "tool": cap["tool"],
-                "label": cap["label"], "view": cap.get("view", ""), "result": out}
+                "label": cap["label"], "view": cap.get("view", ""), "result": out,
+                "show": made}
 
     return await loop.run_in_executor(None, _work)
 
@@ -3562,7 +3580,11 @@ def _command_params(cap: dict, rest: str):
             return {"days": int(rest)} if rest else {}
         except ValueError:
             return {}
-    # 予定・メール送信・定期実行・ドライブ等は、1つの文から機械的に割れない
+    # 予定・メール送信・定期実行・ドライブ等は、1つの文から機械的に割れない。
+    #
+    # draw_diagram も**わざと**ここに落とす。`#図解 開発の流れ` の「開発の流れ」は
+    # mermaid の記法ではないので、そのまま source に入れると必ず描けない。
+    # AIに回して記法へ直してもらう。上の simple に足さないこと。
     return None
 
 

@@ -32,8 +32,10 @@ import {
   conversationsList, conversationGet, conversationSave, conversationDelete,
   capabilities, runCommand, setupPending, setupResume,
   type ChatTurn, type AgentEvent, type CommandItem, type CommandResult,
+  type MadeItem,
 } from "@/lib/api";
 import CommandPalette, { readHashInput } from "@/components/CommandPalette";
+import Canvas, { pushItem } from "@/components/Canvas";
 import { PACKS_CHANGED } from "@/lib/shell";
 import { useSpeechRecognition } from "@/lib/voice";
 import { speakCore, stopCoreVoice, type CoreVoiceSettings, type VoiceEngine } from "@/lib/coreVoice";
@@ -181,6 +183,39 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
   const [agentMode, setAgentMode] = useState(false);
   const [approval, setApproval] = useState(true);   // 取り消せない操作は実行前に確認
   const actedRef = useRef(false);
+
+  /* ── 作った物（会話の隣に出す） ───────────────────────────────
+     画像・資料・スライド・検索結果は、吹き出しに入れると見られない。
+     出来た物はここに積んで、キャンバスに出す。            */
+  const [madeItems, setMadeItems] = useState<MadeItem[]>([]);
+  const [canvasOpen, setCanvasOpen] = useState(false);
+
+  /** 出来た物を受け取る。**出たら開く**（作った物を隠さない）。 */
+  const made = useCallback((item: MadeItem) => {
+    setMadeItems((prev) => pushItem(prev, item));
+    setCanvasOpen(true);
+  }, []);
+
+  /* キャンバスは会話にかぶせるが、**入力欄は残す**。
+     見た直後にやりたいのはたいてい「直して」「もっと」なので、
+     いちいち閉じさせない。入力欄の高さは中身（画像を貼った・
+     用事を預かった等）で変わるので、その都度測る。 */
+  const composerRef = useRef<HTMLDivElement | null>(null);
+  const [composerH, setComposerH] = useState(0);
+  useEffect(() => {
+    const el = composerRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const measure = () => {
+      const r = el.getBoundingClientRect();
+      // 画面の下端から入力欄の上端までの高さ（下のナビも含まれる）
+      setComposerH(Math.max(0, Math.round(window.innerHeight - r.top)));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    window.addEventListener("resize", measure);
+    return () => { ro.disconnect(); window.removeEventListener("resize", measure); };
+  }, []);
 
   // モードは覚えておく（毎回切り替えるのは面倒）
   useEffect(() => {
@@ -529,6 +564,12 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
               case "observation":
                 setSteps((s) => [...s, { kind: "observation", result: ev.result || "", ms: ev.ms }]);
                 break;
+              case "show":
+                // その手で出来た物を、隣のキャンバスに出す。
+                // 文章で「作りました。HOMEの生成物から見てください」と
+                // 案内していた所。作った物は、ここで受け取れるようにする。
+                if (ev.item) made(ev.item);
+                break;
               case "approval":
                 setSteps((s) => s.filter((x) => x.kind !== "thinking"));
                 setMessages((prev) => prev.map((m) => (m.id === assistantId
@@ -633,9 +674,10 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
     }));
     if (!act) return;
     try {
-      const result = await agentExecute(act.tool, act.params);
+      const { result, show } = await agentExecute(act.tool, act.params);
       setMessages((prev) => prev.map((m) => (m.id === msgId
         ? { ...m, steps: [...(m.steps ?? []), { kind: "observation" as const, result }] } : m)));
+      for (const it of show) made(it);
       actedRef.current = true;
     } catch {
       setMessages((prev) => prev.map((m) => (m.id === msgId
@@ -690,9 +732,11 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
     setMessages((prev) => [...prev,
       { id: uid(), role: "user", content: text },
       { id: uid(), role: "assistant", content: res.result ?? "" }]);
+    // 近道で出来た物も、AI経由と同じようにキャンバスへ
+    for (const it of res.show ?? []) made(it);
     setInput("");
     return true;
-  }, [onOpenView]);
+  }, [onOpenView, made]);
 
   useEffect(() => {
     if (!API_URL) return;
@@ -944,7 +988,15 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
   const canSend = (input.trim().length > 0 || !!pendingImage) && !streaming;
 
   return (
-    <div className="relative flex h-full min-h-0 w-full justify-center">
+    <div
+      /* PCではキャンバスが右半分に出る。会話がその下に潜ると読めなくなる
+         ので、開いているあいだは残りの幅で中央に寄せ直す（実測で入力欄の
+         右端がキャンバスの左端を91px越えていた）。
+         スマホはかぶせる形なので、ここは効かせない。 */
+      className={`relative flex h-full min-h-0 w-full justify-center transition-[margin] duration-200 ${
+        canvasOpen ? "lg:mr-[42vw] lg:max-w-[calc(100%-42vw)]" : ""
+      }`}
+    >
       {/* Full-height left history panel + bottom-left toggle (chat only). */}
       <ChatHistory
         convos={convos}
@@ -984,7 +1036,7 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
       </div>
 
       {/* Composer */}
-      <div className="mt-2 shrink-0">
+      <div className="mt-2 shrink-0" ref={composerRef}>
         {/* 会話 / 司令塔（実行）の切替。何ができるモードなのかを明示する。 */}
         <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
           <div className="flex overflow-hidden rounded-forge border border-panel">
@@ -1213,6 +1265,29 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
         </div>
       </div>
       </div>
+
+      {/* ── 作った物のキャンバス（会話の隣） ──
+          スマホは会話にかぶせ、PCは右半分に並ぶ。閉じても生成物は残る。 */}
+      <Canvas
+        items={madeItems}
+        open={canvasOpen}
+        bottomOffset={composerH}
+        onClose={() => setCanvasOpen(false)}
+        onOpenFiles={onOpenView ? () => onOpenView("archive") : undefined}
+      />
+
+      {/* 閉じたあとに、出した物へ戻る口。無いと「消えた」ように見える。 */}
+      {!canvasOpen && madeItems.length > 0 && (
+        <button
+          type="button"
+          onClick={() => setCanvasOpen(true)}
+          className="fixed bottom-[74px] right-3 z-20 flex min-h-[44px] items-center gap-1.5 rounded-forge border border-[var(--line)] px-3 text-[11px] text-fg-strong shadow-glow transition sm:bottom-4"
+          style={{ background: "var(--chrome)" }}
+        >
+          <span>🗂</span>
+          <span>作った物 {madeItems.length}</span>
+        </button>
+      )}
 
       {/* ── リアルタイム会話モードの全画面オーバーレイ ── */}
       <AnimatePresence>

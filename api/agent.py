@@ -32,6 +32,7 @@ import time
 from datetime import datetime, timezone, timedelta
 
 import llm
+import present
 import risk
 import toolcall
 import tools
@@ -200,7 +201,20 @@ def _build_convo(system_prompt: str, history, instruction: str) -> str:
 
 def run_stream(instruction: str, history=None, name: str = "AIbou", approval: bool = False):
     """エージェントを実行し、進捗イベントを逐次 yield するジェネレータ。
-    approval=True のとき、機微なツール（SENSITIVE_TOOLS）は実行せず 'approval'
+
+    「作った物の置き場」を、この実行のあいだだけ開ける。途中で読むのを
+    やめられても閉じるよう finally に置く（開けっぱなしにすると、次の人の
+    画面に前の人の物が出る）。
+    """
+    token = present.begin()
+    try:
+        yield from _run_stream(instruction, history, name, approval)
+    finally:
+        present.end(token)
+
+
+def _run_stream(instruction: str, history=None, name: str = "AIbou", approval: bool = False):
+    """approval=True のとき、機微なツール（SENSITIVE_TOOLS）は実行せず 'approval'
     イベントを出して停止する（人間が承認したら /agent/execute で実行する）。"""
     instruction = (instruction or "").strip()
     stamp = _stamper()
@@ -298,6 +312,13 @@ def run_stream(instruction: str, history=None, name: str = "AIbou", approval: bo
         if _looks_failed(result):
             failed.append((tool, result))
         yield stamp({"phase": "observation", "step": step, "tool": tool, "result": result})
+
+        # その手で出来た物を、会話の隣に出す。
+        # ここまで、作った画像も資料も「HOMEの生成物から見てください」で
+        # 終わっていた。作っておいて別の場所へ行かせるのは、頼んだ人から
+        # 見れば「まだ受け取っていない」のと同じ。
+        for made in present.take():
+            yield stamp({"phase": "show", "step": step, "tool": tool, "item": made})
 
         # 失敗の理由が「まだ連携していない」だけなら、そこで話を終わらせない。
         # 用事を預かって、繋ぐ入口を出す。繋げたら預けた用事から再開する。

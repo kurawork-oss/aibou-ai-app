@@ -461,9 +461,39 @@ export function codeGenerateStream(
 }
 
 /* ---------------- HOME agent (手足となって動く) ---------------- */
+/**
+ * 道具が「作った物」。会話の隣（キャンバス）に出すためのもの。
+ *
+ * 道具の戻り値（文字列）とは役目が違う。あちらはAIに読ませる文章、
+ * こちらは人に見せる物。作った画像も資料も検索結果も、これまでは
+ * 文字列の中のURLでしかなく、「HOMEの生成物から見てください」と
+ * 案内するだけだった。
+ */
+export interface MadeItem {
+  kind: "image" | "document" | "slides" | "table" | "search" | "page" | "diagram" | "link";
+  title?: string;
+  /** image / page / link */
+  url?: string;
+  /** document / table … 中身そのもの（Markdown・CSV） */
+  content?: string;
+  /** document / slides / table … 保存された生成物のID（開き直せる） */
+  artifact_id?: string;
+  /** slides */
+  deck?: SlideDeck;
+  /** search */
+  query?: string;
+  results?: { title: string; url: string; snippet: string }[];
+  /** page … 読み取った本文 */
+  text?: string;
+  /** diagram … mermaid の記法 */
+  source?: string;
+  /** link … どこに出来たか（Googleドキュメント等） */
+  where?: string;
+}
+
 export interface AgentEvent {
   phase: "start" | "prepare" | "thinking" | "tool" | "observation" | "approval"
-    | "setup_required" | "final" | "done" | "error";
+    | "setup_required" | "show" | "final" | "done" | "error";
   step?: number;
   tool?: string;
   params?: Record<string, unknown>;
@@ -500,6 +530,10 @@ export interface AgentEvent {
   needs_owner?: boolean;
   /** 連携待ちで止まっている（用事は預けてある）。 */
   awaiting_setup?: boolean;
+
+  /* ── show のとき ── */
+  /** その手で出来た物（画像・資料・検索結果など）。 */
+  item?: MadeItem;
 }
 
 /**
@@ -560,14 +594,18 @@ export function agentActStream(
 }
 
 /** POST /agent/execute — run a single approved tool (approval-mode confirm). */
-export async function agentExecute(tool: string, params: Record<string, unknown>): Promise<string> {
+export async function agentExecute(
+  tool: string, params: Record<string, unknown>,
+): Promise<{ result: string; show: MadeItem[] }> {
   const res = await fetch(`${requireApiUrl()}/agent/execute`, {
     method: "POST",
     headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ tool, params }),
   });
-  const data = (await res.json().catch(() => ({ result: "" }))) as { result?: string };
-  return data.result ?? "";
+  const data = (await res.json().catch(() => ({}))) as
+    { result?: string; show?: MadeItem[] };
+  // 承認して実行した物も、そのまま隣に出す（押したあとに行き先を探させない）
+  return { result: data.result ?? "", show: asArray<MadeItem>(data.show) };
 }
 
 /* ---------------- CAPTURE: 文字起こし / ナレーション ---------------- */
@@ -2478,6 +2516,8 @@ export interface CommandResult {
   message?: string;
   cmd?: string;
   arg?: string;
+  /** その近道で出来た物（画像・資料・検索結果など）。 */
+  show?: MadeItem[];
 }
 
 /**

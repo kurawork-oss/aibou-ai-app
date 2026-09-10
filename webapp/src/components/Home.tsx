@@ -445,7 +445,9 @@ function AgentConsole({
     setApproving(true);
     setSteps((s) => [...s, { kind: "tool", tool: p.tool, note: p.note }]);
     try {
-      const result = await agentExecute(p.tool, p.params);
+      // HOMEのエージェント欄には隣のキャンバスが無い（会話は実行タブに
+      // 1つ）。作った物は生成物として残るので、ここは文章のままでよい。
+      const { result } = await agentExecute(p.tool, p.params);
       setSteps((s) => [...s, { kind: "observation", result }]);
       actedRef.current = true;
       onDidAct();
