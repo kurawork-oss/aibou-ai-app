@@ -14,6 +14,15 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  // 画像の最適化は使わない（next/image をどこでも使っていない。生成画像は
+  // 外部URLなので、通すと配信元をいちいち許可する設定が要るだけ）。
+  //
+  // 使っていないのに口だけ開いていると、そこに見つかった穴をこちらが
+  // 背負うことになる。実際 /_next/image には Next 15.5.24 未満に対する
+  // 重大な勧告（AVIFの取り扱い）が出ている。使わない口は閉じておく。
+  images: {
+    unoptimized: true,
+  },
   env: {
     // Default to the shared Supabase project unless overridden in Vercel.
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL || SUPABASE_URL_DEFAULT,

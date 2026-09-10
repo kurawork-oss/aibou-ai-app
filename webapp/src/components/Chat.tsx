@@ -660,7 +660,7 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
       );
       cancelRef.current = handlers.cancel;
     },
-    [settings, speakReply, feedSpeech, flushSpeech, agentMode, approval],
+    [settings, speakReply, feedSpeech, flushSpeech, agentMode, approval, made],
   );
 
   /** 承認待ちの操作を実行する（メール送信など、取り消せないもの）。 */
@@ -683,7 +683,7 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
       setMessages((prev) => prev.map((m) => (m.id === msgId
         ? { ...m, steps: [...(m.steps ?? []), { kind: "error" as const, detail: "実行に失敗しました" }] } : m)));
     }
-  }, []);
+  }, [made]);
 
   /** 承認待ちの操作をやめる（実行しない）。 */
   const rejectAct = useCallback((msgId: string) => {
