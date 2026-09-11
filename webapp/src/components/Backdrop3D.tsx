@@ -127,10 +127,21 @@ export default function Backdrop3D() {
         cyan: i % 9 === 0,
       }));
     };
-    /* 紺（CYBER）の地は水たまり。高さを計算して、傾きを光に変える。
-       格子は8px四方——画素ぶん計算するとスマホで間に合わない。 */
-    const water = new Water({ cell: 6, damping: 0.984, rainEvery: 1.9 });
-    const fitWater = () => water.resize(w, h);
+    /* 紺（CYBER）の地は水たまり。高さを計算し、傾きで底をずらして拾う
+       （屈折）。細かいほど水らしくなるので、まず細かく張る。
+
+       ただし「細かい＝正解」ではない。弱い端末で 30fps になるくらいなら、
+       少し粗くて 60fps のほうが水に見える。だから**実測して自動で
+       粗くする**（下の adapt）。 */
+    const water = new Water({
+      cell: 3,          // ここから始める（いちばん細かい）
+      maxCells: 90000,  // 広い画面でも、これ以上は増やさない
+      damping: 0.988,
+      rainEvery: 1.9,
+      refract: 15,
+    });
+    let waterCell = 3;
+    const fitWater = () => water.resize(w, h, waterCell);
 
     resize();
     fitWater();
@@ -148,7 +159,7 @@ export default function Backdrop3D() {
       if (d < 14) return;
       lastDropX = e.clientX;
       lastDropY = e.clientY;
-      water.drop(e.clientX, e.clientY, e.pointerType === "touch" ? 0.9 : 0.55, 2);
+      water.drop(e.clientX, e.clientY, e.pointerType === "touch" ? 1.1 : 0.75, 20);
     };
     window.addEventListener("pointermove", onPointer, { passive: true });
 
@@ -157,7 +168,7 @@ export default function Backdrop3D() {
       if (document.documentElement.dataset.skin !== "cyber") return;
       lastDropX = e.clientX;
       lastDropY = e.clientY;
-      water.drop(e.clientX, e.clientY, 1.6, 3);
+      water.drop(e.clientX, e.clientY, 2.2, 30);
     };
     window.addEventListener("pointerdown", onDown, { passive: true });
 
@@ -281,6 +292,25 @@ export default function Backdrop3D() {
       }
     };
 
+    /* 速さを見て、粗さを決める。
+     *
+     * 1コマ 16.7ms が 60fps。水に使ってよいのは、その半分くらいまで
+     * （ほかにも描く物があるので）。何コマか続けて重かったら1段粗くし、
+     * 軽い状態が続いたら1段細かく戻す。
+     *
+     * 1コマの跳ねで判断しない——タブの切り替えやGCで簡単に跳ねるので、
+     * そのたびに張り直すと、かえってガタつく。 */
+    let heavy = 0, light = 0;
+    const BUDGET = 7.5;            // 水に使ってよい時間（ms）
+    const adapt = (ms: number) => {
+      if (ms > BUDGET) { heavy++; light = 0; } else if (ms < BUDGET * 0.45) { light++; heavy = 0; }
+      if (heavy >= 30 && waterCell < 8) {
+        waterCell += 1; heavy = 0; fitWater();
+      } else if (light >= 180 && waterCell > 3) {
+        waterCell -= 1; light = 0; fitWater();
+      }
+    };
+
     const draw = (now: number) => {
       // 模様や白地を持つスキンでは、星空・グリッドを描かない。
       //   aibou   … 白地に星を撒くとゴミのように見える
@@ -298,11 +328,15 @@ export default function Backdrop3D() {
       if (skin === "cyber") {
         const wdt = Math.min((now - last) / 1000, 0.05);
         last = now;
+
+        const t0 = performance.now();
         water.step(wdt);
         water.render(ctx, w, h, WATER_COLORS);
+        adapt(performance.now() - t0);
+
         // 背景として後ろへ下げる。水紋をそのままの強さで出すと、
         // 上に載る文章と明るさで張り合って読みにくくなる（実際なった）。
-        ctx.fillStyle = "rgba(6, 11, 26, 0.42)";
+        ctx.fillStyle = "rgba(6, 11, 26, 0.30)";
         ctx.fillRect(0, 0, w, h);
         return;
       }

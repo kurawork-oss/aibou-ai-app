@@ -150,7 +150,7 @@ export default function Guide() {
                  style={{ background: "var(--panel-bd)" }}
                  role="progressbar" aria-valuenow={doneCount}
                  aria-valuemin={0} aria-valuemax={SETUP_STEPS.length}>
-              <div className="h-full rounded-full transition-all duration-300"
+              <div className="h-full rounded-full transition-[width] duration-300 ease-out motion-reduce:transition-none"
                    style={{
                      width: `${(doneCount / SETUP_STEPS.length) * 100}%`,
                      background: "var(--accent)",

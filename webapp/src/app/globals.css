@@ -843,17 +843,10 @@ html[data-skin="cyber"] {
   --tint: rgba(206, 216, 234, 0.09);
 
   background-color: var(--bg);
-  /* 模様：細い格子＋斜めの走査線＋上下のにじみ。
-     格子だけだと方眼紙になるので、斜線を薄く重ねて回路っぽさを出す。 */
-  background-image:
-    linear-gradient(rgba(160, 180, 215, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(160, 180, 215, 0.05) 1px, transparent 1px),
-    repeating-linear-gradient(115deg,
-      rgba(190, 206, 236, 0.045) 0 1px, transparent 1px 58px),
-    radial-gradient(1200px 700px at 50% -18%, rgba(150, 175, 220, 0.16), transparent 64%),
-    radial-gradient(900px 520px at 50% 116%, rgba(120, 150, 200, 0.10), transparent 60%);
-  background-size: 44px 44px, 44px 44px, auto, auto, auto;
-  background-attachment: fixed;
+  /* 模様はここに描かない。**水の底**に描いてある（lib/water.ts の
+     defaultFloor）。上に重ねると、水と模様が別々の層に見えてしまう。
+     下に置いて屈折させて初めて「水を通して見ている」になる。
+     ここはキャンバスが載るまでの下地（読み込み中の一瞬）だけ。 */
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -912,3 +905,35 @@ html[data-skin="emerald"] .glass-silver {
 }
 
 html[data-skin="emerald"] .forge-backdrop { display: none; }
+
+/* ── 滑らかさ ──────────────────────────────────────────────────────
+   スマホで「ぬるっと」感じるかどうかは、描画の速さより**引っかかりの
+   有無**で決まる。ここは体感に直結する2つだけ。 */
+
+/* 内側の一覧を端まで送ったときに、ページごと引きずられないようにする。
+   これが無いと、会話の履歴を送りきった瞬間に画面全体が跳ねる。 */
+.overflow-y-auto,
+.overflow-auto,
+.overflow-x-auto {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* 横に流す帯（# の候補・「もっと」の並び等）は、指を離した所で止める。 */
+.overflow-x-auto {
+  scroll-snap-type: none;
+  touch-action: pan-x;
+}
+
+/* 動きを減らす設定の人には、animation も transition も出さない。
+   個々の要素に motion-reduce を書き漏らしても、ここで受け止める。 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

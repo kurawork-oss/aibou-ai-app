@@ -8,37 +8,37 @@
  *
  *     次 = (上 + 下 + 左 + 右) / 2 − 前
  *
- * これは波動方程式をいちばん粗く解いた形で、見た目は本物の水になる。
- * 毎回わずかに減らす（減衰）ので、放っておけば必ず凪ぐ。
+ * 波動方程式をいちばん粗く解いた形。毎回わずかに減らす（減衰）ので、
+ * 放っておけば必ず凪ぐ。
  *
- * 描くときは高さそのものではなく**傾き**を見る。傾いた所は光の反射が
- * ずれるので、そこに明るい線が出る——それが波紋に見える。
+ * 水に見せているのは「屈折」
+ * --------------------------
+ * 傾きを明るさに変えるだけでも波紋には見えるが、**水には見えない**。
+ * 本物の水が水に見えるのは、下にある物が水面の傾きでずれて見えるから。
  *
- * なぜ格子を粗くするか
- * --------------------
- * 画面の画素ぶん計算すると、スマホでは間に合わない。8px四方で1点にして
- * 小さな画像を作り、引き伸ばして描く。輪郭がぼけるが、水はぼけていて
- * 構わない——むしろそのほうが水に見える。
+ * だから底の絵（floor）を先に1枚作っておき、水面の傾きぶんだけ
+ * **ずらして拾う**。波の下で底の模様がうねる——これが効く。
+ * そこへ光の反射（specular）を足すと、濡れた面になる。
  *
- * 触っていないときも、ゆっくり雨粒を落とす。完全に止まった水面は
- * 「壁紙」に見えてしまい、触れることに気づいてもらえない。
+ * 重さの見積もり
+ * --------------
+ * 1点あたり「波の更新」＋「底を拾う」＋「反射」で、だいたい20〜30演算。
+ * 60fpsなら1コマ16.7msなので、JSで回せるのは数万点まで。
+ * 画面が広いほど点が増えるので上限を置き、さらに**実測して足りなければ
+ * 自動で粗くする**（弱い端末で固まるより、少し粗いほうがいい）。
  */
 
 export interface WaterOptions {
-  /** 1点あたりの画素数（下限）。大きいほど軽く、粗い。 */
+  /** 1点あたりの画素数（下限＝いちばん細かいとき）。 */
   cell?: number;
-  /**
-   * 格子の点数の上限。
-   *
-   * 画面が広いほど点が増えるので、放っておくとPCだけ重くなる（実測で
-   * 1440x900 だと 30fps まで落ちた）。上限を決めて、超えるぶんは
-   * 粗さで吸収する——水はぼけていて構わないので、ここは粗さで払う。
-   */
+  /** 格子の点数の上限。広い画面だけ重くなるのを防ぐ。 */
   maxCells?: number;
   /** 波の減り方（0〜1）。1に近いほど長く残る。 */
   damping?: number;
   /** 触っていないときに落とす雨粒の間隔（秒）。0で止める。 */
   rainEvery?: number;
+  /** 屈折の強さ（底をどれだけずらして拾うか。格子の点数で数える）。 */
+  refract?: number;
 }
 
 export interface WaterColors {
@@ -46,9 +46,50 @@ export interface WaterColors {
   deep: [number, number, number];
   /** 水の地の色（浅い側＝上のほう）。 */
   shallow: [number, number, number];
-  /** 反射の色（波の光）。 */
+  /** 反射の色（波の照り）。 */
   sheen: [number, number, number];
 }
+
+/** 底に敷く模様の描き方。grid 座標系（点）で受け取る。 */
+export type FloorPainter = (
+  ctx: CanvasRenderingContext2D, w: number, h: number, colors: WaterColors,
+) => void;
+
+/**
+ * 底の既定の絵。深さの階調＋細い格子。
+ *
+ * 模様を**水の下**に置くのが肝。上に重ねると、水と模様が別々の層に
+ * 見えてしまう（実際そう見えていた）。下に置いて屈折させると、
+ * 初めて「水を通して見ている」になる。
+ */
+export const defaultFloor: FloorPainter = (ctx, w, h, colors) => {
+  const g = ctx.createLinearGradient(0, 0, 0, h);
+  const rgb = (c: [number, number, number]) => `rgb(${c[0]},${c[1]},${c[2]})`;
+  g.addColorStop(0, rgb(colors.shallow));
+  g.addColorStop(1, rgb(colors.deep));
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, w, h);
+
+  // 細い格子（サイバーな床）。点の間隔で引くので、粗さが変わっても
+  // 見た目の密度は変わらない。
+  const step = Math.max(6, Math.round(w / 26));
+  ctx.strokeStyle = "rgba(150,175,215,0.10)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let x = step; x < w; x += step) { ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, h); }
+  for (let y = step; y < h; y += step) { ctx.moveTo(0, y + 0.5); ctx.lineTo(w, y + 0.5); }
+  ctx.stroke();
+
+  // 斜めの走査線を1本おきに。格子だけだと方眼紙に見える。
+  ctx.strokeStyle = "rgba(170,195,235,0.06)";
+  ctx.beginPath();
+  const diag = Math.max(10, Math.round(w / 9));
+  for (let i = -h; i < w + h; i += diag) {
+    ctx.moveTo(i, 0);
+    ctx.lineTo(i + h, h);
+  }
+  ctx.stroke();
+};
 
 /**
  * 水面。
@@ -58,43 +99,64 @@ export interface WaterColors {
  * 画面側がタブの表示状態や reduce-motion を見て止めるため）。
  */
 export class Water {
-  /** いま実際に使っている1点あたりの画素数（画面の広さで決まる）。 */
+  /** いま実際に使っている1点あたりの画素数（画面の広さと速さで決まる）。 */
   cell: number;
   readonly minCell: number;
   readonly maxCells: number;
   readonly damping: number;
   readonly rainEvery: number;
+  readonly refract: number;
 
-  private w = 0;          // 格子の横の点数
-  private h = 0;          // 格子の縦の点数
+  private w = 0;
+  private h = 0;
   private cur: Float32Array = new Float32Array(0);
   private prev: Float32Array = new Float32Array(0);
   private img: ImageData | null = null;
   private buf: HTMLCanvasElement | null = null;
   private bufCtx: CanvasRenderingContext2D | null = null;
+  /** 底の絵（RGBA）。屈折して拾う元。 */
+  private floor: Uint8ClampedArray | null = null;
   private rainAt = 0;
+  private pxW = 0;
+  private pxH = 0;
+  private painter: FloorPainter = defaultFloor;
+  private colors: WaterColors | null = null;
 
   constructor(opts: WaterOptions = {}) {
-    this.minCell = Math.max(3, opts.cell ?? 8);
+    this.minCell = Math.max(2, opts.cell ?? 4);
     this.cell = this.minCell;
-    this.maxCells = Math.max(2000, opts.maxCells ?? 14000);
-    this.damping = Math.min(0.999, Math.max(0.8, opts.damping ?? 0.976));
-    this.rainEvery = opts.rainEvery ?? 2.4;
+    this.maxCells = Math.max(2000, opts.maxCells ?? 60000);
+    this.damping = Math.min(0.999, Math.max(0.8, opts.damping ?? 0.986));
+    this.rainEvery = opts.rainEvery ?? 1.9;
+    this.refract = opts.refract ?? 7;
   }
 
-  /** 画面の大きさに合わせて張り直す（波はいったん消える）。 */
-  resize(pxW: number, pxH: number): void {
-    // 上限を超えないところまで粗くする（広い画面だけ重くならないように）
-    let cell = this.minCell;
+  /** 底の模様を差し替える（張り直しのたびに描き直される）。 */
+  setFloor(painter: FloorPainter): void {
+    this.painter = painter;
+    if (this.pxW) this.bakeFloor();
+  }
+
+  /**
+   * 画面の大きさに合わせて張り直す（波はいったん消える）。
+   *
+   * `cellOverride` を渡すと、その粗さで張る（速さが足りないときに
+   * 呼び出し側が粗くするため）。
+   */
+  resize(pxW: number, pxH: number, cellOverride?: number): void {
+    this.pxW = pxW;
+    this.pxH = pxH;
+
+    let cell = Math.max(this.minCell, cellOverride ?? this.minCell);
     while ((pxW / cell) * (pxH / cell) > this.maxCells) cell += 1;
     this.cell = cell;
 
-    this.w = Math.max(8, Math.ceil(pxW / this.cell));
-    this.h = Math.max(8, Math.ceil(pxH / this.cell));
+    this.w = Math.max(8, Math.ceil(pxW / cell));
+    this.h = Math.max(8, Math.ceil(pxH / cell));
     const n = this.w * this.h;
     this.cur = new Float32Array(n);
     this.prev = new Float32Array(n);
-    // 小さい画像を1枚作って、毎コマ書き換えて引き伸ばす
+
     if (typeof document !== "undefined") {
       const c = document.createElement("canvas");
       c.width = this.w;
@@ -105,25 +167,33 @@ export class Water {
         this.bufCtx = ctx;
         this.img = ctx.createImageData(this.w, this.h);
       }
+      this.bakeFloor();
     }
+  }
+
+  /** 底の絵を1枚焼いておく（毎コマ描き直さない）。 */
+  private bakeFloor(): void {
+    if (typeof document === "undefined" || !this.w || !this.colors) return;
+    const c = document.createElement("canvas");
+    c.width = this.w;
+    c.height = this.h;
+    const ctx = c.getContext("2d");
+    if (!ctx) return;
+    this.painter(ctx, this.w, this.h, this.colors);
+    this.floor = ctx.getImageData(0, 0, this.w, this.h).data;
   }
 
   get gridWidth(): number { return this.w; }
   get gridHeight(): number { return this.h; }
 
-  /**
-   * いまどれだけ暴れているか（高さの絶対値の合計）。
-   *
-   * 「凪いだか」を外から判断できるようにしておく。放っておいても
-   * 止まらない水は不具合なので、そこを見張れる形にしておきたい。
-   */
+  /** いまどれだけ暴れているか（高さの絶対値の合計）。 */
   energy(): number {
     let sum = 0;
     for (let i = 0; i < this.prev.length; i++) sum += Math.abs(this.prev[i]);
     return sum;
   }
 
-  /** 格子の1点の高さ（外側を指したら0）。波の広がりを確かめるため。 */
+  /** 格子の1点の高さ（外側を指したら0）。 */
   heightAt(gx: number, gy: number): number {
     if (gx < 0 || gy < 0 || gx >= this.w || gy >= this.h) return 0;
     return this.prev[gy * this.w + gx];
@@ -132,42 +202,42 @@ export class Water {
   /**
    * 波を立てる。画面の座標で受ける。
    *
-   * radius は「指の太さ」。1点だけ叩くと尖った針のような波になり、
-   * 水というより電気に見えるので、少し広げて落とす。
+   * radius は「指の太さ」。1点だけ叩くと針のような波になり、水というより
+   * 電気に見えるので、少し広げて落とす。
    */
-  drop(pxX: number, pxY: number, strength = 1, radius = 2): void {
+  drop(pxX: number, pxY: number, strength = 1, radiusPx = 14): void {
     if (!this.w) return;
     const gx = Math.round(pxX / this.cell);
     const gy = Math.round(pxY / this.cell);
-    const r = Math.max(1, Math.round(radius));
+    // 指の太さは画面の長さで受け取る（粗さが変わっても同じ大きさの波になる）
+    const r = Math.max(1, Math.round(radiusPx / this.cell));
     for (let dy = -r; dy <= r; dy++) {
       for (let dx = -r; dx <= r; dx++) {
         const d = Math.hypot(dx, dy);
         if (d > r) continue;
         const x = gx + dx, y = gy + dy;
         if (x < 1 || y < 1 || x >= this.w - 1 || y >= this.h - 1) continue;
-        // 中心ほど深く沈める（縁は浅く）
-        this.prev[y * this.w + x] -= strength * (1 - d / (r + 1));
+        // なめらかに沈める（角が立つと、波紋が四角くなる）
+        const f = 0.5 + 0.5 * Math.cos((d / (r + 1)) * Math.PI);
+        this.prev[y * this.w + x] -= strength * f;
       }
     }
   }
 
-  /** 1コマ進める。dt は秒（大きすぎる跳びは丸める）。 */
+  /** 1コマ進める。dt は秒。 */
   step(dt: number): void {
     if (!this.w) return;
     const { w, h, cur, prev, damping } = this;
 
-    // 触っていなくても、たまに雨粒を落とす（止まった水は壁紙に見える）
     if (this.rainEvery > 0) {
       this.rainAt += dt;
       if (this.rainAt >= this.rainEvery) {
         this.rainAt = 0;
-        this.drop(Math.random() * w * this.cell, Math.random() * h * this.cell,
-                  0.35 + Math.random() * 0.3, 2);
+        this.drop(Math.random() * this.pxW, Math.random() * this.pxH,
+                  0.30 + Math.random() * 0.28, 10 + Math.random() * 10);
       }
     }
 
-    // 波の式。端は触らない（壁として跳ね返る）。
     for (let y = 1; y < h - 1; y++) {
       const row = y * w;
       for (let x = 1; x < w - 1; x++) {
@@ -176,59 +246,97 @@ export class Water {
         cur[i] = next * damping;
       }
     }
-    // 入れ替え（今回の「次」が、次回の「前」になる）
     const t = this.prev;
     this.prev = this.cur;
     this.cur = t;
   }
 
   /**
-   * 描く。高さではなく**傾き**を光に変える。
+   * 描く。
    *
-   * 左右の高さの差が、そのまま「光がどれだけずれたか」になる。
-   * ずれた所を明るくすると、波紋の縁が光って見える。
+   *   ① 傾きから法線を作る
+   *   ② その向きにずらして**底を拾う**（屈折）
+   *   ③ 光の反射を足す（濡れた面の照り）
+   *
+   * ②が水に見せている。①③だけだと、うねった模様止まりになる。
    */
   render(ctx: CanvasRenderingContext2D, pxW: number, pxH: number, colors: WaterColors): void {
-    const { w, h, prev, img, buf, bufCtx } = this;
-    if (!img || !buf || !bufCtx || !w) return;
+    // 色が変わったら底を焼き直す（初回もここで焼かれる）
+    if (!this.colors || this.colors.deep[0] !== colors.deep[0]
+        || this.colors.shallow[0] !== colors.shallow[0]) {
+      this.colors = colors;
+      this.bakeFloor();
+    }
+
+    const { w, h, prev, img, buf, bufCtx, floor } = this;
+    if (!img || !buf || !bufCtx || !floor || !w) return;
 
     const data = img.data;
-    const [dr, dg, db] = colors.deep;
-    const [sr, sg, sb] = colors.shallow;
     const [hr, hg, hb] = colors.sheen;
+    const K = this.refract;
 
-    for (let y = 0; y < h; y++) {
+    for (let y = 1; y < h - 1; y++) {
       const row = y * w;
-      // 上ほど浅い色（遠くの水面が明るく見えるのと同じ理屈）
-      const depth = y / (h - 1);
-      const br = dr + (sr - dr) * (1 - depth);
-      const bg = dg + (sg - dg) * (1 - depth);
-      const bb = db + (sb - db) * (1 - depth);
-
-      for (let x = 0; x < w; x++) {
+      for (let x = 1; x < w - 1; x++) {
         const i = row + x;
-        // 傾き（左右差・上下差）。端は0にする。
-        const gx = x > 0 && x < w - 1 ? prev[i - 1] - prev[i + 1] : 0;
-        const gy = y > 0 && y < h - 1 ? prev[i - w] - prev[i + w] : 0;
-        // 斜め上からの光に対する明るさ。0〜1に収める。
-        // 傾きをそのまま明るさにする。係数が小さいと、水面ではなく
-        // 「うっすら汚れた壁」に見える（最初そうなっていた）。
-        const lit = Math.max(0, Math.min(1, (gx * 0.6 + gy * 0.8) * 1.9));
-        const k = lit * lit;                    // 明るい所をより締める
 
-        // 沈んでいる所は暗く落とす。明暗の両方が出て、初めて水になる。
-        const dark = Math.max(0, Math.min(0.42, -(gx * 0.6 + gy * 0.8) * 1.3));
+        // ① 傾き（法線の x,y 成分にあたる）
+        const gx = prev[i - 1] - prev[i + 1];
+        const gy = prev[i - w] - prev[i + w];
+
+        // ② 屈折：傾いた向きへずらして底を拾う。
+        //    四捨五入で寄せる。切り捨てだと、弱い傾き（ほとんどの所）が
+        //    すべて 0 になって、屈折そのものが効かなくなる。
+        let sx = (x + gx * K + 0.5) | 0;
+        let sy = (y + gy * K + 0.5) | 0;
+        if (sx < 0) sx = 0; else if (sx >= w) sx = w - 1;
+        if (sy < 0) sy = 0; else if (sy >= h) sy = h - 1;
+        const f = (sy * w + sx) * 4;
+
+        // ③ 反射：斜め上からの光。傾きが光の向きに合った所が強く光る。
+        //    2乗を重ねて、狭く鋭い照りにする（広いと霧に見える）
+        // ③ 反射：**細く鋭い照り**にする。広く強くすると白い塊になって、
+        //    水ではなくこぼれた絵の具に見える（実際そうなった）。
+        //    水らしさを作っているのは②の屈折なので、ここは控える。
+        let lit = (gx * 0.55 + gy * 0.83) * 1.5;
+        lit = lit > 0 ? lit : 0;
+        const s2 = lit * lit;
+        const s4 = s2 * s2;
+        const spec = s4 * s2 * 0.55;         // 6乗。急な斜面だけが光る
+        const k = spec > 0.55 ? 0.55 : spec;
+
+        // 沈んでいる側は暗く。明暗が揃って初めて水になる。
+        // 沈んでいる側は少しだけ暗く。明暗が揃って初めて水になるが、
+        // 強くすると影が塊になる。
+        let dip = -(gx * 0.55 + gy * 0.83) * 1.1;
+        dip = dip > 0 ? dip : 0;
+        const dark = dip > 0.30 ? 0.30 : dip;
 
         const p = i * 4;
-        data[p] = (br + (hr - br) * k) * (1 - dark);
-        data[p + 1] = (bg + (hg - bg) * k) * (1 - dark);
-        data[p + 2] = (bb + (hb - bb) * k) * (1 - dark);
+        data[p] = (floor[f] + (hr - floor[f]) * k) * (1 - dark);
+        data[p + 1] = (floor[f + 1] + (hg - floor[f + 1]) * k) * (1 - dark);
+        data[p + 2] = (floor[f + 2] + (hb - floor[f + 2]) * k) * (1 - dark);
         data[p + 3] = 255;
       }
     }
 
+    // 端の1列は計算していないので、底をそのまま置く（真っ黒の枠を作らない）
+    for (let y = 0; y < h; y++) {
+      for (const x of [0, w - 1]) {
+        const i = (y * w + x) * 4;
+        data[i] = floor[i]; data[i + 1] = floor[i + 1];
+        data[i + 2] = floor[i + 2]; data[i + 3] = 255;
+      }
+    }
+    for (let x = 0; x < w; x++) {
+      for (const y of [0, h - 1]) {
+        const i = (y * w + x) * 4;
+        data[i] = floor[i]; data[i + 1] = floor[i + 1];
+        data[i + 2] = floor[i + 2]; data[i + 3] = 255;
+      }
+    }
+
     bufCtx.putImageData(img, 0, 0);
-    // 引き伸ばして描く。なめらかに拡大されるので、粗い格子が水のぼけになる。
     const smooth = ctx.imageSmoothingEnabled;
     ctx.imageSmoothingEnabled = true;
     ctx.drawImage(buf, 0, 0, w, h, 0, 0, pxW, pxH);

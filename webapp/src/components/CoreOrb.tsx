@@ -115,7 +115,11 @@ export default function CoreOrb({ size = 140, state = "idle", className = "", ty
     // bloom aren't clipped at the edges.
     const pal = corePalette(skin);
     const stage = Math.ceil(size * 1.4);
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    /* コアは小さい面（140px 前後）なので、端末の細かさをそのまま使っても
+       描く画素は知れている。ここを 2 で頭打ちにすると、3倍の画面で
+       輪郭がにじむ——いちばん見られる所なので、3 まで許す。
+       （全画面の背景は面積が桁違いなので、あちらは 2 のまま） */
+    const dpr = Math.min(window.devicePixelRatio || 1, 3);
     canvas.width = stage * dpr;
     canvas.height = stage * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);

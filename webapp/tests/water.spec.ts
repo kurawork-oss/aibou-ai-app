@@ -92,3 +92,63 @@ test("雨を止める指定が効く", async () => {
   for (let i = 0; i < 600; i++) w.step(1 / 60);
   expect(w.energy()).toBe(0);
 });
+
+/* ── 屈折（水に見せている当のもの）─────────────────────────────────
+ *
+ * 傾きを明るさに変えるだけでは、うねった模様にしかならない。
+ * 下にある物が水面の傾きでずれて見えて、初めて「水を通して見ている」
+ * になる。
+ *
+ * 描画そのものは canvas が要るので、ここでは**拾う位置の式**を確かめる。
+ * 実装と同じ式をここに書くと写経になるだけなので、性質だけを見る:
+ * 「平らなら真下、傾いていればずれる」。 */
+
+test("平らな水面では、底が真下に見える（ずれない）", async () => {
+  const w = new Water({ cell: 4, rainEvery: 0, refract: 20 });
+  w.resize(120, 120);
+  // 波を立てていない＝傾き0。どの点も高さ0。
+  for (let gy = 2; gy < w.gridHeight - 2; gy++) {
+    for (let gx = 2; gx < w.gridWidth - 2; gx++) {
+      expect(w.heightAt(gx, gy)).toBe(0);
+    }
+  }
+});
+
+test("波を立てると、傾きが生まれる（＝底がずれて見える）", async () => {
+  const w = new Water({ cell: 4, damping: 0.99, rainEvery: 0, refract: 20 });
+  w.resize(200, 200);
+  w.drop(100, 100, 2, 24);
+  for (let i = 0; i < 20; i++) w.step(1 / 60);
+
+  const gx = Math.round(100 / w.cell);
+  const gy = Math.round(100 / w.cell);
+  // 波の外側のどこかに、はっきりした左右差（＝屈折のずれ）があること
+  let maxSlope = 0;
+  for (let d = 2; d < 20; d++) {
+    const s = Math.abs(w.heightAt(gx + d - 1, gy) - w.heightAt(gx + d + 1, gy));
+    if (s > maxSlope) maxSlope = s;
+  }
+  expect(maxSlope, "傾きが生まれていない＝屈折も起きない").toBeGreaterThan(0.01);
+});
+
+test("指の太さは画面の長さで受ける（粗さが変わっても同じ大きさの波）", async () => {
+  // ここが格子の点数だと、細かくしたときだけ波が小さくなる。
+  const fine = new Water({ cell: 3, rainEvery: 0 });
+  const coarse = new Water({ cell: 9, rainEvery: 0 });
+  fine.resize(360, 360);
+  coarse.resize(360, 360);
+  fine.drop(180, 180, 1, 36);
+  coarse.drop(180, 180, 1, 36);
+
+  // 沈んだ範囲を、画面の長さに直して比べる
+  const spreadPx = (w: Water) => {
+    const cx = Math.round(180 / w.cell);
+    const cy = Math.round(180 / w.cell);
+    let n = 0;
+    for (let d = 0; d < 40; d++) if (Math.abs(w.heightAt(cx + d, cy)) > 0.02) n = d;
+    return n * w.cell;
+  };
+  const a = spreadPx(fine);
+  const b = spreadPx(coarse);
+  expect(Math.abs(a - b), `細かい=${a}px 粗い=${b}px`).toBeLessThan(14);
+});

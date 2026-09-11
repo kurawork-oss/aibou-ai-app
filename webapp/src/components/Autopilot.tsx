@@ -191,7 +191,7 @@ export default function Autopilot() {
 
                 {/* Progress bar */}
                 <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-white/5">
-                  <div className="h-full rounded-full transition-all" style={{ width: total ? `${(done / total) * 100}%` : "0%", background: STATUS_COLOR[m.status] || "var(--accent)" }} />
+                  <div className="h-full rounded-full transition-[width] duration-300 ease-out motion-reduce:transition-none" style={{ width: total ? `${(done / total) * 100}%` : "0%", background: STATUS_COLOR[m.status] || "var(--accent)" }} />
                 </div>
 
                 {/* Steps */}

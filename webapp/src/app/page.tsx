@@ -284,7 +284,7 @@ function Hud() {
         {!fullscreen && (
           <>
             <header
-              className="flex flex-col items-center transition-all duration-300"
+              className="flex flex-col items-center transition-[color,opacity,transform] duration-300 ease-out motion-reduce:transition-none"
               style={{ paddingBottom: view === "chat" || view === "home" ? "0.5rem" : "0.25rem", paddingTop: view === "chat" || view === "home" ? "0.25rem" : "0" }}
             >
               <CoreOrb size={view === "chat" || view === "home" ? 108 : 72} state={coreState} />
@@ -1215,12 +1215,18 @@ function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: (v: b
       className="relative h-6 w-11 rounded-full border border-panel-strong transition"
       style={{ background: checked ? "rgba(0,243,255,0.18)" : "rgba(255,255,255,0.05)" }}
     >
+      {/* つまみは left ではなく transform で動かす。
+          left を動かすと、コマごとに版組みをやり直すことになる
+          （GPUで動かせない）。transform なら合成だけで済むので、
+          ちらつかずに滑る。 */}
       <span
-        className="absolute top-1/2 h-4 w-4 -translate-y-1/2 rounded-full transition-all"
+        className="absolute left-[0.2rem] top-1/2 h-4 w-4 rounded-full
+                   transition-[transform,background-color,box-shadow] duration-200 ease-out
+                   motion-reduce:transition-none"
         style={{
-          left: checked ? "calc(100% - 1.25rem)" : "0.2rem",
+          transform: `translateY(-50%) translateX(${checked ? "1.05rem" : "0rem"})`,
           background: checked ? "var(--accent)" : "var(--muted)",
-          boxShadow: checked ? "0 0 8px rgba(0,243,255,0.7)" : "none",
+          boxShadow: checked ? "0 0 8px var(--glow-strong)" : "none",
         }}
       />
     </button>
