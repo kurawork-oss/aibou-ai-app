@@ -1,194 +1,235 @@
 /**
- * アプリのアイコンを作る。
+ * アプリのアイコンを、渡された1枚から全サイズ作る。
  *
  *   node tools/make-icon.mjs
  *
- * 何を作るか
- * ----------
- * 黒から水色へ斜めに流れる下地に、白で AIBOU / agentcore を置いたもの。
- * 送ってもらった参考画像（Anker Soundcore のアイコン）の**雰囲気**——
- * 暗い地に一方向の光、上に太い大文字、下に細い小文字——に合わせてある。
+ * 元にするのは tools/icon-source.jpg（作ってもらった絵をそのまま置いてある）。
+ * 描き起こしはしない——この道具の仕事は「1枚を、置き場ごとの決まりに
+ * 合わせて切り出す」ことだけ。
  *
- * 文字の形について
- * ----------------
- * 参考画像の書体は、そのメーカーの商標そのもの（とくに天辺を水平に
- * 切った A は、あの会社のロゴの一番の特徴）。なぞると、別の製品の
- * アイコンに他社のロゴを載せることになるので、そこだけは写していない。
- * 代わりに、素性の近い幾何学サンセリフ（Inter）で組んである。
- * 並び・太さの差・字間・色は参考画像に合わせているので、見た印象は近い。
- *
- * なぜ画像を置かずに生成するのか
- * ------------------------------
+ * なぜ書き出しを手作業にしないのか
+ * --------------------------------
  * アイコンは 16px から 512px まで9種類要る。手で書き出すと、直したときに
- * どれか1つが古いまま残る（実際、他のアプリでよくある）。1つの元から
- * 全部作れば、その事故が起きない。
+ * どれか1つが古いまま残る。1つの元から全部作れば、その事故が起きない。
  *
- * 使う書体は次の手順で用意してある（このスクリプトは入っている前提で動く）:
- *   .next/static/media の Inter(woff2) → TTF へ変換 → wght 700/400 で固定
- *   → ~/.fonts へ置いて fc-cache
- * 入っていなければ、汎用のサンセリフに落ちる（形は変わるが破綻はしない）。
+ * 置き場ごとの決まり（ここを外すと、端末の上で崩れる）
+ * ----------------------------------------------------
+ *   apple-touch … iOS が**自分で角を丸める**。こちらで角丸も透明も入れない。
+ *                 入れると、丸めた外側に元の角が残って縁が汚れる
+ *   maskable    … Android が外周を**円で切り落とす**。中心から4割の円より
+ *                 外は消えるので、絵を縮めて余白を作る
+ *   favicon     … タブに出る 16px。二段の文字は読めないので「A」1文字にする
+ *   それ以外    … そのまま四角で出す（今までのアイコンもそう）
+ *
+ * 白い余白の扱い
+ * --------------
+ * 渡された絵は、角丸四角のまわりが**白**になっている。そのまま使うと、
+ * iOS が丸めた縁に白がはみ出して、額縁のように見える。
+ * 角の白だけを外側から塗りつぶして、地の紺で埋める。
+ * （内側の白い文字は縁と繋がっていないので、塗りつぶしは届かない）
  */
 
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
 
+const SRC = path.resolve("tools/icon-source.jpg");
 const OUT = path.resolve("public");
-const SIZE = 1024;              // 元の大きさ。ここから全部を縮めて作る
 
-/* ── 色 ────────────────────────────────────────────────────────────
- * 参考画像から拾った3点。暗い側を広くとり、水色は右下の3割ほどに寄せる。
- * 均等に混ぜると「水色のアイコン」になってしまい、あの落ち着きが出ない。 */
-const INK = "#ffffff";
-const STOPS = [
-  { at: 0.00, c: "#000305" },   // 上：ほぼ黒
-  { at: 0.38, c: "#01131c" },   // ここまで暗いままにするのが肝
-  { at: 0.60, c: "#063a52" },
-  { at: 0.80, c: "#24a5d8" },
-  { at: 1.00, c: "#7eeaff" },   // 下：明るい水色
-];
+/** 角の白を埋める色。絵の中心から採った紺。 */
+const INK_BG = { r: 0, g: 5, b: 24 };
 
-/** 斜めに走る光の帯。参考画像の「刷いたような」筋。 */
-const STREAKS = [
-  { off: -0.40, w: 0.34, a: 0.20 },
-  { off: 0.02, w: 0.12, a: 0.11 },
-  { off: 0.24, w: 0.06, a: 0.07 },
-  { off: 0.62, w: 0.20, a: 0.09 },
-];
+/** これ以上明るければ「余白の白」とみなす。
+ *  銀の縁はいちばん明るい所で 220 前後なので、十分に離してある。 */
+const WHITE = 248;
 
-const FONT_BOLD = "AibouIcon Bold, Inter, Liberation Sans, DejaVu Sans, sans-serif";
-const FONT_LIGHT = "AibouIcon Light, Inter, Liberation Sans, DejaVu Sans, sans-serif";
+/* ── 1. 読む ───────────────────────────────────────────────────── */
 
-/**
- * アイコン1枚ぶんの SVG。
+const src = sharp(SRC);
+const meta = await src.metadata();
+const { data, info } = await src.raw().toBuffer({ resolveWithObject: true });
+const W = info.width;
+const H = info.height;
+const C = info.channels;
+
+const isWhite = (i) => data[i] >= WHITE && data[i + 1] >= WHITE && data[i + 2] >= WHITE;
+
+/* ── 2. 角丸四角の外接を測る ─────────────────────────────────────
  *
- * `inset` は「四辺をどれだけ空けるか」（0〜0.25）。Android の maskable は
- * 外側が丸く切り落とされるので、文字を内側へ寄せる必要がある。
- * 切られない用途では 0 にして、隅まで色を使う。
- */
-function svg(size, { inset = 0, radius = 0, mark = false } = {}) {
-  const s = size;
-  const pad = s * inset;
-  const inner = s - pad * 2;
+ * 決め打ちの座標で切ると、絵を差し替えたときに黙ってずれる。毎回測る。 */
 
-  // 文字の大きさと位置は、参考画像の比率をそのまま使う
-  const capH = inner * 0.112;             // AIBOU の高さ
-  const xH = inner * 0.084;               // agentcore の高さ
-  const cx = s / 2;
-  const y1 = pad + inner * 0.545;         // AIBOU のベースライン
-  const y2 = pad + inner * 0.678;         // agentcore のベースライン
+let x0 = W, y0 = H, x1 = 0, y1 = 0;
+for (let y = 0; y < H; y++) {
+  for (let x = 0; x < W; x++) {
+    if (!isWhite((y * W + x) * C)) {
+      if (x < x0) x0 = x;
+      if (x > x1) x1 = x;
+      if (y < y0) y0 = y;
+      if (y > y1) y1 = y;
+    }
+  }
+}
+const cw = x1 - x0 + 1;
+const ch = y1 - y0 + 1;
+console.log(`角丸四角の位置: (${x0},${y0}) ${cw}x${ch}`);
 
-  const streaks = STREAKS.map(({ off, w, a }) => {
-    // 左下→右上へ走る帯。回転で作ると端が欠けるので、十分長い矩形を回す
-    const x = s * (0.18 + off);
-    return `<rect x="${x.toFixed(1)}" y="${(-s * 0.6).toFixed(1)}" ` +
-      `width="${(s * w).toFixed(1)}" height="${(s * 2.2).toFixed(1)}" ` +
-      `fill="url(#streak)" opacity="${a}" transform="rotate(28 ${cx} ${s / 2})"/>`;
-  }).join("");
+/* ── 3. 角の白を、外側から塗りつぶす ─────────────────────────────
+ *
+ * 四隅から塗り広げる。内側の白い文字は縁と繋がっていないので届かない。
+ * 幾何学的に角丸を計算して切る手もあるが、絵の角の形が想定とわずかに
+ * 違うだけで、銀の縁を削ってしまう。実際の白だけを狙うほうが安全。 */
 
-  /** ふだんの二段組み（AIBOU / agentcore）。 */
-  const wordmark = () => `
-    <text x="${cx}" y="${y1.toFixed(1)}" fill="${INK}" text-anchor="middle"
-          font-family="${FONT_BOLD}" font-weight="700"
-          font-size="${capH.toFixed(1)}" letter-spacing="${(capH * 0.085).toFixed(1)}"
-          >AIBOU</text>
-    <text x="${cx}" y="${y2.toFixed(1)}" fill="${INK}" text-anchor="middle"
-          font-family="${FONT_LIGHT}" font-weight="400"
-          font-size="${(xH / 0.727).toFixed(1)}" letter-spacing="${(xH * 0.055).toFixed(1)}"
-          >agentcore</text>`;
+const filled = new Uint8Array(W * H);
+const stack = [];
+const push = (x, y) => {
+  if (x < 0 || y < 0 || x >= W || y >= H) return;
+  const p = y * W + x;
+  if (filled[p]) return;
+  if (!isWhite(p * C)) return;
+  filled[p] = 1;
+  stack.push(p);
+};
+for (let x = 0; x < W; x++) { push(x, 0); push(x, H - 1); }
+for (let y = 0; y < H; y++) { push(0, y); push(W - 1, y); }
+while (stack.length) {
+  const p = stack.pop();
+  const x = p % W;
+  const y = (p - x) / W;
+  push(x + 1, y); push(x - 1, y); push(x, y + 1); push(x, y - 1);
+}
 
-  /* 小さい札用の「A」1文字。
-     16px に二段の文字を詰めると、読めないどころか**ただの白い染み**になる
-     （実際そうなった）。ブラウザのタブに出るのはこの大きさなので、
-     そこだけは1文字に割り切る。地と書体は同じなので、別物には見えない。 */
-  const markText = () => `
-    <text x="${cx}" y="${(pad + inner * 0.715).toFixed(1)}" fill="${INK}" text-anchor="middle"
-          font-family="${FONT_BOLD}" font-weight="700"
-          font-size="${(inner * 0.58).toFixed(1)}">A</text>`;
+let painted = 0;
+for (let p = 0; p < W * H; p++) {
+  if (!filled[p]) continue;
+  const i = p * C;
+  data[i] = INK_BG.r; data[i + 1] = INK_BG.g; data[i + 2] = INK_BG.b;
+  painted++;
+}
 
-  const clip = radius > 0
-    ? `<clipPath id="round"><rect width="${s}" height="${s}" rx="${(s * radius).toFixed(1)}" ry="${(s * radius).toFixed(1)}"/></clipPath>`
-    : "";
-  const g = radius > 0 ? ' clip-path="url(#round)"' : "";
+/* 塗りが内側へ漏れていないかを、面積で確かめる。
+   期待は「余白＋四隅」。絵の半分が塗られたら、どこかで漏れている。 */
+const ratio = painted / (W * H);
+console.log(`白を埋めた面積: ${(ratio * 100).toFixed(1)}%`);
+if (ratio > 0.45) {
+  throw new Error(`塗りつぶしが内側へ漏れています（${(ratio * 100).toFixed(1)}%）。`
+    + "銀の縁が明るすぎる可能性があるので WHITE を上げてください。");
+}
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${s}" height="${s}" viewBox="0 0 ${s} ${s}">
-  <defs>
-    <linearGradient id="bg" x1="0.66" y1="0" x2="0.28" y2="1">
-      ${STOPS.map((p) => `<stop offset="${p.at}" stop-color="${p.c}"/>`).join("\n      ")}
-    </linearGradient>
-    <linearGradient id="streak" x1="0" y1="1" x2="0" y2="0">
-      <stop offset="0" stop-color="#ffffff" stop-opacity="0"/>
-      <stop offset="0.45" stop-color="#bff2ff" stop-opacity="1"/>
-      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
-    </linearGradient>
-    <filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
-      <feGaussianBlur stdDeviation="${(s * 0.022).toFixed(1)}"/>
-    </filter>
-    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#ffffff" stop-opacity="0.17"/>
-      <stop offset="0.30" stop-color="#ffffff" stop-opacity="0"/>
-    </linearGradient>
-    <!-- 上を黒へ沈める。参考画像は上半分がほぼ真っ黒で、そこに文字が乗る。
-         帯をどこに置いても上が黒くなるよう、帯の**後**からかける。 -->
-    <linearGradient id="crush" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#000205" stop-opacity="0.92"/>
-      <stop offset="0.34" stop-color="#000205" stop-opacity="0.62"/>
-      <stop offset="0.62" stop-color="#000205" stop-opacity="0.14"/>
-      <stop offset="0.86" stop-color="#000205" stop-opacity="0"/>
-    </linearGradient>
-    ${clip}
-  </defs>
-  <g${g}>
-    <rect width="${s}" height="${s}" fill="url(#bg)"/>
-    <g filter="url(#soft)">${streaks}</g>
-    <rect width="${s}" height="${s}" fill="url(#crush)"/>
-    <rect width="${s}" height="${s}" fill="url(#sheen)"/>
-    ${mark ? markText() : wordmark()}
-  </g>
-</svg>`;
+/** 白を埋め終えた元画像（1024px）。ここから切り出す。 */
+const cleaned = await sharp(Buffer.from(data), { raw: { width: W, height: H, channels: C } })
+  .png().toBuffer();
+
+/** 角丸四角だけを切り出したもの（四隅は紺で埋まっている）。 */
+const squircle = await sharp(cleaned)
+  .extract({ left: x0, top: y0, width: cw, height: ch })
+  .png().toBuffer();
+
+/* ── 3.5 「A」1文字を切り出す ───────────────────────────────────
+ *
+ * 座標は実測値（下の MARK）。自動で探すのは**やめた**。
+ *
+ * 最初は「白い所を探して1文字目を取る」で書いたが、この絵は
+ * クロムの照り返しでできていて、その照りも白い。明るさで分けようが
+ * ないので、上辺の 1x4px の光を「1文字目」として切り出していた。
+ *
+ * 代わりに、切り出した中身が**文字らしいか**を数で確かめる。
+ * 絵を差し替えて座標がずれたら、黙って別の所を切るのではなく落ちる。 */
+
+/** 「A」1文字の位置（元画像 1024px での実測。x196..351 / y341..498）。 */
+const MARK = { left: 195, top: 341, size: 158 };
+
+const mark = await sharp(cleaned)
+  .extract({ left: MARK.left, top: MARK.top, width: MARK.size, height: MARK.size })
+  .png().toBuffer();
+
+/* 検算：切り出した中の「白い画素」の割合。
+   文字なら1〜4割くらい。0に近ければ地だけを切っているし、
+   大きすぎれば白い面を切っている。どちらも「A」ではない。 */
+{
+  const m = await sharp(mark).raw().toBuffer({ resolveWithObject: true });
+  const px = m.info.width * m.info.height;
+  let bright = 0;
+  for (let i = 0; i < m.data.length; i += m.info.channels) {
+    if (m.data[i] >= 246 && m.data[i + 1] >= 246 && m.data[i + 2] >= 246) bright++;
+  }
+  const frac = bright / px;
+  console.log(`「A」の切り出し: ${MARK.size}px / 白い画素 ${(frac * 100).toFixed(1)}%`);
+  if (frac < 0.08 || frac > 0.5) {
+    throw new Error(`切り出した所に文字が見当たりません（白 ${(frac * 100).toFixed(1)}%）。`
+      + "絵を差し替えたなら MARK を測り直してください。");
+  }
+}
+
+/* ── 4. 書き出す ─────────────────────────────────────────────── */
+
+const rgb = `rgb(${INK_BG.r},${INK_BG.g},${INK_BG.b})`;
+
+/** そのまま四角いっぱいに。 */
+async function full(size) {
+  return sharp(squircle)
+    .resize(size, size, { fit: "fill", kernel: "lanczos3" })
+    .flatten({ background: rgb })
+    .png({ compressionLevel: 9 })
+    .toBuffer();
 }
 
 /**
- * 作るもの。
+ * Android 用。外周が円で切られるので、絵を縮めて余白を作る。
  *
- *   maskable … Android が外側を丸く切る。文字は内側へ寄せる（inset）
- *   apple    … iOS が自分で角を丸める。角丸は付けない・透明も入れない
- *   その他   … そのまま四角で出す（今までのアイコンもそうなっている）
+ * `inset` は片側の空き。0.10 なら絵は 80%。文字の端まで
+ * 中心から4割の円に収まるかは、tests/icons.spec.ts で測っている。
  */
-const TARGETS = [
-  { file: "icon-512.png", size: 512, inset: 0 },
-  { file: "icon-192.png", size: 192, inset: 0 },
-  { file: "icon-maskable-512.png", size: 512, inset: 0.10 },
-  { file: "icon-maskable-192.png", size: 192, inset: 0.10 },
-  { file: "apple-touch-icon.png", size: 180, inset: 0 },
-  { file: "aibou_icon.png", size: 512, inset: 0 },
-  // タブに出る大きさ。二段の文字は読めないので「A」1文字にする
-  { file: "favicon-32.png", size: 32, inset: 0, mark: true },
-  { file: "favicon-16.png", size: 16, inset: 0, mark: true },
-];
+async function maskable(size, inset = 0.10) {
+  const inner = Math.round(size * (1 - inset * 2));
+  const art = await sharp(squircle)
+    .resize(inner, inner, { fit: "fill", kernel: "lanczos3" })
+    .png().toBuffer();
+  const pad = Math.round((size - inner) / 2);
+  return sharp({ create: { width: size, height: size, channels: 3, background: INK_BG } })
+    .composite([{ input: art, left: pad, top: pad }])
+    /* composite を挟むと、地を3チャンネルで作っていても透明の層が付く。
+       flatten は「下に地を敷く」だけで層は残るので、removeAlpha で落とす。
+       透明のまま出すと、丸めた外側にその形が残って縁が汚れる。 */
+    .flatten({ background: rgb })
+    .removeAlpha()
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+}
+
+async function monogram(size) {
+  return sharp(mark)
+    .resize(size, size, { fit: "fill", kernel: "lanczos3" })
+    .flatten({ background: rgb })
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+}
 
 await mkdir(OUT, { recursive: true });
 
+const TARGETS = [
+  { file: "icon-512.png", make: () => full(512) },
+  { file: "icon-192.png", make: () => full(192) },
+  { file: "aibou_icon.png", make: () => full(512) },
+  // iOS は自分で角を丸める。角丸も透明も入れない
+  { file: "apple-touch-icon.png", make: () => full(180) },
+  // Android は外周を円で切る。縮めて余白を作る
+  { file: "icon-maskable-512.png", make: () => maskable(512) },
+  { file: "icon-maskable-192.png", make: () => maskable(192) },
+  // タブの大きさ。二段の文字は読めないので「A」1文字
+  { file: "favicon-32.png", make: () => monogram(32) },
+  { file: "favicon-16.png", make: () => monogram(16) },
+];
+
 for (const t of TARGETS) {
-  /* 小さい札は、大きく描いてから縮める。16px で直接描くと、字が潰れて
-     ただの白い染みになる（実際そうなった）。 */
-  const draw = Math.max(t.size, 512);
-  const buf = Buffer.from(svg(draw, { inset: t.inset, mark: t.mark }));
-  await sharp(buf, { density: 384 })
-    .resize(t.size, t.size, { fit: "fill", kernel: "lanczos3" })
-    .flatten({ background: "#01060c" })      // 透明を残さない（既存の並びに合わせる）
-    .png({ compressionLevel: 9 })
-    .toFile(path.join(OUT, t.file));
-  console.log("wrote", t.file, `${t.size}x${t.size}`);
+  await writeFile(path.join(OUT, t.file), await t.make());
+  console.log("wrote", t.file);
 }
 
-/* favicon.ico は 16/32/48 を1つに束ねる。ブラウザによって使う大きさが違う。 */
-const ico = await Promise.all([16, 32, 48].map(async (n) => {
-  const buf = Buffer.from(svg(512, { inset: 0, mark: true }));
-  return { n, png: await sharp(buf, { density: 384 }).resize(n, n).png().toBuffer() };
-}));
+/* favicon.ico は 16/32/48 を1つに束ねる（ブラウザによって使う大きさが違う）。 */
+const ico = await Promise.all([16, 32, 48].map(async (n) => ({ n, png: await monogram(n) })));
 await writeFile(path.join(OUT, "favicon.ico"), buildIco(ico));
 console.log("wrote favicon.ico (16/32/48)");
+console.log(`元: ${meta.width}x${meta.height} ${meta.format}`);
 
 /** PNG を並べて ICO にする（ICO は PNG をそのまま入れてよい）。 */
 function buildIco(entries) {
