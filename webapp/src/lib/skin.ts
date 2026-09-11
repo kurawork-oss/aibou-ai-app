@@ -1,8 +1,8 @@
 /**
  * 見た目（スキン）の切り替え。
  *
- *   cyber   … 既定。紺色のサイバーな地に、シルバーに光るコア。枠と影もシルバー
- *   emerald … エメラルドの地に、白く光るコア
+ *   cyber   … 既定。紺の水面（触ると波が立つ）。コアと枠と影はシルバー
+ *   emerald … エメラルド×金×黒。枠と影は金、コアは白く光る
  *   forge   … 宇宙。黒＋シルバーのHUD（THE FORGE OS）
  *   aibou   … 白＋薄紫のライト。AIbouブランドの明るい画面
  *
@@ -20,8 +20,8 @@ export type Skin = "cyber" | "emerald" | "forge" | "aibou";
 
 /** 並び順は設定画面の並び順。既定を先頭に置く。 */
 export const SKINS: { key: Skin; label: string; hint: string }[] = [
-  { key: "cyber", label: "CYBER（紺）", hint: "紺の地にサイバーな模様、シルバーに光るコア。既定" },
-  { key: "emerald", label: "EMERALD（緑）", hint: "エメラルドの地に、白く光るコア" },
+  { key: "cyber", label: "CYBER（紺）", hint: "紺の水面。触ると波が立つ。コアはシルバー。既定" },
+  { key: "emerald", label: "EMERALD（緑金）", hint: "エメラルド×金×黒。白く光るコア" },
   { key: "forge", label: "FORGE（宇宙）", hint: "黒×シルバーのHUD。星空とグリッド" },
   { key: "aibou", label: "AIbou（ライト）", hint: "白×淡い紫の明るい画面" },
 ];
@@ -36,7 +36,7 @@ export const SKIN_KEY = "forge_skin";
 /** ブラウザのUI色（アドレスバー等）。切り替え時に meta も合わせる。 */
 export const SKIN_THEME_COLOR: Record<Skin, string> = {
   cyber: "#080e20",
-  emerald: "#04241d",
+  emerald: "#03201a",
   forge: "#0a0b0f",
   aibou: "#f4f5fd",
 };

@@ -137,7 +137,7 @@ test("Settings CORE has the theme picker with every skin", async ({ page }) => {
   await enterApp(page);
   await page.getByLabel("Settings").click();
   await expect(page.getByText("見た目（テーマ）")).toBeVisible({ timeout: 5_000 });
-  for (const name of [/CYBER（紺）/, /EMERALD（緑）/, /FORGE（宇宙）/, /AIbou（ライト）/]) {
+  for (const name of [/CYBER（紺）/, /EMERALD（緑金）/, /FORGE（宇宙）/, /AIbou（ライト）/]) {
     await expect(page.getByRole("button", { name })).toBeVisible();
   }
 });
@@ -171,7 +171,7 @@ test("4つのスキンを切り替えると、地の色も文字色も変わる"
   });
 
   for (const [name, key, bg, theme] of [
-    [/EMERALD（緑）/, "emerald", "rgb(4, 36, 29)", "#04241d"],
+    [/EMERALD（緑金）/, "emerald", "rgb(3, 32, 26)", "#03201a"],
     [/FORGE（宇宙）/, "forge", "rgb(10, 11, 15)", "#0a0b0f"],
     [/AIbou（ライト）/, "aibou", "rgb(244, 245, 253)", "#f4f5fd"],
     [/CYBER（紺）/, "cyber", "rgb(8, 14, 32)", "#080e20"],
@@ -189,7 +189,7 @@ test("暗い3つは、文字が白（頼まれた通り）", async ({ page }) =>
   await page.goto("/");
   await enterApp(page);
   await page.getByLabel("Settings").click();
-  for (const name of [/CYBER（紺）/, /EMERALD（緑）/]) {
+  for (const name of [/CYBER（紺）/, /EMERALD（緑金）/]) {
     await page.getByRole("button", { name }).click();
     const fg = await page.evaluate(() =>
       getComputedStyle(document.documentElement).getPropertyValue("--fg-strong").trim());

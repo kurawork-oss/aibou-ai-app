@@ -20,6 +20,7 @@
  */
 
 import { useEffect, useRef } from "react";
+import { Water } from "@/lib/water";
 
 /* ── Constellation shapes (normalized coords + edge lists) ─────────── */
 interface ConstShape { name: string; pts: [number, number][]; edges: [number, number][] }
@@ -82,6 +83,18 @@ function backdropTint(skin: string | undefined) {
   };
 }
 
+/**
+ * 水の色。紺の地に、シルバーの照りが乗る。
+ *
+ * 照りを白（255,255,255）にすると、波の縁だけが白く飛んで
+ * 「水」ではなく「ひび割れ」に見える。少し落とした銀にする。
+ */
+const WATER_COLORS = {
+  deep: [6, 11, 26] as [number, number, number],      // 底のほう
+  shallow: [14, 24, 52] as [number, number, number],  // 上のほう（やや明るい）
+  sheen: [198, 212, 238] as [number, number, number], // 波の照り＝シルバー
+};
+
 export default function Backdrop3D() {
   const ref = useRef<HTMLCanvasElement | null>(null);
 
@@ -114,15 +127,39 @@ export default function Backdrop3D() {
         cyan: i % 9 === 0,
       }));
     };
+    /* 紺（CYBER）の地は水たまり。高さを計算して、傾きを光に変える。
+       格子は8px四方——画素ぶん計算するとスマホで間に合わない。 */
+    const water = new Water({ cell: 6, damping: 0.984, rainEvery: 1.9 });
+    const fitWater = () => water.resize(w, h);
+
     resize();
-    window.addEventListener("resize", resize);
+    fitWater();
+    window.addEventListener("resize", () => { resize(); fitWater(); });
 
     let px = 0, py = 0, lpx = 0, lpy = 0;
+    let lastDropX = -999, lastDropY = -999;
     const onPointer = (e: PointerEvent) => {
       px = (e.clientX / w) * 2 - 1;
       py = (e.clientY / h) * 2 - 1;
+      // 触った所に波を立てる。動かしている間は、少し離れるたびに1滴。
+      // 毎イベント落とすと線ではなく帯になり、水に見えない。
+      if (document.documentElement.dataset.skin !== "cyber") return;
+      const d = Math.hypot(e.clientX - lastDropX, e.clientY - lastDropY);
+      if (d < 14) return;
+      lastDropX = e.clientX;
+      lastDropY = e.clientY;
+      water.drop(e.clientX, e.clientY, e.pointerType === "touch" ? 0.9 : 0.55, 2);
     };
     window.addEventListener("pointermove", onPointer, { passive: true });
+
+    // 押した瞬間は、はっきり大きく落とす（触れたことが伝わるように）
+    const onDown = (e: PointerEvent) => {
+      if (document.documentElement.dataset.skin !== "cyber") return;
+      lastDropX = e.clientX;
+      lastDropY = e.clientY;
+      water.drop(e.clientX, e.clientY, 1.6, 3);
+    };
+    window.addEventListener("pointerdown", onDown, { passive: true });
 
     let raf = 0;
     let last = performance.now();
@@ -255,6 +292,21 @@ export default function Backdrop3D() {
         last = now;
         return;
       }
+
+      // 紺（CYBER）は水たまり。星もグリッドも出さない——水面に星が
+      // 浮いていると、水なのか空なのか分からなくなる。
+      if (skin === "cyber") {
+        const wdt = Math.min((now - last) / 1000, 0.05);
+        last = now;
+        water.step(wdt);
+        water.render(ctx, w, h, WATER_COLORS);
+        // 背景として後ろへ下げる。水紋をそのままの強さで出すと、
+        // 上に載る文章と明るさで張り合って読みにくくなる（実際なった）。
+        ctx.fillStyle = "rgba(6, 11, 26, 0.42)";
+        ctx.fillRect(0, 0, w, h);
+        return;
+      }
+
       const tone = backdropTint(skin);
       const dt = Math.min((now - last) / 1000, 0.05);
       last = now;

@@ -123,13 +123,39 @@ export default function CoreOrb({ size = 140, state = "idle", className = "", ty
     const coreR = size * 0.33;
 
     // Fibonacci sphere — evenly distributed particle shell.
-    const pts: { x: number; y: number; z: number; tw: number }[] = [];
+    /* 光の粒。**球の殻ではなく、中身の詰まったかたまり**にする。
+       殻に並べると、玉の表面に水玉模様が貼られたように見える（以前が
+       そうだった）。半径をばらして内側にも置くと、輪郭がほどけて
+       「光の集まり」に見えてくる。 */
+    const pts: { x: number; y: number; z: number; tw: number; rr: number; wob: number }[] = [];
     const golden = Math.PI * (3 - Math.sqrt(5));
     for (let i = 0; i < PARTICLES; i++) {
       const y = 1 - (i / (PARTICLES - 1)) * 2;
       const r = Math.sqrt(Math.max(0, 1 - y * y));
       const th = golden * i;
-      pts.push({ x: Math.cos(th) * r, y, z: Math.sin(th) * r, tw: (i % 7) / 7 });
+      // 立方根で散らすと、体積あたりの密度が一定になる（中心に寄りすぎない）
+      const rr = 0.16 + Math.pow((i * 0.6180339887) % 1, 1 / 3) * 0.84;
+      pts.push({
+        x: Math.cos(th) * r, y, z: Math.sin(th) * r,
+        tw: (i % 7) / 7, rr,
+        wob: ((i * 0.381966) % 1) * Math.PI * 2,   // 揺れの位相
+      });
+    }
+
+    /* 光の粒は1つずつ createRadialGradient すると重い（毎コマ×粒の数）。
+       ぼけた点を1枚だけ焼いておいて、拡大して重ねる。 */
+    const sprite = document.createElement("canvas");
+    const SPR = 64;
+    sprite.width = SPR;
+    sprite.height = SPR;
+    const sctx = sprite.getContext("2d");
+    if (sctx) {
+      const g = sctx.createRadialGradient(SPR / 2, SPR / 2, 0, SPR / 2, SPR / 2, SPR / 2);
+      g.addColorStop(0, `rgba(${pal.shell},1)`);
+      g.addColorStop(0.35, `rgba(${pal.shell},0.45)`);
+      g.addColorStop(1, `rgba(${pal.shell},0)`);
+      sctx.fillStyle = g;
+      sctx.fillRect(0, 0, SPR, SPR);
     }
 
     // Smoothly-lerped live tune + pointer parallax.
@@ -218,64 +244,43 @@ export default function CoreOrb({ size = 140, state = "idle", className = "", ty
         ctx.stroke();
       }
 
-      /* 3 — back half of the particle shell (dim, behind the body) */
-      for (const p of pts) {
-        const q = project(p.x, p.y, p.z, R * pulse);
-        if (q.z >= 0) continue;
-        const d = (q.z + 1) / 2; // 0 far → 0.5 mid
-        const a = 0.05 + d * 0.30;
-        const tw = 0.75 + 0.25 * Math.sin(t * 2 + p.tw * Math.PI * 2);
-        ctx.fillStyle = `rgba(${pal.shell},${(a * tw * 0.72).toFixed(3)})`;
-        ctx.beginPath();
-        ctx.arc(q.sx, q.sy, Math.max(0.4, size * 0.006 * q.s), 0, Math.PI * 2);
-        ctx.fill();
-      }
+      /* 3 — 光の集合体。玉ではなく、光が集まっている状態として描く。
+         ・足し算で重ねる（lighter）ので、重なった所ほど白く締まる
+         ・輪郭線も、つやの点も描かない。それが「ツルピカ」の正体だった
+         ・粒ごとにゆっくり揺らすので、縁が固まらない */
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
 
-      /* 4 — core body: pale-blue centre → deep navy/black rim */
+      // 中心の芯。ここだけは面で置く（無いと、粒の集まりが散って見える）
       const bodyR = coreR * pulse;
-      const body = ctx.createRadialGradient(
-        cx - bodyR * 0.24, cy - bodyR * 0.36, bodyR * 0.08,
-        cx, cy, bodyR,
-      );
-      const STOPS = [0, 0.2, 0.44, 0.68, 0.86, 1];
-      pal.body.forEach((c, i) => body.addColorStop(STOPS[i], c));
-      ctx.fillStyle = body;
+      const heart = ctx.createRadialGradient(cx, cy, 0, cx, cy, bodyR * 1.05);
+      heart.addColorStop(0, `rgba(${pal.bloomIn},${(0.60 * live.glow + 0.52).toFixed(3)})`);
+      heart.addColorStop(0.32, `rgba(${pal.bloomIn},${(0.40 * live.glow + 0.24).toFixed(3)})`);
+      heart.addColorStop(0.7, `rgba(${pal.bloomMid},${(0.20 * live.glow + 0.08).toFixed(3)})`);
+      heart.addColorStop(1, `rgba(${pal.bloomMid},0)`);
+      ctx.fillStyle = heart;
       ctx.beginPath();
-      ctx.arc(cx, cy, bodyR, 0, Math.PI * 2);
+      ctx.arc(cx, cy, bodyR * 1.05, 0, Math.PI * 2);
       ctx.fill();
 
-      // Specular highlight + thin silver rim.
-      const spec = ctx.createRadialGradient(
-        cx - bodyR * 0.34, cy - bodyR * 0.44, 0,
-        cx - bodyR * 0.34, cy - bodyR * 0.44, bodyR * 0.5,
-      );
-      spec.addColorStop(0, "rgba(255,255,255,0.85)");
-      spec.addColorStop(1, "rgba(255,255,255,0)");
-      ctx.fillStyle = spec;
-      ctx.beginPath();
-      ctx.arc(cx - bodyR * 0.34, cy - bodyR * 0.44, bodyR * 0.5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(cx, cy, size * 0.37, 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(${pal.ring},0.28)`;
-      ctx.lineWidth = 1;
-      ctx.stroke();
-
-      /* 5 — front half of the particle shell (bright energy) */
+      // 粒。奥から手前へ向かって明るく・大きくなる
       for (const p of pts) {
-        const q = project(p.x, p.y, p.z, R * pulse);
-        if (q.z < 0) continue;
-        const d = q.z; // 0 mid → 1 nearest
-        const tw = 0.7 + 0.3 * Math.sin(t * 2.4 + p.tw * Math.PI * 2);
-        const a = (0.25 + d * 0.65) * tw;
-        const cyanMix = live.cyan > 0.1 && p.tw > 0.6;
-        ctx.fillStyle = cyanMix
-          ? `rgba(${pal.shellHot},${a.toFixed(3)})`
-          : `rgba(${pal.shell},${a.toFixed(3)})`;
-        ctx.beginPath();
-        ctx.arc(q.sx, q.sy, Math.max(0.5, size * 0.0085 * q.s), 0, Math.PI * 2);
-        ctx.fill();
+        // ゆっくりの息づき。半径を少しだけ動かして、輪郭を固めない
+        const rr = p.rr * (1 + 0.06 * Math.sin(t * 0.7 + p.wob));
+        const q = project(p.x * rr, p.y * rr, p.z * rr, R * pulse * 1.05);
+        const depth = (q.z + 1) / 2;                 // 0 奥 → 1 手前
+        const core = 1 - Math.min(1, p.rr);          // 中心ほど 1
+        const tw = 0.72 + 0.28 * Math.sin(t * 1.8 + p.tw * Math.PI * 2);
+        // 小さく・強く。大きく薄くすると1つの染みになって、
+        // 「光が集まっている」ではなく「ぼやけた玉」に戻ってしまう。
+        const a = (0.14 + core * 0.42) * (0.34 + depth * 0.66) * tw;
+        if (a <= 0.006) continue;
+        const rad = size * (0.017 + core * 0.030) * q.s;
+        ctx.globalAlpha = Math.min(1, a);
+        ctx.drawImage(sprite, q.sx - rad, q.sy - rad, rad * 2, rad * 2);
       }
+      ctx.globalAlpha = 1;
+      ctx.restore();
 
       /* 6 — orbital rings with tracer lights (depth-shaded segments) */
       const SEG = 72;

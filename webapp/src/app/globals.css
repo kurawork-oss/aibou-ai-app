@@ -863,40 +863,52 @@ html[data-skin="cyber"] {
    明るい緑にすると、白い光が沈んで「光っていない」ように見える。
    ═══════════════════════════════════════════════════════════════════ */
 html[data-skin="emerald"] {
-  --bg: #04241d;               /* 深いエメラルド */
-  --bg2: #063028;
-  --panel: rgba(180, 255, 226, 0.07);
-  --panel-bd: rgba(150, 240, 208, 0.28);
-  --fg: #e9fff6;               /* 本文＝ほぼ白 */
+  --bg: #03201a;               /* エメラルド寄りの深緑 */
+  --bg2: #010b09;              /* 黒に落ちる側 */
+  --panel: rgba(0, 0, 0, 0.34);        /* 面は黒。金の枠を立たせるため */
+  --panel-bd: rgba(212, 175, 55, 0.55);/* 枠＝金 */
+  --fg: #f2fbf6;               /* 本文＝ほぼ白 */
   --fg-strong: #ffffff;
-  --muted: #9fd8c2;
-  --muted-rgb: 159 216 194;
-  --line: #bff3dc;
-  --glow: rgba(160, 255, 214, 0.22);
-  --glow-strong: rgba(200, 255, 232, 0.34);
-  --accent: #7cf0c4;           /* エメラルドの差し色（文字は白のまま） */
-  --input-bg: rgba(180, 255, 226, 0.07);
-  --input-bd: rgba(150, 240, 208, 0.32);
-  --btn-bg: rgba(160, 250, 214, 0.10);
-  --btn-bd: rgba(160, 245, 210, 0.40);
-  --shadow: rgba(0, 20, 14, 0.55);
-  --chrome: rgba(4, 36, 29, 0.86);
-  --chrome-2: rgba(6, 44, 35, 0.92);
-  --tint: rgba(124, 240, 196, 0.10);
+  --muted: #a9c9ba;
+  --muted-rgb: 169 201 186;
+  --line: #d4af37;             /* 線＝金 */
+  --glow: rgba(212, 175, 55, 0.24);        /* 影も金 */
+  --glow-strong: rgba(240, 214, 130, 0.40);
+  --accent: #e7c65c;           /* 強調＝金（文字は白のまま） */
+  --input-bg: rgba(0, 0, 0, 0.32);
+  --input-bd: rgba(212, 175, 55, 0.45);
+  --btn-bg: rgba(212, 175, 55, 0.12);
+  --btn-bd: rgba(224, 192, 96, 0.62);
+  --shadow: rgba(0, 0, 0, 0.66);
+  --chrome: rgba(3, 20, 16, 0.90);
+  --chrome-2: rgba(2, 14, 11, 0.94);
+  --tint: rgba(212, 175, 55, 0.10);
 
   background-color: var(--bg);
-  /* 模様：菱形の綾（斜め2本の重ね）＋やわらかいにじみ。
-     格子ではなく綾にしたのは、サイバーとの違いを模様で出すため。 */
+  /* 模様：金の細い綾＋四隅を黒へ落とす。
+     緑を一面に敷くと平らに見えるので、黒を混ぜて奥行きを作り、
+     その上に金の線を通す——エメラルド×金×黒の三色で組む。 */
   background-image:
     repeating-linear-gradient(45deg,
-      rgba(140, 240, 200, 0.05) 0 1px, transparent 1px 34px),
+      rgba(212, 175, 55, 0.075) 0 1px, transparent 1px 30px),
     repeating-linear-gradient(-45deg,
-      rgba(140, 240, 200, 0.05) 0 1px, transparent 1px 34px),
-    radial-gradient(1100px 640px at 50% -16%, rgba(80, 220, 170, 0.20), transparent 62%),
-    radial-gradient(880px 520px at 50% 118%, rgba(40, 160, 130, 0.16), transparent 58%);
+      rgba(212, 175, 55, 0.055) 0 1px, transparent 1px 30px),
+    radial-gradient(900px 540px at 50% -12%, rgba(60, 210, 160, 0.22), transparent 62%),
+    radial-gradient(1200px 900px at 50% 50%, rgba(6, 60, 48, 0.55), transparent 70%),
+    radial-gradient(1400px 1000px at 50% 120%, #010b09, transparent 66%);
   background-attachment: fixed;
 }
 
-/* 星空のバックドロップは、模様を持つスキンでは描かない（重なると濁る）。
-   JS側（Backdrop3D）でも同じ判定で描画を止めている。 */
+/* 金の枠は、ただの線より「縁」に見せたい。内側に細いハイライトを1本
+   入れると、板金のような立体感が出る（ゴージャスの正体はこの1本）。
+
+   かけるのは**面**だけ。rounded-forge は角丸の指定で446か所に付いて
+   いるので、そこに影を足すと小さなボタン全部が額縁になって、うるさい。 */
+html[data-skin="emerald"] .panel,
+html[data-skin="emerald"] .glass-silver {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 236, 170, 0.20),
+    0 2px 10px rgba(0, 0, 0, 0.45);
+}
+
 html[data-skin="emerald"] .forge-backdrop { display: none; }
