@@ -31,6 +31,16 @@ export interface StreamChatParams {
   history?: ChatTurn[];
   persona?: string;
   name?: string;
+  /**
+   * 端末の中から思い出した記憶（lib/memory.ts）。
+   *
+   * サーバー側にも記憶はあるが、そちらは Supabase が要る。繋いでいない人・
+   * 圏外の人にとっては、こちらが**唯一の記憶**になる。サーバーは自分の
+   * 想起と混ぜて使う（どちらか片方でも成り立つ形にしてある）。
+   *
+   * 送るのは**引き当てた数件だけ**。端末の記憶を丸ごと送りはしない。
+   */
+  memory?: string;
 }
 
 export interface VisionParams {
@@ -222,6 +232,7 @@ export function streamChat(
           history: params.history ?? [],
           persona: params.persona ?? undefined,
           name: params.name ?? undefined,
+          memory: params.memory || undefined,
         }),
         signal: controller.signal,
       });

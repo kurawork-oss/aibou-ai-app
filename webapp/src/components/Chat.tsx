@@ -40,6 +40,7 @@ import { PACKS_CHANGED } from "@/lib/shell";
 import { useSpeechRecognition } from "@/lib/voice";
 import { speakCore, stopCoreVoice, type CoreVoiceSettings, type VoiceEngine } from "@/lib/coreVoice";
 import { takeCompleteSentences } from "@/lib/speech";
+import * as memory from "@/lib/memory";
 import { trimHistory } from "@/lib/history";
 
 export interface ChatSettings {
@@ -632,11 +633,27 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
         return;
       }
 
+      /* 端末の中の記憶から、この話に関係する物を引く。
+         サーバー側にも記憶はあるが、そちらは Supabase が要る。繋いでいない
+         人・圏外の人にとっては、これが唯一の記憶になる。
+         引けなくても会話は止めない（記憶は「あれば効く」物）。 */
+      let localMemory = "";
+      try {
+        localMemory = (await memory.search(text, 6)).block;
+      } catch {
+        localMemory = "";
+      }
+      /* この発言自体も覚えておく。本人が言ったことは、あとで効く度合いが
+         いちばん高い（好み・予定・体質など）。返答のほうは長くて要約でも
+         あるので、いまは取らない。 */
+      void memory.add(text, { source: "me", kind: "note" }).catch(() => null);
+
       // Text path → SSE streaming.
       let acc = "";
       spokenUpTo.current = 0;          // このターンの読み上げ位置を初期化
       const handlers = streamChat(
-        { message: text, history, persona: settings.persona || undefined, name: settings.name || undefined },
+        { message: text, history, persona: settings.persona || undefined,
+          name: settings.name || undefined, memory: localMemory },
         (token) => {
           acc += token;
           setMessages((prev) =>

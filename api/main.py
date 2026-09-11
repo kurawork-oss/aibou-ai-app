@@ -407,6 +407,10 @@ class ChatRequest(BaseModel):
     history: Optional[List[ChatMessage]] = None
     persona: Optional[str] = None
     name: Optional[str] = None  # アシスタント名（既定 "AIbou"）
+    # 端末の中から思い出した記憶（画面が引いて送ってくる）。
+    # サーバー側の記憶は Supabase が要るので、繋いでいない人・圏外の人に
+    # とってはこちらが唯一の記憶になる。両方あれば混ぜる。
+    memory: Optional[str] = None
 
 
 class VisionRequest(BaseModel):
@@ -775,6 +779,38 @@ class WorkflowRunRequest(BaseModel):
 # =====================================================================
 # プロンプト構築
 # =====================================================================
+#: 端末から届く記憶の上限。ここを開けておくと、画面側の不具合や細工で
+#: 指示文をいくらでも膨らませられる（費用にも待ち時間にも直結する）。
+MAX_CLIENT_MEMORY = 4000
+
+
+def merge_memory(server_block: str, client_block: Optional[str]) -> str:
+    """サーバー側の記憶と、端末から届いた記憶を1つにする。
+
+    どちらか片方だけのことが普通にある:
+      ・Supabase を繋いでいない  → サーバー側が空
+      ・古い画面・別の端末        → 端末側が空
+
+    見出し（【関連する記憶】）は1つにまとめる。2つ並ぶと、AIは
+    「別々の資料が2つ来た」と読んで、片方を無視することがある。
+    """
+    head = "【関連する記憶】"
+    lines: List[str] = []
+    seen = set()
+    for block in (server_block or "", (client_block or "")[:MAX_CLIENT_MEMORY]):
+        for raw in block.splitlines():
+            line = raw.strip()
+            if not line or line == head:
+                continue
+            if line in seen:          # 両方に同じ記憶が入っていることがある
+                continue
+            seen.add(line)
+            lines.append(line)
+    if not lines:
+        return ""
+    return head + "\n" + "\n".join(lines[:24])
+
+
 def build_system_prompt(name: Optional[str], persona: Optional[str], memory_block: str) -> str:
     """アシスタントの基本人格＋persona＋想起した記憶 を1つのsystem promptに合成する。"""
     assistant_name = (name or "AIbou").strip() or "AIbou"
@@ -1054,6 +1090,9 @@ async def chat(req: ChatRequest, _auth: None = Depends(require_auth)):
     memory_block = await asyncio.get_event_loop().run_in_executor(
         None, lambda: mem_recall(req.message, limit=8)
     )
+    # 端末から届いた記憶と混ぜる。どちらか片方しか無いこともある
+    # （Supabase 未接続ならサーバー側が空、古い画面なら端末側が空）。
+    memory_block = merge_memory(memory_block, req.memory)
     system_prompt = build_system_prompt(req.name, req.persona, memory_block)
     # ツール実行を許可（行動を頼まれた時だけマーカーを使う旨をルール付けする）
     system_prompt += (
