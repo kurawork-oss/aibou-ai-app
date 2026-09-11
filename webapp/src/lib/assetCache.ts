@@ -176,6 +176,43 @@ export async function loadCachedImage(
   }
 }
 
+/**
+ * CSS に渡せる在処を返す。手元にあれば blob:、無ければ取りに行く。
+ *
+ * `loadCachedImage` との違いは、**画像を復号しないこと**。CSS の
+ * `background-image` に渡すだけなら、こちらでよい（一度も
+ * `<img>` にせず、ブラウザが必要な大きさで直接描く）。
+ *
+ * 使い終わったら `revoke()` を呼ぶ。blob: の URL は放っておくと、その
+ * ページを開いている間ずっと画像をメモリに留める。
+ */
+export async function cachedObjectUrl(
+  url: string, opts: { download?: boolean } = {},
+): Promise<{ href: string; revoke: () => void } | null> {
+  const { download = true } = opts;
+  const c = cacheApi();
+  const plain = { href: url, revoke: () => {} };
+
+  try {
+    // Cache Storage が無い環境（http:// の開発サーバーなど）では、
+    // ふつうの URL をそのまま渡す。ブラウザのキャッシュには載る。
+    if (!c) return download ? plain : null;
+
+    const cache = await c.open(CACHE_NAME);
+    let hit = await cache.match(url);
+    if (!hit) {
+      if (!download) return null;
+      if (!(await downloadAsset(url))) return plain;   // 取れなくても出す努力はする
+      hit = await cache.match(url);
+      if (!hit) return plain;
+    }
+    const href = URL.createObjectURL(await hit.blob());
+    return { href, revoke: () => URL.revokeObjectURL(href) };
+  } catch {
+    return download ? plain : null;
+  }
+}
+
 /** 人に見せる大きさ（「約 115KB」）。 */
 export function formatBytes(n: number): string {
   if (n <= 0) return "0";

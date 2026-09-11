@@ -26,7 +26,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import CoreOrb from "@/components/CoreOrb";
 import { CORE_TYPES, readCoreType, setCoreType, type CoreType } from "@/lib/coreType";
 import {
-  BACKGROUNDS, backgroundDef, readBackground, setBackground,
+  BACKGROUNDS, assetFor, backgroundDef, isWideScreen, readBackground, setBackground,
   type BackgroundChoice, type BackgroundDef, type BackgroundKey,
 } from "@/lib/background";
 import {
@@ -147,13 +147,16 @@ function UserThumb({ url }: { url: string | null }) {
   return <img src={url} alt="" style={{ ...THUMB_STYLE, objectFit: "cover" }} />;
 }
 
-function BackgroundThumb({ def, userUrl }: { def: BackgroundDef; userUrl: string | null }) {
+function BackgroundThumb(
+  { def, userUrl, wide }: { def: BackgroundDef; userUrl: string | null; wide: boolean },
+) {
   if (def.needsUserImage) return <UserThumb url={userUrl} />;
-  if (def.asset) {
+  const asset = assetFor(def, wide);
+  if (asset) {
     return (
       // eslint-disable-next-line @next/next/no-img-element -- 素の <img> で十分（最適化は切ってある）
       <img
-        src={def.asset.thumb}
+        src={asset.thumb}
         alt=""
         loading="lazy"
         decoding="async"
@@ -193,25 +196,54 @@ function BackgroundThumb({ def, userUrl }: { def: BackgroundDef; userUrl: string
 
 type DlState = { have: boolean; busy: boolean; pct: number; failed?: boolean };
 
-function useAssetState(defs: BackgroundDef[]) {
+/**
+ * いまの画面が横長か。横長／縦長で敷く絵が変わる背景がある。
+ *
+ * 描いている途中に `window` を直に読まない。SSR では横長を既定にして
+ * いるので、スマホで開くと「サーバーが作った中身」と食い違って
+ * hydration が壊れる。立ち上がってから直す。
+ */
+function useWideScreen(): boolean {
+  const [wide, setWide] = useState(true);
+  useEffect(() => {
+    const sync = () => setWide(isWideScreen());
+    sync();
+    window.addEventListener("resize", sync);
+    return () => window.removeEventListener("resize", sync);
+  }, []);
+  return wide;
+}
+
+function useAssetState(defs: BackgroundDef[], wide: boolean) {
   const [state, setState] = useState<Record<string, DlState>>({});
 
+  /* 「手元にあるか」は**毎回聞き直す**。同じ絵を使う背景が2つある
+     （水あり／水なし）ので、片方を落とすともう片方も手元にある。
+     自前の印で持つと、そこがずれる。 */
   const refresh = useCallback(async () => {
-    const next: Record<string, DlState> = {};
+    const have: Record<string, boolean> = {};
     for (const d of defs) {
-      if (!d.asset) continue;
-      next[d.key] = { have: await hasAsset(d.asset.url), busy: false, pct: 0 };
+      const a = assetFor(d, wide);
+      if (!a) continue;
+      have[d.key] = await hasAsset(a.url);
     }
-    setState((prev) => ({ ...prev, ...next }));
-  }, [defs]);
+    setState((prev) => {
+      const next = { ...prev };
+      for (const k of Object.keys(have)) {
+        next[k] = { ...(next[k] ?? { busy: false, pct: 0, have: false }), have: have[k], busy: false };
+      }
+      return next;
+    });
+  }, [defs, wide]);
 
   useEffect(() => { void refresh(); }, [refresh]);
 
   /** 落とす。進み具合を出しながら。 */
   const fetchAsset = useCallback(async (d: BackgroundDef) => {
-    if (!d.asset) return true;
+    const a = assetFor(d, wide);
+    if (!a) return true;
     setState((s) => ({ ...s, [d.key]: { have: false, busy: true, pct: 0 } }));
-    const ok = await downloadAsset(d.asset.url, ({ received, total }) => {
+    const ok = await downloadAsset(a.url, ({ received, total }) => {
       const pct = total > 0 ? Math.round((received / total) * 100) : 0;
       setState((s) => ({ ...s, [d.key]: { have: false, busy: true, pct } }));
     });
@@ -219,16 +251,19 @@ function useAssetState(defs: BackgroundDef[]) {
        取っておけない端末（http:// の開発サーバーなど）では落とせても
        残らないので、ok をそのまま出すと「もう手元にあります」と
        言い続けることになる。 */
-    const have = await hasAsset(d.asset.url);
+    const have = await hasAsset(a.url);
     setState((s) => ({ ...s, [d.key]: { have, busy: false, pct: 100, failed: !ok } }));
+    // 同じ絵を使う他の背景の印も合わせる（refresh は failed を消さない）
+    void refresh();
     return ok;
-  }, []);
+  }, [wide, refresh]);
 
   const drop = useCallback(async (d: BackgroundDef) => {
-    if (!d.asset) return;
-    await removeAsset(d.asset.url);
-    setState((s) => ({ ...s, [d.key]: { have: false, busy: false, pct: 0 } }));
-  }, []);
+    const a = assetFor(d, wide);
+    if (!a) return;
+    await removeAsset(a.url);
+    await refresh();
+  }, [wide, refresh]);
 
   return { state, fetchAsset, drop, refresh };
 }
@@ -246,7 +281,8 @@ export default function AppearanceSettings() {
   const [imgError, setImgError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
-  const { state: dl, fetchAsset, drop } = useAssetState(BACKGROUNDS);
+  const wide = useWideScreen();
+  const { state: dl, fetchAsset, drop } = useAssetState(BACKGROUNDS, wide);
   /* 取っておけるかは端末による。できない所で「✓ 端末にあり」と出すと嘘になる。 */
   const [keepable, setKeepable] = useState(true);
   useEffect(() => { setKeepable(canKeepAssets()); }, []);
@@ -294,7 +330,7 @@ export default function AppearanceSettings() {
   const pickBg = async (key: BackgroundChoice) => {
     if (key !== "auto") {
       const def = backgroundDef(key);
-      if (def.asset && !dl[def.key]?.have) {
+      if (assetFor(def, wide) && !dl[def.key]?.have) {
         const ok = await fetchAsset(def);
         if (!ok) return;
       }
@@ -478,6 +514,8 @@ export default function AppearanceSettings() {
             const active = bg === d.key;
             const st = dl[d.key];
             const locked = d.needsUserImage && !userUrl;
+            // 落とす大きさも「いまの画面に敷く絵」のもの（縦横で別の絵）
+            const asset = assetFor(d, wide);
             return (
               <div
                 key={d.key}
@@ -498,7 +536,7 @@ export default function AppearanceSettings() {
                 >
                   <span className="mb-1.5 block overflow-hidden rounded-forge"
                         style={{ border: "1px solid var(--panel-bd)", lineHeight: 0 }}>
-                    <BackgroundThumb def={d} userUrl={userUrl} />
+                    <BackgroundThumb def={d} userUrl={userUrl} wide={wide} />
                   </span>
                   <span className="block truncate text-[10px] label-mono"
                         style={{ color: active ? "var(--fg-strong)" : "var(--muted)" }}>
@@ -507,7 +545,7 @@ export default function AppearanceSettings() {
                 </button>
 
                 {/* 落とす物があるものだけ、状態を出す */}
-                {d.asset && (
+                {asset && (
                   st?.busy ? (
                     <div className="mt-1">
                       <div className="h-1 w-full overflow-hidden rounded-full" style={{ background: "var(--panel-bd)" }}>
@@ -538,12 +576,12 @@ export default function AppearanceSettings() {
                     </span>
                   ) : (
                     <span className="mt-1 block text-[9px] text-muted label-mono">
-                      ⤓ 約{formatBytes(d.asset.bytes)}
+                      ⤓ 約{formatBytes(asset.bytes)}
                       {keepable ? "（選ぶと落とします）" : "（この端末では毎回読み込みます）"}
                     </span>
                   )
                 )}
-                {!d.asset && !d.needsUserImage && (
+                {!asset && !d.needsUserImage && (
                   <span className="mt-1 block text-[9px] text-muted label-mono">通信なし</span>
                 )}
                 {locked && (

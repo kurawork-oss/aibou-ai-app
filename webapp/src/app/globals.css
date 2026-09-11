@@ -907,7 +907,73 @@ html[data-skin="emerald"] .glass-silver {
    （中身が空でも、全画面の要素が1枚あると合成の対象にはなる） */
 html[data-bg="plain"] .forge-backdrop,
 html[data-bg="emerald"] .forge-backdrop,
+html[data-bg="chrome-flat"] .forge-backdrop,
 html[data-bg="user-flat"] .forge-backdrop { display: none; }
+
+/* 用意した絵を、水を通さずにそのまま敷く。
+   ──────────────────────────────────────────────────────────────────
+   なぜ同じ絵で2つ用意するのか
+
+   水の背景は、画面を格子に割って1点ずつ計算する。底に敷いた絵も
+   **その格子の細かさまでしか持てない**。1440×900 の画面なら底は
+   481×301 で焼かれ、3倍に引き伸ばして出る。元の絵を何ピクセルで
+   渡しても、ここは変わらない——「画質が悪い」の正体はこれ。
+
+   こちらは CSS が画面の実解像度で描く（Retina なら2倍で出る）。
+   波は立たないが、絵は渡したまま出る。
+
+   膜の濃さは、**水の背景と同じ読みやすさ**に合わせてある。
+
+   ここは目分量ではなく測って決めた。文字を隠した状態で撮って、文字が
+   載る場所の下地の輝度を拾い、本文の色（#9fadc6）との比を出した：
+
+     水たまり・銀（いま使えている背景）  本文 2.35 / 見出し 3.8〜4.3
+     銀の流れ・膜 0.35                   本文 1.05 ← 読めない
+     銀の流れ・膜 0.55                   本文 1.98
+     銀の流れ・膜 0.60                   本文 2.4  ← ここ
+     銀の流れ・膜 0.65                   本文 2.9
+
+   「白い文字と 4.5:1」を満たすには 0.82 の膜が要る、とも測れている。
+   だがそれは絵の見えない背景で、鮮明にするために作った意味が消える。
+   だから狙いを「WCAG を満たす」ではなく**「いま使えている背景と同じ
+   読みやすさにして、鮮明さで勝つ」**に置いた。
+
+   上下（0.85）だけ濃いのは、文字と押し物がそこに集まっているため。
+   真ん中は 0.60 で、絵の流れがはっきり見える。 */
+html[data-bg="chrome-flat"] {
+  background-image:
+    linear-gradient(
+      to bottom,
+      rgba(2, 6, 18, 0.85) 0,
+      rgba(2, 6, 18, 0.60) 150px,
+      rgba(2, 6, 18, 0.60) calc(100% - 200px),
+      rgba(2, 6, 18, 0.85) 100%
+    ),
+    var(--asset-bg, none);
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+  /* 絵が届くまでの地色。真っ白から紺へ切り替わるのを見せない */
+  background-color: #050b1a;
+}
+
+/* 文字の影。膜だけでは足りない分を、**文字のすぐ後ろだけ**で補う。
+   近い影（1px）で字の形を立たせ、広い影（12px）で字のまわりごと沈める。
+   絵を一切暗くせずにコントラストを足せるので、膜を濃くするより安い。 */
+html[data-bg="chrome-flat"] body {
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.9),
+    0 0 12px rgba(2, 6, 18, 0.75);
+}
+/* 入力欄と押し物の中は、自前の地色を持っているので影は要らない
+   （かかると、小さな等幅の字がにじんで太って見える）。 */
+html[data-bg="chrome-flat"] input,
+html[data-bg="chrome-flat"] textarea,
+html[data-bg="chrome-flat"] select,
+html[data-bg="chrome-flat"] .panel {
+  text-shadow: none;
+}
 
 /* 金の綾。緑を一面に敷くと平らに見えるので、黒を混ぜて奥行きを作り、
    その上に金の線を通す——エメラルド×金×黒の三色で組む。 */

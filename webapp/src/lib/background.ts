@@ -24,6 +24,7 @@ import type { Skin } from "@/lib/skin";
 
 export type BackgroundKey =
   | "water-chrome"
+  | "chrome-flat"
   | "water-grid"
   | "stars"
   | "retro"
@@ -51,10 +52,31 @@ export interface BackgroundDef {
   render: BackgroundRender;
   /** 水の底に何を敷くか。 */
   floor?: "grid" | "asset" | "user";
+  /** 縦長の画面で使う絵。 */
   asset?: BackgroundAsset;
+  /**
+   * 横長の画面で使う絵（無ければ `asset` を使う）。
+   *
+   * 同じ絵で両方まかなうと、どちらかが必ず大きく切られる。縦 900×1600 の
+   * 絵を 1440×900 の画面に cover で敷くと、**高さの35%しか映らない**
+   * ——絵の大半が画面の外にあり、残りが 1.6 倍に引き伸ばされる。
+   * 形の違う絵を2枚持つほうが、1枚を伸ばすより軽くて綺麗。
+   */
+  wideAsset?: BackgroundAsset;
+  /** CSS が `--asset-bg` として敷く（canvas を使わない＝いちばん鮮明）。 */
+  flatAsset?: boolean;
   /** 自分の画像が要る（無いときは選べない）。 */
   needsUserImage?: boolean;
 }
+
+/** 縦長の画面用（スマホ）。 */
+const CHROME_TALL: BackgroundAsset = {
+  url: "/skin-cyber-floor.webp", bytes: 118062, thumb: "/skin-cyber-floor-thumb.webp",
+};
+/** 横長の画面用（PC・タブレット横）。 */
+const CHROME_WIDE: BackgroundAsset = {
+  url: "/skin-chrome-wide.webp", bytes: 129052, thumb: "/skin-chrome-wide-thumb.webp",
+};
 
 export const BACKGROUNDS: BackgroundDef[] = [
   {
@@ -63,7 +85,29 @@ export const BACKGROUNDS: BackgroundDef[] = [
     hint: "触ると波が立つ。底に銀の流れの絵を敷く",
     render: "water",
     floor: "asset",
-    asset: { url: "/skin-cyber-floor.webp", bytes: 118062, thumb: "/skin-cyber-floor-thumb.webp" },
+    asset: CHROME_TALL,
+    wideAsset: CHROME_WIDE,
+  },
+  {
+    /**
+     * 水を張らない版。
+     *
+     * なぜ要るか——**水を通すと、絵はどうやってもぼやける**から。
+     * 水は画面を格子に割って1点ずつ計算するので、絵もその格子の細かさ
+     * までしか持てない。1440×900 の画面なら底は 481×301 で焼かれ、
+     * 3倍に拡大して出る。元の絵を何ピクセルで渡しても、ここは変わらない。
+     *
+     * こちらは CSS が画像をそのまま敷くので、画面の実解像度で出る
+     * （Retina なら 2倍で出る）。canvas も requestAnimationFrame も
+     * 使わないので、いちばん軽くもある。波が要らない人はこちら。
+     */
+    key: "chrome-flat",
+    label: "銀の流れ",
+    hint: "水を張らずに絵をそのまま敷く。いちばん鮮明で、いちばん軽い",
+    render: "none",
+    flatAsset: true,
+    asset: CHROME_TALL,
+    wideAsset: CHROME_WIDE,
   },
   {
     key: "water-grid",
@@ -95,8 +139,33 @@ export const BACKGROUNDS: BackgroundDef[] = [
 
 const BY_KEY = new Map(BACKGROUNDS.map((b) => [b.key, b]));
 
+/* 逃げ先は名前で引く。ここが「後ろから3番目」だった頃、背景を1つ足した
+   だけで逃げ先が「自分の画像」に変わっていた——並べ替えただけで壊れる
+   書き方はしない。 */
+const PLAIN = BACKGROUNDS.find((b) => b.key === "plain") as BackgroundDef;
+
 export function backgroundDef(key: BackgroundKey): BackgroundDef {
-  return BY_KEY.get(key) ?? BACKGROUNDS[BACKGROUNDS.length - 3]; // plain
+  return BY_KEY.get(key) ?? PLAIN;
+}
+
+/**
+ * いまの画面が横長か。
+ *
+ * 機種ではなく**窓の形**で見る。スマホを横に倒せば横長だし、PCの窓を
+ * 縦に細くすれば縦長。敷く絵を決めるのは形のほうなので、
+ * 「スマホかPCか」で分けない。
+ */
+export function isWideScreen(): boolean {
+  try {
+    return window.innerWidth >= window.innerHeight;
+  } catch {
+    return true;          // SSR では横長（PC）を既定に
+  }
+}
+
+/** この画面の形に合う絵。横長の絵を持たない背景は、そのまま1枚を使う。 */
+export function assetFor(def: BackgroundDef, wide = isWideScreen()): BackgroundAsset | undefined {
+  return (wide && def.wideAsset) || def.asset;
 }
 
 /** テーマごとの既定。`auto` のときに使う。 */

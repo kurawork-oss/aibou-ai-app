@@ -27,11 +27,11 @@
 import { useEffect, useRef, useState } from "react";
 import { QUALITY_STEPS, Water, imageFloor } from "@/lib/water";
 import { RetroSky } from "@/lib/retroSky";
-import { loadCachedImage } from "@/lib/assetCache";
+import { cachedObjectUrl, loadCachedImage } from "@/lib/assetCache";
 import { getUserImage, loadUserImage } from "@/lib/imageStore";
 import {
-  BACKGROUND_EVENT, applyBackground, backgroundDef, readBackground,
-  resolveBackground, type BackgroundKey,
+  BACKGROUND_EVENT, applyBackground, assetFor, backgroundDef, isWideScreen,
+  readBackground, resolveBackground, type BackgroundKey,
 } from "@/lib/background";
 import { CUSTOM_THEME_EVENT, DEFAULT_SKIN, readCustomTheme, type Skin } from "@/lib/skin";
 import { isLight, parseHex } from "@/lib/color";
@@ -110,6 +110,33 @@ const WATER_COLORS = {
 };
 
 /**
+ * 水の格子の上限（点の数）。**底に敷いた絵の粗さは、これで決まる。**
+ *
+ * 1440×900 の画面なら、ここが 160,000 のとき底は 481×301 で焼かれ、
+ * 3.0倍に引き伸ばして出る。元の絵を何ピクセルで渡しても変わらない
+ * ——「背景の画質が悪い」の正体はここだった。
+ *
+ * 上げるといくら重くなるのか（1440×900・この開発機で実測、1コマあたり）
+ *
+ *   160,000 →  481×301 … 12.6ms
+ *   250,000 →  605×379 … 15.5ms
+ *   400,000 →  763×477 … 18.9ms   ← ここ
+ *   640,000 →  960×600 … 27.5ms
+ *
+ * 点が 2.5 倍でも時間は 1.5 倍にしかならない。重さの多くは点の数ではなく
+ * **画面の広さ**（putImageData と引き伸ばし）のほうにあるため。
+ * つまり細かさは、思っていたより安い。
+ *
+ * 上げても危なくない理由は、下の adapt が**実測して足りなければ粗くする**
+ * から。弱い端末はこれまでと同じ粗さへ自動で戻るだけで、速い端末だけが
+ * 細かいまま回る。決め打ちの上限で全員を止める必要はない。
+ *
+ * スマホ（393×852）はもともと上限に当たっていない（cell 1.5 で 148,816 点）
+ * ので、ここを上げても何も変わらない。
+ */
+const MAX_WATER_CELLS = 400_000;
+
+/**
  * いま実際に描く背景を決めて、<html data-bg> に立てる。
  *
  * 決め手が3つある（テーマ・背景の設定・自分の画像があるか）ので、
@@ -124,14 +151,21 @@ function useResolvedBackground(): BackgroundKey {
   useEffect(() => {
     let alive = true;
     let objectUrl: string | null = null;
+    let flat: { href: string; revoke: () => void } | null = null;
+    /* 取りに行っている途中で次の指示が来たら、古いほうの結果は捨てる。
+       画像を待っている間にテーマを変えられると、あとから届いた古い画像が
+       新しい背景を上書きしてしまう。 */
+    let seq = 0;
+    let wide = isWideScreen();
 
     const recompute = async () => {
+      const mine = ++seq;
       const skin = (document.documentElement.dataset.skin as Skin) || DEFAULT_SKIN;
       const choice = readBackground();
       // 1回だけ開く。「あるか」と「中身」で2回開くと、切り替えのたびに
       // IndexedDB を開け閉てすることになる
       const rec = await getUserImage();
-      if (!alive) return;
+      if (!alive || mine !== seq) return;
       const resolved = resolveBackground(skin, choice, rec !== null);
       applyBackground(resolved);
 
@@ -156,6 +190,28 @@ function useResolvedBackground(): BackgroundKey {
         document.documentElement.style.removeProperty("--user-bg");
       }
 
+      /* 用意した絵を、水を通さずそのまま敷く背景。
+         水は画面を格子に割って1点ずつ計算するので、底に敷いた絵も
+         その細かさまでしか持てない（1440×900 の画面で 481×301）。
+         こちらは CSS が画面の実解像度で描くので、渡した絵がそのまま出る。 */
+      /* 膜の濃さは CSS 側の決め打ちで、ここでは触らない。「自分で決める」
+         テーマのつまみを効かせると、地の色が明るい設定のときに**白い膜**が
+         選ばれて、紺の絵と明るい文字の両方が壊れる。自分で選んだ絵
+         （user-flat）と違い、こちらは絵が決まっているので測って決める。 */
+      const def = backgroundDef(resolved);
+      const flatAsset = def.flatAsset ? assetFor(def, wide) : undefined;
+      if (flat) { flat.revoke(); flat = null; }
+      const got = flatAsset ? await cachedObjectUrl(flatAsset.url) : null;
+      if (!alive || mine !== seq) { got?.revoke(); return; }
+      if (got) {
+        flat = got;
+        document.documentElement.style.setProperty("--asset-bg", `url("${got.href}")`);
+      } else {
+        /* 取れなかったときも必ず消す。前の blob: の在処が残っていると、
+           すでに手放した画像を指したままになる（絵は出ず、直しようもない）。 */
+        document.documentElement.style.removeProperty("--asset-bg");
+      }
+
       setKey(resolved);
     };
 
@@ -164,6 +220,16 @@ function useResolvedBackground(): BackgroundKey {
     window.addEventListener(BACKGROUND_EVENT, onBg);
     // 膜の濃さを動かしたら、その場で効かせる（設定を閉じるまで待たせない）
     window.addEventListener(CUSTOM_THEME_EVENT, onBg);
+    /* 画面の形が縦横で入れ替わったら、敷く絵も入れ替える。
+       大きさが少し変わっただけ（キーボードが出た等）では動かさない
+       ——そのたびに読み直すと、文字を打つたびに背景が瞬く。 */
+    const onShape = () => {
+      const now = isWideScreen();
+      if (now === wide) return;
+      wide = now;
+      void recompute();
+    };
+    window.addEventListener("resize", onShape);
     // テーマを変えると、背景が「おまかせ」の人はそれに追従する
     const mo = new MutationObserver(() => { void recompute(); });
     mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-skin"] });
@@ -172,8 +238,10 @@ function useResolvedBackground(): BackgroundKey {
       alive = false;
       window.removeEventListener(BACKGROUND_EVENT, onBg);
       window.removeEventListener(CUSTOM_THEME_EVENT, onBg);
+      window.removeEventListener("resize", onShape);
       mo.disconnect();
       if (objectUrl) URL.revokeObjectURL(objectUrl);
+      if (flat) flat.revoke();
     };
   }, []);
 
@@ -210,7 +278,7 @@ export default function Backdrop3D() {
     const water = def.render === "water"
       ? new Water({
           cell: QUALITY_STEPS[0],   // いちばん細かい所から始める
-          maxCells: 160000,         // 広い画面でも、これ以上は増やさない
+          maxCells: MAX_WATER_CELLS,
           damping: 0.988,
           rainEvery: 1.9,
           refract: 15,
@@ -248,12 +316,32 @@ export default function Backdrop3D() {
        取れなければ既定の床（線の格子）のまま——背景の絵が出ないだけで、
        水は動く。画像1枚のために画面を止めない。 */
     let cancelled = false;
-    if (water && def.floor === "asset" && def.asset) {
-      void loadCachedImage(def.asset.url).then((img) => {
+    /* 画面の形に合う絵を敷く。縦の絵を横長の画面に cover で敷くと
+       **高さの35%しか映らない**（1440×900 で 900×1600 の絵）。
+       形の違う絵を持つ背景では、そちらへ差し替える。 */
+    let floorWide = isWideScreen();
+    const loadFloor = () => {
+      const a = assetFor(def, floorWide);
+      if (!water || !a) return;
+      void loadCachedImage(a.url).then((img) => {
         if (!cancelled && img) {
           water.setFloor(imageFloor(img, img.naturalWidth, img.naturalHeight));
         }
       });
+    };
+    let onShape: (() => void) | null = null;
+    if (water && def.floor === "asset" && def.asset) {
+      loadFloor();
+      if (def.wideAsset) {
+        // 端末を倒したら、そちらの形の絵に差し替える
+        onShape = () => {
+          const now = isWideScreen();
+          if (now === floorWide) return;
+          floorWide = now;
+          loadFloor();
+        };
+        window.addEventListener("resize", onShape);
+      }
     } else if (water && def.floor === "user") {
       void loadUserImage().then((img) => {
         if (!cancelled && img) {
@@ -418,7 +506,12 @@ export default function Backdrop3D() {
     let heavy = 0, light = 0;
     const BUDGET = 7.5;            // 水に使ってよい時間（ms）
     const adapt = (ms: number) => {
-      if (ms > BUDGET) { heavy++; light = 0; } else if (ms < BUDGET * 0.45) { light++; heavy = 0; }
+      /* 少し重い程度なら、ゆっくり数える（GCやタブ切り替えの跳ねで
+         張り直さないため）。budget の 2.5 倍を超えるコマは跳ねではなく
+         **本当に追いついていない**ので、5コマぶんとして早く下げる。
+         上限を上げたぶん、弱い端末が長く固まらないようにする。 */
+      if (ms > BUDGET) { heavy += ms > BUDGET * 2.5 ? 5 : 1; light = 0; }
+      else if (ms < BUDGET * 0.45) { light++; heavy = 0; }
       if (heavy >= 30 && qi < QUALITY_STEPS.length - 1) {
         qi += 1; heavy = 0; fitWater();
       } else if (light >= 180 && qi > 0) {
@@ -536,6 +629,7 @@ export default function Backdrop3D() {
     const teardown = () => {
       cancelled = true;
       window.removeEventListener("resize", onResize);
+      if (onShape) window.removeEventListener("resize", onShape);
       window.removeEventListener("pointermove", onPointer);
       window.removeEventListener("pointerdown", onDown);
     };

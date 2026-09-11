@@ -29,6 +29,17 @@ async function enterApp(page: Page) {
   await expect(page.getByLabel("Settings")).toBeVisible({ timeout: 10_000 });
 }
 
+/**
+ * 背景の一覧にある、その名前のカード。
+ *
+ * 「✓ 端末にあり」を画面全体から探さない。同じ絵を使う背景が2つある
+ * （水たまり・銀／銀の流れ）ので、どちらの話をしているのか分からなく
+ * なる——実際それで、通ったり落ちたりするテストになった。
+ */
+function bgCard(page: Page, label: string) {
+  return page.getByRole("button", { name: label, exact: true }).locator("xpath=..");
+}
+
 /** そのURLへの通信を数える（部分一致ではなく、末尾で見る）。 */
 function countRequests(page: Page, path: string) {
   const hits: string[] = [];
@@ -89,8 +100,9 @@ test("選んだときに落として、次からは端末の物を使う", async
   await expect(page.getByText("画面のテーマ")).toBeVisible({ timeout: 5_000 });
 
   const first = countRequests(page, FLOOR);
-  await page.getByRole("button", { name: /水たまり・銀/ }).click();
-  await expect(page.getByText("✓ 端末にあり")).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("button", { name: "水たまり・銀", exact: true }).click();
+  await expect(bgCard(page, "水たまり・銀").getByText("✓ 端末にあり"))
+    .toBeVisible({ timeout: 15_000 });
   expect(first.length, "選んでも落としに行っていない").toBeGreaterThan(0);
   expect(await page.evaluate(() => document.documentElement.dataset.bg)).toBe("water-chrome");
 
@@ -311,6 +323,168 @@ test("無地を選ぶと、背景の canvas ごと出さない", async ({ page }
     return el ? getComputedStyle(el).display : "missing";
   });
   expect(shown).toBe("none");
+});
+
+/* ── 画面の形で、敷く絵を変える ──────────────────────────────────
+ *
+ * ふだんのテストは縦長（390×844）で回っているので、**横長の道だけ
+ * 誰も通らない**。ここだけ窓を横に開けて見る。
+ *
+ * 直した中身: 縦 900×1600 の絵を 1440×900 の画面に cover で敷くと、
+ * 高さの35%しか映らず、残りを1.6倍に引き伸ばしていた。 */
+
+const WIDE = "/skin-chrome-wide.webp";
+
+test("横長の画面では、横長の絵を落とす", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/");
+  await page.evaluate(() => {
+    localStorage.setItem("forge_skin", "cyber");
+    localStorage.setItem("forge_bg", "water-chrome");
+  });
+
+  const wide = countRequests(page, WIDE);
+  const tall = countRequests(page, FLOOR);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await enterApp(page);
+  await expect(async () => {
+    expect(wide.length, "横長の絵を落としていない").toBeGreaterThan(0);
+  }).toPass({ timeout: 10_000 });
+  expect(tall, `横長の画面で縦の絵を落としている: ${tall.join(", ")}`).toHaveLength(0);
+});
+
+test("縦長の画面では、これまで通り縦の絵のまま", async ({ page }) => {
+  // 「スマホはそのままでいい」——横長を足したせいで縦が変わっては困る
+  await page.goto("/");
+  await page.evaluate(() => {
+    localStorage.setItem("forge_skin", "cyber");
+    localStorage.setItem("forge_bg", "water-chrome");
+  });
+
+  const wide = countRequests(page, WIDE);
+  const tall = countRequests(page, FLOOR);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await enterApp(page);
+  await expect(async () => {
+    expect(tall.length, "縦の絵を落としていない").toBeGreaterThan(0);
+  }).toPass({ timeout: 10_000 });
+  expect(wide, `縦長の画面で横長の絵を落としている: ${wide.join(", ")}`).toHaveLength(0);
+});
+
+test("水を張らない「銀の流れ」は、canvas を回さずに絵を敷く", async ({ page }) => {
+  /* これが「画質が悪い」への本当の答え。水を通すと、絵は格子の細かさ
+     （1440×900 で 481×301）までしか持てない。CSS に直接渡せば、画面の
+     実解像度でそのまま出る。 */
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/");
+  await enterApp(page);
+  await page.getByLabel("Settings").click();
+  await page.getByRole("button", { name: "見た目" }).click();
+  await expect(page.getByText("画面のテーマ")).toBeVisible({ timeout: 5_000 });
+
+  await page.getByRole("button", { name: "銀の流れ", exact: true }).click();
+  await expect(async () => {
+    expect(await page.evaluate(() => document.documentElement.dataset.bg)).toBe("chrome-flat");
+  }).toPass({ timeout: 15_000 });
+
+  // 絵が CSS に渡っている
+  await expect(async () => {
+    const url = await page.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue("--asset-bg"));
+    expect(url, "絵が CSS に渡っていない").toContain("url(");
+  }).toPass({ timeout: 10_000 });
+
+  // canvas は出ていない（「いちばん軽い」を名乗る以上、本当に止まっている）
+  const shown = await page.evaluate(() => {
+    const el = document.querySelector(".forge-backdrop");
+    return el ? getComputedStyle(el).display : "missing";
+  });
+  expect(shown, "水を使わない背景なのに canvas が出ている").toBe("none");
+});
+
+/**
+ * その背景の上で、本文がどれだけ読めるか（コントラスト比）。
+ *
+ * 測り方: 中身をいったん隠して**下地だけ**を撮り、本文が載っていた場所の
+ * 画素を拾って、本文の色との比を出す。撮った絵の解読はブラウザにさせる
+ * （canvas に描いて getImageData）——そのために画像の変換ライブラリを
+ * 足すと、テストが宣言していない依存で動くことになる。
+ */
+async function bodyContrast(page: Page, bg: string): Promise<number> {
+  await page.goto("/");
+  await page.evaluate((bg) => {
+    localStorage.setItem("forge_skin", "cyber");
+    localStorage.setItem("forge_bg", bg);
+  }, bg);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await enterApp(page);
+  await page.waitForTimeout(3500);          // 絵の取得と、水なら波が落ち着くまで
+
+  const probe = await page.evaluate(() => {
+    const el = [...document.querySelectorAll("p,div,span")]
+      .find((e) => e.children.length === 0 && e.textContent?.includes("話しかけるか入力して"));
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    const color = getComputedStyle(el).color;
+    // 下地だけにする（canvas の背景は残す）
+    document.querySelectorAll<HTMLElement>("body > *").forEach((e) => {
+      if (!e.classList.contains("forge-backdrop") && !e.querySelector(".forge-backdrop")) {
+        e.style.visibility = "hidden";
+      }
+    });
+    document.querySelectorAll<HTMLElement>("main, header, footer")
+      .forEach((e) => { e.style.visibility = "hidden"; });
+    return { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height), color };
+  });
+  expect(probe, "本文が見つからない（画面の作りが変わった？）").not.toBeNull();
+
+  await page.waitForTimeout(300);
+  const shot = (await page.screenshot()).toString("base64");
+
+  return page.evaluate(async ({ shot, probe }) => {
+    const img = new Image();
+    await new Promise((ok, ng) => {
+      img.onload = ok; img.onerror = ng;
+      img.src = `data:image/png;base64,${shot}`;
+    });
+    const c = document.createElement("canvas");
+    c.width = img.width; c.height = img.height;
+    const ctx = c.getContext("2d")!;
+    ctx.drawImage(img, 0, 0);
+    const ch = (v: number) => {
+      const s = v / 255;
+      return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+    };
+    const lum = (r: number, g: number, b: number) => 0.2126 * ch(r) + 0.7152 * ch(g) + 0.0722 * ch(b);
+    const m = probe.color.match(/\d+/g)!.map(Number);
+    const text = lum(m[0], m[1], m[2]);
+    const d = ctx.getImageData(probe.x, probe.y, Math.max(1, probe.w), Math.max(1, probe.h)).data;
+    let worst = 99;
+    for (let i = 0; i < d.length; i += 4) {
+      const L = lum(d[i], d[i + 1], d[i + 2]);
+      const ratio = (Math.max(text, L) + 0.05) / (Math.min(text, L) + 0.05);
+      if (ratio < worst) worst = ratio;
+    }
+    return worst;
+  }, { shot, probe: probe! });
+}
+
+test("絵を敷く背景の上でも、本文が水の背景と同じくらい読める", async ({ page }) => {
+  /* 鮮明にするために膜を薄くしていくと、銀の帯に重なった本文が消える。
+     作っている最中、膜 0.35 では本文のコントラストが **1.05**（＝ほぼ
+     見えない）まで落ちていた。目では「少し読みにくい」程度にしか
+     見えないので、数で止める。
+
+     基準は WCAG ではなく**いま使えている水の背景**。水も 2.35 しか
+     無いので、そこへ 4.5 を求めると背景ごと作り直しになる。狙いは
+     「同じ読みやすさで、鮮明さだけ勝つ」。 */
+  const water = await bodyContrast(page, "water-chrome");
+  const flat = await bodyContrast(page, "chrome-flat");
+  expect(flat, `銀の流れ=${flat.toFixed(2)} / 水たまり=${water.toFixed(2)}`)
+    .toBeGreaterThan(water * 0.8);
+  // 水そのものが薄くなっていないことも見る（両方一緒に落ちたら気づけない）
+  expect(water, `水たまりの本文が読みにくくなっている（${water.toFixed(2)}）`)
+    .toBeGreaterThan(1.9);
 });
 
 /* ── 新しいテーマで、画面が壊れていないか ────────────────────────

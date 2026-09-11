@@ -19,9 +19,12 @@ import {
   customThemeVars, normalizeCustomTheme, normalizeSkin,
 } from "../src/lib/skin";
 import {
-  BACKGROUNDS, DEFAULT_BACKGROUND, backgroundDef, normalizeBackground, resolveBackground,
+  BACKGROUNDS, DEFAULT_BACKGROUND, assetFor, backgroundDef, normalizeBackground,
+  resolveBackground,
 } from "../src/lib/background";
 import { veilFor } from "../src/lib/imageStore";
+import { statSync } from "node:fs";
+import { resolve } from "node:path";
 
 /* ── 色 ────────────────────────────────────────────────────────── */
 
@@ -194,6 +197,55 @@ test("水を使う背景には、底の指定がある", async () => {
     expect(b.floor, b.key).toBeTruthy();
     // 画像を敷く指定なら、その画像がある
     if (b.floor === "asset") expect(b.asset, b.key).toBeTruthy();
+  }
+});
+
+test("人に見せる「約◯KB」が、実物と合っている", () => {
+  /* ここがずれると、押す前に出している数字が嘘になる。
+     一度やらかしている——webp を2回エンコードして 129KB のはずの
+     ファイルが 87KB になり、`bytes` だけ元の値のまま残っていた。 */
+  for (const b of BACKGROUNDS) {
+    for (const a of [b.asset, b.wideAsset]) {
+      if (!a) continue;
+      for (const f of [a.url, a.thumb]) {
+        const path = resolve(__dirname, "..", "public", f.replace(/^\//, ""));
+        expect(() => statSync(path), `${f} が public に無い`).not.toThrow();
+      }
+      const real = statSync(resolve(__dirname, "..", "public", a.url.replace(/^\//, ""))).size;
+      expect(a.bytes, `${a.url} の bytes が実物とずれている`).toBe(real);
+      // 見本は本体よりずっと小さい（一覧を開いただけで重くならないため）
+      const thumb = statSync(resolve(__dirname, "..", "public", a.thumb.replace(/^\//, ""))).size;
+      expect(thumb, `${a.thumb} が見本にしては大きい`).toBeLessThan(real / 5);
+    }
+  }
+});
+
+test("横長の画面には横長の絵を出す", () => {
+  /* 縦 900×1600 の絵を 1440×900 の画面に cover で敷くと、**高さの35%
+     しか映らない**。「PCだと絵が切れている」の正体はこれだった。 */
+  const chrome = BACKGROUNDS.filter((b) => b.wideAsset);
+  expect(chrome.length, "横長の絵を持つ背景が1つも無い").toBeGreaterThan(0);
+  for (const b of chrome) {
+    expect(assetFor(b, true), b.key).toBe(b.wideAsset);
+    expect(assetFor(b, false), b.key).toBe(b.asset);
+    // 形の違う絵は別の物（同じ絵を2回出しても意味が無い）
+    expect(b.wideAsset!.url, b.key).not.toBe(b.asset!.url);
+  }
+  // 横長の絵を持たない背景では、そのまま1枚を使う（未定義にしない）
+  const one = BACKGROUNDS.find((b) => b.asset && !b.wideAsset);
+  if (one) expect(assetFor(one, true)).toBe(one.asset);
+});
+
+test("水を通さずに絵を敷く背景がある（canvas を使わない＝ぼやけない）", () => {
+  /* 水は画面を格子に割るので、底の絵もその細かさまでしか持てない。
+     元の絵をどれだけ大きく渡しても鮮明にはならない。逃げ道として、
+     水を張らずに CSS がそのまま敷く背景を用意してある。 */
+  const flat = BACKGROUNDS.filter((b) => b.flatAsset);
+  expect(flat.length, "絵をそのまま敷く背景が無い").toBeGreaterThan(0);
+  for (const b of flat) {
+    expect(b.render, `${b.key} が canvas を回している`).toBe("none");
+    expect(assetFor(b, true), b.key).toBeTruthy();
+    expect(assetFor(b, false), b.key).toBeTruthy();
   }
 });
 
