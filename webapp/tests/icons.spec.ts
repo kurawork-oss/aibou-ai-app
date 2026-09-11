@@ -103,18 +103,25 @@ test("maskable の中身は、ちゃんと絵が入っている（真っ黒で�
   expect(bright, "明るい所が無い＝絵が入っていない").toBeGreaterThan(300);
 });
 
-test("タブの札は、絵の縮小ではない（二段の文字を詰めない）", async () => {
-  /* 16px に二段の文字を詰めると、読めないどころかただの白い染みになる
-     （実際そうなった）。絵をそのまま縮めた物と**違う**ことを見る。 */
-  const fav = await sharp(p("favicon-32.png")).raw().toBuffer();
-  const shrunk = await sharp(p("icon-512.png")).resize(32, 32).raw().toBuffer();
+test("タブの札も、渡された絵そのまま（切り出しに戻っていない）", async () => {
+  /* ここは一度**逆のことを見張っていた**。
+     16px に二段の文字を詰めても読めないので、「A」の一文字だけを切り出して
+     札にしていた——読みやすさで言えばそのほうが良い。
+     が、それは渡された絵と違う物が出るということで、持ち主から
+     「Aのドアップになっている」と言われた。読みやすさより
+     **渡した絵がそのまま出ること**を取る、という指定。
 
-  let diff = 0;
-  for (let i = 0; i < Math.min(fav.length, shrunk.length); i++) {
-    diff += Math.abs(fav[i] - shrunk[i]);
+     なので今度は「絵をそのまま縮めた物と同じであること」を見る。
+     16px では二段の文字は読めず、紺と銀の塊に見える。それは承知のうえ。 */
+  for (const [file, n] of [["favicon-32.png", 32], ["favicon-16.png", 16]] as const) {
+    const fav = await sharp(p(file)).raw().removeAlpha().toBuffer();
+    const shrunk = await sharp(p("icon-512.png")).resize(n, n).raw().removeAlpha().toBuffer();
+    let diff = 0;
+    const len = Math.min(fav.length, shrunk.length);
+    for (let i = 0; i < len; i++) diff += Math.abs(fav[i] - shrunk[i]);
+    // 実測 1.6〜2.2（縮め方の違いぶんだけ）。切り出しに戻ると 12 を超える
+    expect(diff / len, `${file} が、絵をそのまま縮めた物と違う`).toBeLessThan(6);
   }
-  const avg = diff / Math.min(fav.length, shrunk.length);
-  expect(avg, "タブの札が、絵をただ縮めた物と同じに見える").toBeGreaterThan(12);
 });
 
 test("タブの札は、地と文字の差がはっきりしている", async () => {

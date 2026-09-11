@@ -18,7 +18,8 @@
  *                 入れると、丸めた外側に元の角が残って縁が汚れる
  *   maskable    … Android が外周を**円で切り落とす**。中心から4割の円より
  *                 外は消えるので、絵を縮めて余白を作る
- *   favicon     … タブに出る 16px。二段の文字は読めないので「A」1文字にする
+ *   favicon     … タブに出る 16px。ここも**絵そのまま**にしてある。
+ *                 文字は読めない大きさだが、渡された絵をそのまま出す指定
  *   それ以外    … そのまま四角で出す（今までのアイコンもそう）
  *
  * 白い余白の扱い
@@ -124,42 +125,6 @@ const squircle = await sharp(cleaned)
   .extract({ left: x0, top: y0, width: cw, height: ch })
   .png().toBuffer();
 
-/* ── 3.5 「A」1文字を切り出す ───────────────────────────────────
- *
- * 座標は実測値（下の MARK）。自動で探すのは**やめた**。
- *
- * 最初は「白い所を探して1文字目を取る」で書いたが、この絵は
- * クロムの照り返しでできていて、その照りも白い。明るさで分けようが
- * ないので、上辺の 1x4px の光を「1文字目」として切り出していた。
- *
- * 代わりに、切り出した中身が**文字らしいか**を数で確かめる。
- * 絵を差し替えて座標がずれたら、黙って別の所を切るのではなく落ちる。 */
-
-/** 「A」1文字の位置（元画像 1024px での実測。x196..351 / y341..498）。 */
-const MARK = { left: 195, top: 341, size: 158 };
-
-const mark = await sharp(cleaned)
-  .extract({ left: MARK.left, top: MARK.top, width: MARK.size, height: MARK.size })
-  .png().toBuffer();
-
-/* 検算：切り出した中の「白い画素」の割合。
-   文字なら1〜4割くらい。0に近ければ地だけを切っているし、
-   大きすぎれば白い面を切っている。どちらも「A」ではない。 */
-{
-  const m = await sharp(mark).raw().toBuffer({ resolveWithObject: true });
-  const px = m.info.width * m.info.height;
-  let bright = 0;
-  for (let i = 0; i < m.data.length; i += m.info.channels) {
-    if (m.data[i] >= 246 && m.data[i + 1] >= 246 && m.data[i + 2] >= 246) bright++;
-  }
-  const frac = bright / px;
-  console.log(`「A」の切り出し: ${MARK.size}px / 白い画素 ${(frac * 100).toFixed(1)}%`);
-  if (frac < 0.08 || frac > 0.5) {
-    throw new Error(`切り出した所に文字が見当たりません（白 ${(frac * 100).toFixed(1)}%）。`
-      + "絵を差し替えたなら MARK を測り直してください。");
-  }
-}
-
 /* ── 4. 書き出す ─────────────────────────────────────────────── */
 
 const rgb = `rgb(${INK_BG.r},${INK_BG.g},${INK_BG.b})`;
@@ -196,14 +161,6 @@ async function maskable(size, inset = 0.10) {
     .toBuffer();
 }
 
-async function monogram(size) {
-  return sharp(mark)
-    .resize(size, size, { fit: "fill", kernel: "lanczos3" })
-    .flatten({ background: rgb })
-    .png({ compressionLevel: 9 })
-    .toBuffer();
-}
-
 await mkdir(OUT, { recursive: true });
 
 const TARGETS = [
@@ -215,9 +172,11 @@ const TARGETS = [
   // Android は外周を円で切る。縮めて余白を作る
   { file: "icon-maskable-512.png", make: () => maskable(512) },
   { file: "icon-maskable-192.png", make: () => maskable(192) },
-  // タブの大きさ。二段の文字は読めないので「A」1文字
-  { file: "favicon-32.png", make: () => monogram(32) },
-  { file: "favicon-16.png", make: () => monogram(16) },
+  /* タブの大きさ。ここも絵そのまま。
+     16px では二段の文字は読めず、紺と銀の塊に見える——それでも
+     「渡した絵と違う物が出ている」ほうが困る、という指定に合わせた。 */
+  { file: "favicon-32.png", make: () => full(32) },
+  { file: "favicon-16.png", make: () => full(16) },
 ];
 
 for (const t of TARGETS) {
@@ -226,7 +185,7 @@ for (const t of TARGETS) {
 }
 
 /* favicon.ico は 16/32/48 を1つに束ねる（ブラウザによって使う大きさが違う）。 */
-const ico = await Promise.all([16, 32, 48].map(async (n) => ({ n, png: await monogram(n) })));
+const ico = await Promise.all([16, 32, 48].map(async (n) => ({ n, png: await full(n) })));
 await writeFile(path.join(OUT, "favicon.ico"), buildIco(ico));
 console.log("wrote favicon.ico (16/32/48)");
 console.log(`元: ${meta.width}x${meta.height} ${meta.format}`);
