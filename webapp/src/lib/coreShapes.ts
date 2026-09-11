@@ -11,6 +11,8 @@
  *   ・半透明の面を重ねるときは、隣接辺の二重塗りに注意する
  */
 
+import type { CorePalette } from "@/lib/coreSkin";
+
 /** 投影結果。z は -1（奥）〜 +1（手前）、s は遠近スケール。 */
 export interface Projected {
   sx: number;
@@ -36,6 +38,15 @@ export interface ShapeCtx {
   cyan: number;
   /** 単位球上の点を投影する。 */
   project: (x: number, y: number, z: number, radius: number) => Projected;
+  /**
+   * いまのテーマの配色。
+   *
+   * 既存の形（ピラミッド・多面体…）は色を直に書いている。テーマに
+   * 追従させるのは見た目が変わる話なので、ここでは**新しく足した形だけ**
+   * が使う。足してすぐ全部に効かせると、今使っている人の画面が黙って
+   * 変わってしまう。
+   */
+  pal: CorePalette;
 }
 
 type V3 = [number, number, number];
@@ -406,6 +417,98 @@ export function drawPortal(c: ShapeCtx) {
   starFlare(c, cx, cy, size * (0.16 + cyan * 0.08) * (0.92 + 0.08 * Math.sin(t * 2.1)), 0.9);
 }
 
+/* ── ドット（昔のゲームの球）─────────────────────────────────────
+ *
+ * 「粗く描く」だけではドットにならない。昔の絵が昔の絵に見えるのは、
+ * 次の3つが**同時に**守られているから。
+ *
+ *   ① 画素が格子に揃っている（中途半端な位置に点が無い）
+ *   ② 色数が少ない（なめらかな階調を作らない）
+ *   ③ 動きが飛び飛び（なめらかに補間しない）
+ *
+ * ③が効く。位置を丸めずに回すと、いくら粗く描いても「粗い今の絵」に
+ * しか見えない。角度も明るさも段に落として、カクッと動かす。
+ */
+export function drawPixelOrb(c: ShapeCtx) {
+  const { ctx, cx, cy, size, t, pulse, glow, cyan, pal } = c;
+
+  // 玉を覆う格子。奇数にして、中心の画素を1つに決める（偶数だと芯が割れる）
+  const CELLS = 19;
+  const r = (size * 0.34 * pulse);
+  const px = (r * 2) / CELLS;                 // 1画素の大きさ
+  // 格子の原点も画素に揃える。ここがずれると、縁が1列だけ半端に出る
+  const ox = Math.round(cx - r);
+  const oy = Math.round(cy - r);
+  const cell = Math.max(1, Math.round(px));
+
+  // ③ 時間を段に落とす（毎秒6コマ。昔のゲームのアニメの速さ）
+  const frame = Math.floor(t * 6);
+  const spin = (frame % 24) / 24 * Math.PI * 2;
+
+  // ② 色は4段だけ。palette の6段から、間を飛ばして取る
+  const steps = [pal.body[0], pal.body[2], pal.body[4], pal.body[5]];
+
+  const mid = (CELLS - 1) / 2;
+
+  /* にじみ。
+     最初は四角く塗りつぶしていたが、暗い背景では**コアの後ろに青い箱**が
+     置いてあるようにしか見えなかった。丸い階調を敷くのも違う（そこだけ
+     今の絵になる）。だから画素の輪を、外へ向かって薄くしながら重ねる。 */
+  const halo = 0.22 + glow * 0.42;
+  ctx.save();
+  for (let ring = 1; ring <= 3; ring++) {
+    ctx.globalAlpha = halo * (0.42 / ring);
+    ctx.fillStyle = `rgb(${pal.bloomOut})`;
+    const rr = 1 + ring * 0.16;             // 玉より少し外側の輪
+    for (let gy = -ring; gy < CELLS + ring; gy++) {
+      for (let gx = -ring; gx < CELLS + ring; gx++) {
+        const dx = (gx - mid) / mid;
+        const dy = (gy - mid) / mid;
+        const d = Math.hypot(dx, dy);
+        if (d <= rr - 0.16 || d > rr) continue;
+        ctx.fillRect(ox + gx * cell, oy + gy * cell, cell, cell);
+      }
+    }
+  }
+  ctx.restore();
+  for (let gy = 0; gy < CELLS; gy++) {
+    for (let gx = 0; gx < CELLS; gx++) {
+      const dx = (gx - mid) / mid;
+      const dy = (gy - mid) / mid;
+      const d = Math.hypot(dx, dy);
+      if (d > 1) continue;                    // ① 円の外は描かない（＝階段状の縁になる）
+
+      // 明るさ：中心が明るく、縁へ向かって暗い。光の当たる向きを少しだけ
+      // ずらして、平らな円盤ではなく球に見せる
+      const shade = d * 0.82 + (dx * 0.18 + dy * 0.12) + Math.sin(spin + dy * 2) * 0.06;
+      let idx = shade < 0.22 ? 0 : shade < 0.52 ? 1 : shade < 0.84 ? 2 : 3;
+      // 聞き取り中は、芯が一段明るくなる（状態が見て分かるように）
+      if (cyan > 0.2 && idx > 0 && ((gx + gy + frame) % 7 === 0)) idx -= 1;
+      ctx.fillStyle = steps[idx];
+      ctx.fillRect(ox + gx * cell, oy + gy * cell, cell, cell);
+    }
+  }
+
+  // きらめき：決まった画素が、決まったコマだけ白く抜ける
+  const spark = [[4, 5], [14, 6], [6, 13], [13, 14], [9, 3]];
+  ctx.fillStyle = `rgba(${pal.shellHot},1)`;
+  for (let i = 0; i < spark.length; i++) {
+    if ((frame + i * 5) % 18 >= 3) continue;  // 3コマだけ光って消える
+    const [sx, sy] = spark[i];
+    ctx.fillRect(ox + sx * cell, oy + sy * cell, cell, cell);
+  }
+
+  // 回る点。角度も画素に落とすので、カクカクと回る
+  const ringR = r + cell * 2.5;
+  for (let i = 0; i < 3; i++) {
+    const a = spin * (i % 2 === 0 ? 1 : -1) + (i * Math.PI * 2) / 3;
+    const bx = Math.round((cx + Math.cos(a) * ringR) / cell) * cell;
+    const by = Math.round((cy + Math.sin(a) * ringR * 0.42) / cell) * cell;
+    ctx.fillStyle = i === 0 ? `rgba(${pal.ping},1)` : `rgba(${pal.ringLight},0.9)`;
+    ctx.fillRect(bx, by, cell, cell);
+  }
+}
+
 /* ── 種類 → 描画関数 ───────────────────────────────────────────── */
 
 export const SHAPE_DRAWERS = {
@@ -414,6 +517,7 @@ export const SHAPE_DRAWERS = {
   hex: drawHexSphere,
   crystal: drawCrystal,
   portal: drawPortal,
+  pixel: drawPixelOrb,
 } as const;
 
 export type ShapeKey = keyof typeof SHAPE_DRAWERS;

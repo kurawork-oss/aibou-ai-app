@@ -800,8 +800,9 @@ html[data-skin="aibou"] [data-mode="board"]     { --accent: #a534cc; --glow: rgb
 html[data-skin="aibou"] [data-mode="archive"]   { --accent: #5a6478; --glow: rgba(90, 100, 120, 0.12);  --glow-strong: rgba(90, 100, 120, 0.2); }
 html[data-skin="aibou"] [data-mode="me"]        { --accent: #d1417a; --glow: rgba(209, 65, 122, 0.14);  --glow-strong: rgba(209, 65, 122, 0.22); }
 
-/* 星空のバックドロップはライトでは出さない（JS側でも描画を止めている） */
-html[data-skin="aibou"] .forge-backdrop { display: none; }
+/* 背景を出すかどうかは data-bg が決める（テーマとは別の設定になった）。
+   ライトのテーマでも「星空」を選べる——前はここで隠していたので、
+   選んでも出なかった。 */
 
 /* キャンバス（作った物を出す面）
    スマホでは入力欄のぶんを空けて上にかぶせる（高さは実測して inline で
@@ -878,18 +879,8 @@ html[data-skin="emerald"] {
   --tint: rgba(212, 175, 55, 0.10);
 
   background-color: var(--bg);
-  /* 模様：金の細い綾＋四隅を黒へ落とす。
-     緑を一面に敷くと平らに見えるので、黒を混ぜて奥行きを作り、
-     その上に金の線を通す——エメラルド×金×黒の三色で組む。 */
-  background-image:
-    repeating-linear-gradient(45deg,
-      rgba(212, 175, 55, 0.075) 0 1px, transparent 1px 30px),
-    repeating-linear-gradient(-45deg,
-      rgba(212, 175, 55, 0.055) 0 1px, transparent 1px 30px),
-    radial-gradient(900px 540px at 50% -12%, rgba(60, 210, 160, 0.22), transparent 62%),
-    radial-gradient(1200px 900px at 50% 50%, rgba(6, 60, 48, 0.55), transparent 70%),
-    radial-gradient(1400px 1000px at 50% 120%, #010b09, transparent 66%);
-  background-attachment: fixed;
+  /* 模様は data-bg が持つ（背景はテーマと別の設定になったので、
+     「緑の色で星空」も選べる）。下の html[data-bg="emerald"] を見る。 */
 }
 
 /* 金の枠は、ただの線より「縁」に見せたい。内側に細いハイライトを1本
@@ -904,7 +895,198 @@ html[data-skin="emerald"] .glass-silver {
     0 2px 10px rgba(0, 0, 0, 0.45);
 }
 
-html[data-skin="emerald"] .forge-backdrop { display: none; }
+/* ═══════════════════════════════════════════════════════════════════
+   背景（data-bg）— テーマ（色）とは別の設定。
+
+   ほとんどの背景は canvas が描くので、ここには**CSSだけで出す背景**と
+   「canvas を隠す／出す」の判断だけを書く。canvas 側（Backdrop3D）も
+   同じ data-bg を見ているので、二重に持たない。
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* canvas が何も描かない背景では、要素ごと出さない。
+   （中身が空でも、全画面の要素が1枚あると合成の対象にはなる） */
+html[data-bg="plain"] .forge-backdrop,
+html[data-bg="emerald"] .forge-backdrop,
+html[data-bg="user-flat"] .forge-backdrop { display: none; }
+
+/* 金の綾。緑を一面に敷くと平らに見えるので、黒を混ぜて奥行きを作り、
+   その上に金の線を通す——エメラルド×金×黒の三色で組む。 */
+html[data-bg="emerald"] {
+  background-image:
+    repeating-linear-gradient(45deg,
+      rgba(212, 175, 55, 0.075) 0 1px, transparent 1px 30px),
+    repeating-linear-gradient(-45deg,
+      rgba(212, 175, 55, 0.055) 0 1px, transparent 1px 30px),
+    radial-gradient(900px 540px at 50% -12%, rgba(60, 210, 160, 0.22), transparent 62%),
+    radial-gradient(1200px 900px at 50% 50%, rgba(6, 60, 48, 0.55), transparent 70%),
+    radial-gradient(1400px 1000px at 50% 120%, #010b09, transparent 66%);
+  background-attachment: fixed;
+}
+
+/* 自分の画像を、そのまま敷く。
+   canvas も requestAnimationFrame も使わない——いちばん軽い背景。
+
+   膜（--veil）を画像の**上**に重ねる。写真は明るい所を持っていることが
+   多く、そのままだと上に載る文字が読めなくなる（送ってもらった銀の
+   画像で実際に起きた）。濃さは設定で変えられる。 */
+html[data-bg="user-flat"] {
+  background-image:
+    linear-gradient(
+      rgba(var(--veil-color, 0, 0, 0), var(--veil, 0.35)),
+      rgba(var(--veil-color, 0, 0, 0), var(--veil, 0.35))
+    ),
+    var(--user-bg, none);
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   RETRO（ドット）— 昔のRPGのメッセージウィンドウ。
+
+   「ドットらしさ」は字を替えるだけでは出ない。昔の画面がそう見えるのは、
+   **角が無く・枠が太く・影がぼけない**から。この3つを全部やる。
+
+     ・角丸を0にする（rounded-forge が446か所にあるので、まとめて潰す）
+     ・枠は2本線（外に白、内に細い線）＝あの窓の正体
+     ・影はぼかさない。ずらした黒を置くだけ（box-shadow の3つ目を0に）
+     ・字は等幅で字間を開ける。日本語のドット字は配らない（数百KBになる）
+       ——形と枠だけで十分に伝わるし、その重さは背景1枚より大きい
+   ═══════════════════════════════════════════════════════════════════ */
+html[data-skin="retro"] {
+  --bg: #0d0d20;
+  --bg2: #12123a;
+  --panel: #10102e;            /* 面はベタ。半透明ガラスは昔の画面に無い */
+  --panel-bd: #ffffff;
+  --fg: #e8e8ff;
+  --fg-strong: #ffffff;
+  --muted: #9a9ad0;
+  --muted-rgb: 154 154 208;
+  --line: #ffffff;
+  --glow: rgba(255, 210, 63, 0.28);
+  --glow-strong: rgba(255, 210, 63, 0.5);
+  --accent: #ffd23f;           /* 選んでいる所＝金（あのカーソルの色） */
+  --input-bg: #0a0a22;
+  --input-bd: #ffffff;
+  --btn-bg: #1a1a44;
+  --btn-bd: #ffffff;
+  --shadow: rgba(0, 0, 0, 1);
+  --chrome: #0d0d20;
+  --chrome-2: #10102e;
+  --tint: rgba(255, 210, 63, 0.16);
+
+  background-color: var(--bg);
+}
+
+/* 角を全部落とす。Tailwind の角丸も含めてまとめて潰す
+   （個々の className を書き換えると 400 か所を触ることになる）。 */
+html[data-skin="retro"] *,
+html[data-skin="retro"] *::before,
+html[data-skin="retro"] *::after {
+  border-radius: 0 !important;
+}
+/* 丸くないと意味が通らない物だけ戻す（コアの丸・状態の点・アバター）。 */
+html[data-skin="retro"] .keep-round,
+html[data-skin="retro"] .rounded-full {
+  border-radius: 9999px !important;
+}
+
+/* あのメッセージウィンドウ。外の白枠と、内側のもう1本。 */
+html[data-skin="retro"] .panel,
+html[data-skin="retro"] .glass-silver {
+  background: var(--panel);
+  border: 2px solid var(--panel-bd);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow:
+    inset 0 0 0 1px #10102e,
+    inset 0 0 0 3px rgba(255, 255, 255, 0.55),
+    4px 4px 0 0 rgba(0, 0, 0, 0.75);   /* ぼかさない影＝ドットの立体感 */
+}
+html[data-skin="retro"] .glass-silver::before { display: none; }
+
+/* ── 字 ────────────────────────────────────────────────────────────
+   本文は等幅にして字間を開ける。日本語のドット字（DotGothic16 など）は
+   配らない——数百KBあり、背景の画像より重い。それだけ払っても、字が
+   出るのは画面の一部分。形と枠のほうが効く。
+
+   見出しと短い英字ラベルだけ、本物のドット字（Press Start 2P）にする。
+   この字は同じ px 数でも横幅が倍近くあるので、長いラベルには使わない
+   （枠から出る）。落ちてくるのはレトロを選んだ人の端末だけ。 */
+html[data-skin="retro"] {
+  font-family: var(--font-share-tech-mono), ui-monospace, "MS Gothic", monospace;
+}
+html[data-skin="retro"] .label-mono {
+  font-family: var(--font-share-tech-mono), ui-monospace, "MS Gothic", monospace;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+html[data-skin="retro"] h1,
+html[data-skin="retro"] h2,
+html[data-skin="retro"] h3,
+html[data-skin="retro"] .brand-sub {
+  font-family: var(--font-pixel), var(--font-share-tech-mono), ui-monospace, monospace;
+  /* この字は字面が大きいので、1割ほど詰めないと見出しだけ飛び出す */
+  font-size: 0.88em;
+  letter-spacing: 0.04em;
+  line-height: 1.6;
+  text-transform: uppercase;
+}
+
+/* 光はぼかさず、ずらした影で出す（にじむ光は昔の画面に出せない）。 */
+html[data-skin="retro"] .text-glow {
+  text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.9);
+}
+html[data-skin="retro"] .glow,
+html[data-skin="retro"] .shadow-glow {
+  box-shadow: 3px 3px 0 0 rgba(0, 0, 0, 0.75) !important;
+}
+html[data-skin="retro"] .divider {
+  background: repeating-linear-gradient(90deg,
+    var(--panel-bd) 0 4px, transparent 4px 8px);
+}
+html[data-skin="retro"] .forge-ambient { display: none; }
+
+/* ボタンは押せる板に見せる（左上が明るく、右下が暗い＝あの立体感）。 */
+html[data-skin="retro"] button:not(.plain) {
+  box-shadow:
+    inset 1px 1px 0 0 rgba(255, 255, 255, 0.45),
+    inset -1px -1px 0 0 rgba(0, 0, 0, 0.55);
+}
+html[data-skin="retro"] button:not(.plain):active {
+  box-shadow:
+    inset -1px -1px 0 0 rgba(255, 255, 255, 0.30),
+    inset 1px 1px 0 0 rgba(0, 0, 0, 0.6);
+  transform: translate(1px, 1px);
+}
+
+/* 画像は補間せず、画素のまま拡大する（ドットの背景がぼやけない）。 */
+html[data-skin="retro"] .forge-backdrop,
+html[data-bg="retro"] .forge-backdrop {
+  image-rendering: pixelated;
+}
+
+html[data-skin="retro"] option {
+  background: #10102e !important;
+  color: #ffffff !important;
+}
+html[data-skin="retro"] .md pre,
+html[data-skin="retro"] .md code {
+  background: #0a0a22;
+  color: #e8e8ff;
+  border-color: var(--panel-bd);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   CUSTOM（自分で決める）— 色は lib/skin.ts が流し込む。
+
+   ここに書けるのは「色が決まった後の組み立て方」だけ。トークン名は
+   他のテーマと同じなので、各画面から見れば区別がない。
+   ═══════════════════════════════════════════════════════════════════ */
+html[data-skin="custom"] {
+  background-color: var(--bg);
+}
 
 /* ── 滑らかさ ──────────────────────────────────────────────────────
    スマホで「ぬるっと」感じるかどうかは、描画の速さより**引っかかりの

@@ -17,7 +17,8 @@
  * いるのか背景なのか分からなくなる。
  */
 
-import type { Skin } from "@/lib/skin";
+import { mix, parseHex, toHex, type Rgb } from "@/lib/color";
+import { readCustomTheme, type CustomTheme, type Skin } from "@/lib/skin";
 
 export interface CorePalette {
   /** 外側のにじみ（中心→外）。 */
@@ -97,14 +98,73 @@ const CYBER: CorePalette = {
   ringLight: "232,238,248",
 };
 
-const BY_SKIN: Record<Skin, CorePalette> = {
+/**
+ * レトロ。**色数を減らす**のがこのテーマの肝。
+ *
+ * 昔の機械は同時に出せる色が十数色しかなく、その制約が「ドットらしさ」
+ * そのものになっている。なめらかな階調を並べると、粗いだけの絵になる。
+ * だから中間色を作らず、白・水色・青・紺の4段でぶつ切りにする。
+ */
+const RETRO: CorePalette = {
+  bloomIn: "255,255,255",
+  bloomMid: "92,220,255",
+  bloomOut: "48,96,220",
+  ping: "255,210,63",
+  body: [
+    "rgba(255,255,255,1)",
+    "rgba(255,255,255,1)",     // 同じ色を続けて「段」を作る（中間色を作らない）
+    "rgba(92,220,255,1)",
+    "rgba(92,220,255,1)",
+    "rgba(48,96,220,1)",
+    "rgba(16,16,48,1)",
+  ],
+  shell: "255,255,255",
+  shellHot: "255,210,63",
+  ring: "255,255,255",
+  ringLight: "92,220,255",
+};
+
+const BY_SKIN: Record<Exclude<Skin, "custom">, CorePalette> = {
   cyber: CYBER,
   emerald: EMERALD,
   forge: FORGE,
   // 白い画面では、黒っぽい玉のままだと浮くので FORGE をそのまま使う
   // （元からそうしていた。ここで変えると今の見た目が変わってしまう）。
   aibou: FORGE,
+  retro: RETRO,
 };
+
+/**
+ * カスタムの配色を、選ばれた枠の色から作る。
+ *
+ * コアの色まで人に決めさせると設定が終わらないので、枠の色（＝その人が
+ * 「この画面の色」と決めた色）から光を作る。中心は白のまま——地の色で
+ * 光らせると、光っているのか背景なのか分からなくなる。
+ */
+export function customCorePalette(theme: CustomTheme): CorePalette {
+  const frame = parseHex(theme.frame) ?? ({ r: 143, g: 182, b: 255 } as Rgb);
+  const bg = parseHex(theme.bg) ?? ({ r: 16, g: 16, b: 24 } as Rgb);
+  const ch = (c: Rgb) => `${Math.round(c.r)},${Math.round(c.g)},${Math.round(c.b)}`;
+  const white = { r: 255, g: 255, b: 255 } as Rgb;
+  return {
+    bloomIn: "255,255,255",
+    bloomMid: ch(mix(frame, white, 0.35)),
+    bloomOut: ch(frame),
+    ping: ch(mix(frame, white, 0.2)),
+    body: [
+      "rgba(255,255,255,1)",
+      `${toHex(mix(white, frame, 0.12))}`,
+      `${toHex(mix(white, frame, 0.45))}`,
+      `${toHex(mix(frame, bg, 0.35))}`,
+      `${toHex(mix(frame, bg, 0.78))}`,
+      `${toHex(mix(bg, { r: 0, g: 0, b: 0 } as Rgb, 0.4))}`,
+    ],
+    shell: ch(mix(frame, white, 0.5)),
+    shellHot: "255,255,255",
+    ring: ch(mix(frame, white, 0.3)),
+    ringLight: ch(mix(frame, white, 0.55)),
+  };
+}
 
 /**
  * いまのスキンの配色。
@@ -112,14 +172,23 @@ const BY_SKIN: Record<Skin, CorePalette> = {
  * `data-skin` が読めない場所（SSR・テストのjsdom等）では既定を返す。
  * ここで例外を投げると、コアが描けずに画面の真ん中が空く。
  */
-export function corePalette(skin?: Skin): CorePalette {
-  if (skin) return BY_SKIN[skin] ?? CYBER;
-  try {
-    const s = document.documentElement.dataset.skin as Skin | undefined;
-    return (s && BY_SKIN[s]) || CYBER;
-  } catch {
-    return CYBER;
+export function corePalette(skin?: Skin, custom?: CustomTheme): CorePalette {
+  let s = skin;
+  if (!s) {
+    try {
+      s = document.documentElement.dataset.skin as Skin | undefined;
+    } catch {
+      s = undefined;
+    }
   }
+  if (s === "custom") {
+    try {
+      return customCorePalette(custom ?? readCustomTheme());
+    } catch {
+      return CYBER;
+    }
+  }
+  return (s && BY_SKIN[s as Exclude<Skin, "custom">]) || CYBER;
 }
 
-export { CYBER, EMERALD, FORGE };
+export { CYBER, EMERALD, FORGE, RETRO };

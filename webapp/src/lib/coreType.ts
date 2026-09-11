@@ -17,6 +17,7 @@ export const CORE_TYPES: { key: CoreType; label: string; hint: string }[] = [
   { key: "hex", label: "ヘックス球", hint: "六角の鱗。光の帯がゆっくり流れる" },
   { key: "crystal", label: "クリスタル", hint: "放射状に爆ぜた結晶" },
   { key: "portal", label: "リング", hint: "光の輪。正面と真横を行き来する" },
+  { key: "pixel", label: "ドット", hint: "昔のゲームの球。色数を減らし、カクカク動く" },
 ];
 
 export const DEFAULT_CORE_TYPE: CoreType = "orb";

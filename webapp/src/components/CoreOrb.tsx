@@ -20,10 +20,32 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { SHAPE_DRAWERS, type ShapeCtx } from "@/lib/coreShapes";
+import type { SHAPE_DRAWERS, ShapeCtx } from "@/lib/coreShapes";
 import { CORE_TYPE_EVENT, readCoreType, type CoreType } from "@/lib/coreType";
 import { corePalette } from "@/lib/coreSkin";
-import { DEFAULT_SKIN, type Skin } from "@/lib/skin";
+import { CUSTOM_THEME_EVENT, DEFAULT_SKIN, type Skin } from "@/lib/skin";
+
+/**
+ * コアの形の描画コードは、**選ばれるまで読み込まない**。
+ *
+ * 既定の玉（orb）はこのファイルが持っているので、開いた瞬間に必ず出る。
+ * 他の形は 16KB ぶんの計算コードがあり、使わない人には要らない。
+ *
+ * 一度読んだら覚えておく（形を行き来するたびに読み直さない）。
+ */
+type Drawers = typeof SHAPE_DRAWERS;
+let shapeCache: Drawers | null = null;
+let shapeLoading: Promise<Drawers> | null = null;
+
+export function loadShapes(): Promise<Drawers> {
+  if (shapeCache) return Promise.resolve(shapeCache);
+  // 同じ瞬間に複数のコアが要求しても、読み込みは1回にまとめる
+  shapeLoading ??= import("@/lib/coreShapes").then((m) => {
+    shapeCache = m.SHAPE_DRAWERS;
+    return shapeCache;
+  });
+  return shapeLoading;
+}
 
 export type CoreState = "idle" | "listening" | "speaking" | "thinking";
 
@@ -38,6 +60,14 @@ export interface CoreOrbProps {
    * 設定画面の見本のように「この形を出したい」ときだけ明示する。
    */
   type?: CoreType;
+  /**
+   * 1コマだけ描いて止める。
+   *
+   * 設定の一覧用。前は見本も本物と同じように 60fps で回していたので、
+   * 一覧を開くだけで canvas が同時に何枚も回り、そのぶん重くなっていた
+   * （形が増えるほど悪化する）。見本に動きは要らない。
+   */
+  still?: boolean;
 }
 
 interface Tune {
@@ -72,7 +102,9 @@ const RINGS = [
 
 const PERSPECTIVE = 3.4;
 
-export default function CoreOrb({ size = 140, state = "idle", className = "", type }: CoreOrbProps) {
+export default function CoreOrb({
+  size = 140, state = "idle", className = "", type, still = false,
+}: CoreOrbProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const stateRef = useRef<CoreState>(state);
   stateRef.current = state;
@@ -88,10 +120,25 @@ export default function CoreOrb({ size = 140, state = "idle", className = "", ty
   }, [type]);
   const kind: CoreType = type ?? saved;
 
+  /* 玉以外の形は、選ばれてから読み込む。届くまでは玉を描いておく——
+     読み込み中に何も描かないと、真ん中がぽっかり空いて壊れて見える。 */
+  const [drawers, setDrawers] = useState<Drawers | null>(shapeCache);
+  useEffect(() => {
+    if (kind === "orb" || shapeCache) { setDrawers(shapeCache); return; }
+    let alive = true;
+    loadShapes().then((d) => { if (alive) setDrawers(d); }).catch(() => {
+      /* 読めなければ玉のまま。形が出ないだけで、アプリは動く */
+    });
+    return () => { alive = false; };
+  }, [kind]);
+
   /* コアの光の色。CSS変数は canvas に届かないので、スキンごとの配色を
      ここで1回選ぶ（毎フレーム getComputedStyle を呼ぶと、描画のたびに
      版組みが走る）。スキンを切り替えたら選び直す。 */
   const [skin, setSkinName] = useState<Skin>(DEFAULT_SKIN);
+  /* カスタムの色は data-skin を変えずに動くので、属性の監視では気づけない。
+     色を保存したときのイベントで、この数を進めて描き直す。 */
+  const [paintKey, setPaintKey] = useState(0);
   useEffect(() => {
     const read = () => setSkinName(
       (document.documentElement.dataset.skin as Skin) || DEFAULT_SKIN);
@@ -99,7 +146,9 @@ export default function CoreOrb({ size = 140, state = "idle", className = "", ty
     // data-skin は setSkin() が書き換えるだけなので、属性を見張る
     const mo = new MutationObserver(read);
     mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-skin"] });
-    return () => mo.disconnect();
+    const onCustom = () => setPaintKey((n) => n + 1);
+    window.addEventListener(CUSTOM_THEME_EVENT, onCustom);
+    return () => { mo.disconnect(); window.removeEventListener(CUSTOM_THEME_EVENT, onCustom); };
   }, []);
 
   useEffect(() => {
@@ -141,7 +190,9 @@ export default function CoreOrb({ size = 140, state = "idle", className = "", ty
       px = (e.clientX / window.innerWidth) * 2 - 1;
       py = (e.clientY / window.innerHeight) * 2 - 1;
     };
-    window.addEventListener("pointermove", onPointer, { passive: true });
+    /* 止まった絵は指を追わない。付けたままだと、設定の一覧を開いている間
+       ずっと、指を動かすたびに見本の数だけ関数が呼ばれる。 */
+    if (!still) window.addEventListener("pointermove", onPointer, { passive: true });
 
     let raf = 0;
     let last = performance.now();
@@ -179,11 +230,11 @@ export default function CoreOrb({ size = 140, state = "idle", className = "", ty
       };
 
       // 既定のコア以外は、形ごとの描画に任せる（舞台づくりはここが持つ）。
-      const drawer = kind === "orb" ? null : SHAPE_DRAWERS[kind];
+      const drawer = kind === "orb" ? null : drawers?.[kind];
       if (drawer) {
         const shapeCtx: ShapeCtx = {
           ctx, cx, cy, size, t, pulse,
-          glow: live.glow, cyan: live.cyan, project,
+          glow: live.glow, cyan: live.cyan, project, pal,
         };
         drawer(shapeCtx);
         return;
@@ -324,9 +375,12 @@ export default function CoreOrb({ size = 140, state = "idle", className = "", ty
       }
     };
 
-    if (reduce) {
-      // Static single frame — no animation loop.
-      draw(last + 16);
+    if (reduce || still) {
+      /* 静止画を1枚。
+         ただし t=0 の姿は、形によっては一番つまらない所（リングが真横、
+         結晶が正面）に当たる。dt は1回あたり 0.05 秒で頭打ちなので、
+         **何度か呼んで**少し進めた姿を描く（呼ぶ先は同じ絵なので安い）。 */
+      for (let i = 1; i <= (still ? 8 : 1); i++) draw(last + i * 50);
       return () => window.removeEventListener("pointermove", onPointer);
     }
 
@@ -350,7 +404,7 @@ export default function CoreOrb({ size = 140, state = "idle", className = "", ty
       document.removeEventListener("visibilitychange", onVis);
       window.removeEventListener("pointermove", onPointer);
     };
-  }, [size, kind, skin]);
+  }, [size, kind, skin, drawers, still, paintKey]);
 
   const stagePx = Math.ceil(size * 1.4);
   return (

@@ -132,12 +132,14 @@ test("Chat: history toggle opens the panel", async ({ page }) => {
 
 
 /* ── 見た目（スキン）の切り替え ─────────────────────────────────── */
-test("Settings CORE has the theme picker with every skin", async ({ page }) => {
+test("Settings 見た目 has the theme picker with every skin", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
   await page.getByLabel("Settings").click();
-  await expect(page.getByText("見た目（テーマ）")).toBeVisible({ timeout: 5_000 });
-  for (const name of [/CYBER（紺）/, /EMERALD（緑金）/, /FORGE（宇宙）/, /AIbou（ライト）/]) {
+  await page.getByRole("button", { name: "見た目" }).click();
+  await expect(page.getByText("画面のテーマ")).toBeVisible({ timeout: 5_000 });
+  for (const name of [/CYBER（紺）/, /EMERALD（緑金）/, /FORGE（宇宙）/, /AIbou（ライト）/,
+                    /RETRO（ドット）/, /CUSTOM（自分で）/]) {
     await expect(page.getByRole("button", { name })).toBeVisible();
   }
 });
@@ -155,10 +157,11 @@ test("既定は CYBER（紺）", async ({ page }) => {
   expect(got.theme).toBe("#080e20");
 });
 
-test("4つのスキンを切り替えると、地の色も文字色も変わる", async ({ page }) => {
+test("テーマを切り替えると、地の色も文字色も変わる", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
   await page.getByLabel("Settings").click();
+  await page.getByRole("button", { name: "見た目" }).click();
 
   const look = () => page.evaluate(() => {
     const cs = getComputedStyle(document.documentElement);
@@ -174,6 +177,7 @@ test("4つのスキンを切り替えると、地の色も文字色も変わる"
     [/EMERALD（緑金）/, "emerald", "rgb(3, 32, 26)", "#03201a"],
     [/FORGE（宇宙）/, "forge", "rgb(10, 11, 15)", "#0a0b0f"],
     [/AIbou（ライト）/, "aibou", "rgb(244, 245, 253)", "#f4f5fd"],
+    [/RETRO（ドット）/, "retro", "rgb(13, 13, 32)", "#0d0d20"],
     [/CYBER（紺）/, "cyber", "rgb(8, 14, 32)", "#080e20"],
   ] as const) {
     await page.getByRole("button", { name }).click();
@@ -189,6 +193,7 @@ test("暗い3つは、文字が白（頼まれた通り）", async ({ page }) =>
   await page.goto("/");
   await enterApp(page);
   await page.getByLabel("Settings").click();
+  await page.getByRole("button", { name: "見た目" }).click();
   for (const name of [/CYBER（紺）/, /EMERALD（緑金）/]) {
     await page.getByRole("button", { name }).click();
     const fg = await page.evaluate(() =>
@@ -225,6 +230,7 @@ test("Settings CORE has the core-shape picker and it persists", async ({ page })
   await page.goto("/");
   await enterApp(page);
   await page.getByLabel("Settings").click();
+  await page.getByRole("button", { name: "見た目" }).click();
   await expect(page.getByText("コアの形")).toBeVisible({ timeout: 5_000 });
   // 見本は実物のコアを小さく描いている（静止画ではない）
   await expect(page.getByRole("button", { name: "ピラミッド" })).toBeVisible();
@@ -234,6 +240,7 @@ test("Settings CORE has the core-shape picker and it persists", async ({ page })
   await page.reload({ waitUntil: "domcontentloaded" });
   await enterApp(page);
   await page.getByLabel("Settings").click();
+  await page.getByRole("button", { name: "見た目" }).click();
   await expect(page.getByRole("button", { name: "クリスタル" })).toHaveAttribute("aria-pressed", "true");
 });
 
@@ -243,6 +250,7 @@ test("A broken saved core shape falls back to the default", async ({ page }) => 
   await page.reload({ waitUntil: "domcontentloaded" });
   await enterApp(page);
   await page.getByLabel("Settings").click();
+  await page.getByRole("button", { name: "見た目" }).click();
   await expect(page.getByRole("button", { name: "コア", exact: true })).toHaveAttribute("aria-pressed", "true");
 });
 
@@ -301,7 +309,7 @@ test("Settings gear icon is clickable and opens panel", async ({ page }) => {
   await expect(page.getByText("CORE SETTINGS")).toBeVisible({ timeout: 5_000 });
 });
 
-test("Settings panel has 5 tabs", async ({ page }) => {
+test("Settings panel has 6 tabs", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
   await page.getByLabel("Settings").click();
@@ -310,6 +318,7 @@ test("Settings panel has 5 tabs", async ({ page }) => {
   await expect(page.getByText("KEYCHAIN", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "HF" })).toBeVisible();
   await expect(page.getByText("DIAGNOSTICS", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "見た目" })).toBeVisible();
 });
 
 test("Settings HF tab explains it needs the backend when offline", async ({ page }) => {

@@ -1,26 +1,40 @@
 "use client";
 
 /**
- * Backdrop3D — full-screen 3D environment behind the HUD.
+ * Backdrop3D — 画面のいちばん後ろ。
  *
- * A depth-layered starfield (near stars drift & parallax faster than far
- * ones) over a perspective grid floor that scrolls slowly toward the viewer,
- * like a holodeck. Pointer-parallax leans the whole field so the UI reads as
- * a window into 3D space. Kept below content contrast — present but never
- * fighting the panels.
+ * 何を描くかは**背景の設定**で決まる（テーマの色とは別の設定）。
  *
- * Sky events: every so often a real constellation (北斗七星・カシオペヤ・
- * オリオン・はくちょう・こと座) fades in at a random spot/rotation, holds,
- * and dissolves; meteors (流れ星) streak across the upper sky on a random
- * cadence — occasionally a long bright one.
+ *   water-*   … 水たまり。触ると波が立つ。底に敷く絵で3種類
+ *   stars     … 星空・流れ星・星座＋奥へ伸びる格子の床（THE FORGE OS）
+ *   retro     … 昔のゲームの夜空（粗い画素のまま拡大する）
+ *   その他    … canvas は何も描かない（CSS だけで見せる／無地）
  *
- * Pure 2D-canvas (no WebGL). Static frame under prefers-reduced-motion
- * (one constellation shown, no meteors); pauses while the tab is hidden;
- * DPR capped at 2.
+ * 重さの決まりごと
+ * ----------------
+ * ① **描く物が無いときは、ループを回さない。**
+ *    前は白いテーマでも「消して抜ける」だけの処理が毎秒60回走っていた。
+ *    見た目は同じでも、電池はそのぶん減る。
+ * ② **使わない素材は取りに行かない。**
+ *    前は背景の画像（118KB）を、紺のテーマを使っていない人にも
+ *    毎回配っていた。いまは水＋画像の背景を選んだときだけ落とす。
+ * ③ 速さを実測して、足りなければ水を粗くする（下の adapt）。
+ *
+ * Pure 2D-canvas（WebGL は使わない）。動きを減らす設定では静止画にし、
+ * タブが隠れている間は止める。
  */
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { QUALITY_STEPS, Water, imageFloor } from "@/lib/water";
+import { RetroSky } from "@/lib/retroSky";
+import { loadCachedImage } from "@/lib/assetCache";
+import { getUserImage, loadUserImage } from "@/lib/imageStore";
+import {
+  BACKGROUND_EVENT, applyBackground, backgroundDef, readBackground,
+  resolveBackground, type BackgroundKey,
+} from "@/lib/background";
+import { CUSTOM_THEME_EVENT, DEFAULT_SKIN, readCustomTheme, type Skin } from "@/lib/skin";
+import { isLight, parseHex } from "@/lib/color";
 
 /* ── Constellation shapes (normalized coords + edge lists) ─────────── */
 interface ConstShape { name: string; pts: [number, number][]; edges: [number, number][] }
@@ -67,7 +81,7 @@ interface Meteor {
 /**
  * 星空とグリッドの色。
  *
- * cyber は「シルバーで光る」ことがそのスキンの肝なので、青みを抜いて
+ * cyber は「シルバーで光る」ことがそのテーマの肝なので、青みを抜いて
  * 灰白へ寄せる。ここを青のままにすると、コアだけシルバーで背景が青くなり、
  * ちぐはぐに見える。
  */
@@ -95,12 +109,94 @@ const WATER_COLORS = {
   sheen: [198, 212, 238] as [number, number, number], // 波の照り＝シルバー
 };
 
+/**
+ * いま実際に描く背景を決めて、<html data-bg> に立てる。
+ *
+ * 決め手が3つある（テーマ・背景の設定・自分の画像があるか）ので、
+ * ここ1か所で合流させる。CSS だけで見せる背景（金の綾・自分の画像）も
+ * 同じ属性を見ているので、canvas と CSS がずれない。
+ */
+function useResolvedBackground(): BackgroundKey {
+  // SSR と最初の1コマは「何も描かない」から始める。存在しない背景を
+  // 一瞬描いてから消すより、出てこないほうが目に障らない。
+  const [key, setKey] = useState<BackgroundKey>("plain");
+
+  useEffect(() => {
+    let alive = true;
+    let objectUrl: string | null = null;
+
+    const recompute = async () => {
+      const skin = (document.documentElement.dataset.skin as Skin) || DEFAULT_SKIN;
+      const choice = readBackground();
+      // 1回だけ開く。「あるか」と「中身」で2回開くと、切り替えのたびに
+      // IndexedDB を開け閉てすることになる
+      const rec = await getUserImage();
+      if (!alive) return;
+      const resolved = resolveBackground(skin, choice, rec !== null);
+      applyBackground(resolved);
+
+      /* 「自分の画像をそのまま敷く」だけは CSS が描く（canvas も
+         requestAnimationFrame も要らない＝いちばん軽い）。画像の在処を
+         CSS 変数で渡す。 */
+      if (objectUrl) { URL.revokeObjectURL(objectUrl); objectUrl = null; }
+      if (resolved === "user-flat") {
+        if (rec) {
+          objectUrl = URL.createObjectURL(rec.blob);
+          const el = document.documentElement;
+          el.style.setProperty("--user-bg", `url(${objectUrl})`);
+          /* 膜の濃さは、テーマが custom でなくても効かせる。
+             自分の画像は他のテーマの色でも使えるので、ここで立てないと
+             「濃さのつまみが効かない背景」ができてしまう。 */
+          const t = readCustomTheme();
+          el.style.setProperty("--veil", String(t.veil));
+          el.style.setProperty("--veil-color", isLight(parseHex(t.bg) ?? { r: 0, g: 0, b: 0 })
+            ? "255,255,255" : "0,0,0");
+        }
+      } else {
+        document.documentElement.style.removeProperty("--user-bg");
+      }
+
+      setKey(resolved);
+    };
+
+    void recompute();
+    const onBg = () => { void recompute(); };
+    window.addEventListener(BACKGROUND_EVENT, onBg);
+    // 膜の濃さを動かしたら、その場で効かせる（設定を閉じるまで待たせない）
+    window.addEventListener(CUSTOM_THEME_EVENT, onBg);
+    // テーマを変えると、背景が「おまかせ」の人はそれに追従する
+    const mo = new MutationObserver(() => { void recompute(); });
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-skin"] });
+
+    return () => {
+      alive = false;
+      window.removeEventListener(BACKGROUND_EVENT, onBg);
+      window.removeEventListener(CUSTOM_THEME_EVENT, onBg);
+      mo.disconnect();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, []);
+
+  return key;
+}
+
 export default function Backdrop3D() {
   const ref = useRef<HTMLCanvasElement | null>(null);
+  const bg = useResolvedBackground();
 
   useEffect(() => {
     const canvas = ref.current;
     if (!canvas) return;
+    const def = backgroundDef(bg);
+
+    /* ① 描く物が無いなら、ここで終わる。
+       canvas を1回消すだけで、requestAnimationFrame は1度も回さない。 */
+    if (def.render === "none") {
+      const c = canvas.getContext("2d");
+      if (c) c.clearRect(0, 0, canvas.width, canvas.height);
+      return;
+    }
+
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
@@ -109,6 +205,20 @@ export default function Backdrop3D() {
 
     let w = 0, h = 0, dpr = 1;
     let stars: { x: number; y: number; z: number; tw: number; cyan: boolean }[] = [];
+
+    /* ② 要る物だけ作る。水を使わない背景で 16万点ぶんの配列を確保しない。 */
+    const water = def.render === "water"
+      ? new Water({
+          cell: QUALITY_STEPS[0],   // いちばん細かい所から始める
+          maxCells: 160000,         // 広い画面でも、これ以上は増やさない
+          damping: 0.988,
+          rainEvery: 1.9,
+          refract: 15,
+        })
+      : null;
+    const retro = def.render === "retro" ? new RetroSky() : null;
+    let qi = 0;                 // 粗さの段（0 が最も細かい）
+    const fitWater = () => water?.resize(w, h, QUALITY_STEPS[qi]);
 
     const resize = () => {
       dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -126,36 +236,31 @@ export default function Backdrop3D() {
         tw: (i % 11) / 11,
         cyan: i % 9 === 0,
       }));
+      retro?.resize(w, h);
     };
-    /* 紺（CYBER）の地は水たまり。高さを計算し、傾きで底をずらして拾う
-       （屈折）。細かいほど水らしくなるので、まず細かく張る。
-
-       ただし「細かい＝正解」ではない。弱い端末で 30fps になるくらいなら、
-       少し粗くて 60fps のほうが水に見える。だから**実測して自動で
-       粗くする**（下の adapt）。 */
-    const water = new Water({
-      cell: QUALITY_STEPS[0],   // いちばん細かい所から始める
-      maxCells: 160000,         // 広い画面でも、これ以上は増やさない
-      damping: 0.988,
-      rainEvery: 1.9,
-      refract: 15,
-    });
-    let qi = 0;                 // 粗さの段（0 が最も細かい）
-    const fitWater = () => water.resize(w, h, QUALITY_STEPS[qi]);
-
-    /* 底に敷く絵。
-       読み込めたら差し替える。読めなければ既定の床のまま——背景の画像が
-       出ないだけで、水は動く（画像1枚のために画面が止まるほうが困る）。 */
-    const floorImg = new Image();
-    floorImg.decoding = "async";
-    floorImg.onload = () => {
-      water.setFloor(imageFloor(floorImg, floorImg.naturalWidth, floorImg.naturalHeight));
-    };
-    floorImg.src = "/skin-cyber-floor.webp";
 
     resize();
     fitWater();
-    window.addEventListener("resize", () => { resize(); fitWater(); });
+    const onResize = () => { resize(); fitWater(); };
+    window.addEventListener("resize", onResize);
+
+    /* ③ 底に敷く絵は、**この背景が要るときだけ**取りに行く。
+       取れなければ既定の床（線の格子）のまま——背景の絵が出ないだけで、
+       水は動く。画像1枚のために画面を止めない。 */
+    let cancelled = false;
+    if (water && def.floor === "asset" && def.asset) {
+      void loadCachedImage(def.asset.url).then((img) => {
+        if (!cancelled && img) {
+          water.setFloor(imageFloor(img, img.naturalWidth, img.naturalHeight));
+        }
+      });
+    } else if (water && def.floor === "user") {
+      void loadUserImage().then((img) => {
+        if (!cancelled && img) {
+          water.setFloor(imageFloor(img, img.naturalWidth, img.naturalHeight));
+        }
+      });
+    }
 
     let px = 0, py = 0, lpx = 0, lpy = 0;
     let lastDropX = -999, lastDropY = -999;
@@ -164,7 +269,7 @@ export default function Backdrop3D() {
       py = (e.clientY / h) * 2 - 1;
       // 触った所に波を立てる。動かしている間は、少し離れるたびに1滴。
       // 毎イベント落とすと線ではなく帯になり、水に見えない。
-      if (document.documentElement.dataset.skin !== "cyber") return;
+      if (!water) return;
       const d = Math.hypot(e.clientX - lastDropX, e.clientY - lastDropY);
       if (d < 14) return;
       lastDropX = e.clientX;
@@ -175,7 +280,7 @@ export default function Backdrop3D() {
 
     // 押した瞬間は、はっきり大きく落とす（触れたことが伝わるように）
     const onDown = (e: PointerEvent) => {
-      if (document.documentElement.dataset.skin !== "cyber") return;
+      if (!water) return;
       lastDropX = e.clientX;
       lastDropY = e.clientY;
       water.drop(e.clientX, e.clientY, 2.2, 30);
@@ -322,25 +427,13 @@ export default function Backdrop3D() {
     };
 
     const draw = (now: number) => {
-      // 模様や白地を持つスキンでは、星空・グリッドを描かない。
-      //   aibou   … 白地に星を撒くとゴミのように見える
-      //   emerald … CSS の綾模様と重なって濁る
-      // 1枚消してから抜ける（CSS側でも .forge-backdrop を隠している）。
-      const skin = document.documentElement.dataset.skin;
-      if (skin === "aibou" || skin === "emerald") {
-        ctx.clearRect(0, 0, w, h);
-        last = now;
-        return;
-      }
+      const dt = Math.min((now - last) / 1000, 0.05);
+      last = now;
+      t += dt;
 
-      // 紺（CYBER）は水たまり。星もグリッドも出さない——水面に星が
-      // 浮いていると、水なのか空なのか分からなくなる。
-      if (skin === "cyber") {
-        const wdt = Math.min((now - last) / 1000, 0.05);
-        last = now;
-
+      if (water) {
         const t0 = performance.now();
-        water.step(wdt);
+        water.step(dt);
         water.render(ctx, w, h, WATER_COLORS);
         adapt(performance.now() - t0);
 
@@ -351,10 +444,17 @@ export default function Backdrop3D() {
         return;
       }
 
+      if (retro) {
+        retro.render(ctx, w, h, t);
+        // 水と同じ理由で、背景として後ろへ下げる。ドットの空をそのままの
+        // 明るさで出すと、上に載る文章と張り合って読みにくくなる。
+        ctx.fillStyle = "rgba(13, 13, 32, 0.34)";
+        ctx.fillRect(0, 0, w, h);
+        return;
+      }
+
+      const skin = document.documentElement.dataset.skin;
       const tone = backdropTint(skin);
-      const dt = Math.min((now - last) / 1000, 0.05);
-      last = now;
-      t += dt;
       lpx += (px - lpx) * Math.min(1, dt * 2.5);
       lpy += (py - lpy) * Math.min(1, dt * 2.5);
 
@@ -433,15 +533,21 @@ export default function Backdrop3D() {
       ctx.fillRect(0, horizon - 40, w, 70);
     };
 
+    const teardown = () => {
+      cancelled = true;
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("pointermove", onPointer);
+      window.removeEventListener("pointerdown", onDown);
+    };
+
     if (reduce) {
       // Static frame — include one fully-faded-in constellation, no meteors.
-      spawnConstellation();
-      if (activeConst) (activeConst as ActiveConst).born = t - 2;
+      if (def.render === "stars") {
+        spawnConstellation();
+        if (activeConst) (activeConst as ActiveConst).born = t - 2;
+      }
       draw(last + 16);
-      return () => {
-        window.removeEventListener("resize", resize);
-        window.removeEventListener("pointermove", onPointer);
-      };
+      return teardown;
     }
 
     const loop = (now: number) => {
@@ -462,10 +568,9 @@ export default function Backdrop3D() {
     return () => {
       cancelAnimationFrame(raf);
       document.removeEventListener("visibilitychange", onVis);
-      window.removeEventListener("resize", resize);
-      window.removeEventListener("pointermove", onPointer);
+      teardown();
     };
-  }, []);
+  }, [bg]);
 
   return (
     <canvas

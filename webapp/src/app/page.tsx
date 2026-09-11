@@ -20,7 +20,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AiProviderSettings from "@/components/AiProviderSettings";
 import HfModels from "@/components/HfModels";
-import { applySkin, readSkin, setSkin, SKINS, type Skin } from "@/lib/skin";
+import AppearanceSettings from "@/components/AppearanceSettings";
 import { CORE_TYPES, readCoreType, setCoreType, type CoreType } from "@/lib/coreType";
 import FeaturePacks from "@/components/FeaturePacks";
 import IntegrationsSettings from "@/components/IntegrationsSettings";
@@ -740,7 +740,23 @@ function GearIcon() {
 
 /* ─── Settings Panel (enhanced) ──────────────────────────────────── */
 
-type SettingsTab = "core" | "persona" | "keychain" | "hf" | "diagnostics";
+type SettingsTab = "core" | "look" | "persona" | "keychain" | "hf" | "diagnostics";
+
+/**
+ * タブの見出し。
+ *
+ * 幅は**中身に合わせる**（等分しない）。等分すると、いちばん長い
+ * DIAGNOSTICS が枠に入らず切れる。名前を縮めれば収まるが、押す物の名前が
+ * 変わるのは、見た目の話ではなく操作の話なので触らない。
+ */
+const SETTINGS_TABS: { key: SettingsTab; label: string }[] = [
+  { key: "core", label: "CORE" },
+  { key: "look", label: "見た目" },
+  { key: "persona", label: "PERSONA" },
+  { key: "keychain", label: "KEYCHAIN" },
+  { key: "hf", label: "HF" },
+  { key: "diagnostics", label: "DIAGNOSTICS" },
+];
 
 function SettingsPanel({
   initial,
@@ -844,27 +860,27 @@ function SettingsPanel({
 
         {/* Tab bar */}
         <div className="flex border-b border-panel">
-          {(["core", "persona", "keychain", "hf", "diagnostics"] as SettingsTab[]).map((t) => (
+          {SETTINGS_TABS.map((t) => (
             <button
-              key={t}
+              key={t.key}
               type="button"
-              onClick={() => setTab(t)}
-              className="flex-1 py-2.5 text-[9px] tracking-[0.12em] transition label-mono"
+              onClick={() => setTab(t.key)}
+              className="shrink-0 grow px-1.5 py-2.5 text-[9px] tracking-[0.1em] transition label-mono"
               style={{
-                color: tab === t ? "var(--fg-strong)" : "var(--muted)",
-                borderBottom: tab === t ? "2px solid var(--accent)" : "2px solid transparent",
+                color: tab === t.key ? "var(--fg-strong)" : "var(--muted)",
+                borderBottom: tab === t.key ? "2px solid var(--accent)" : "2px solid transparent",
               }}
             >
-              {t.toUpperCase()}
+              {t.label}
             </button>
           ))}
         </div>
 
         <div className="max-h-[60vh] overflow-y-auto p-5">
+          {tab === "look" && <AppearanceSettings />}
+
           {tab === "core" && (
             <>
-              <SkinSetting />
-              <CoreTypeSetting />
               <AiProviderSettings />
               {/* 使う機能の入り切り。連携（外と繋ぐ）より先に置く。
                   「何をする人か」を決めてから、繋ぐ物を選ぶ順のほうが迷わない。 */}
@@ -1233,121 +1249,9 @@ function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: (v: b
   );
 }
 
-/**
- * 見た目（スキン）の切り替え。反映は <html data-skin> の1属性で、
- * 色・面・角丸・ラベルの体裁は globals.css 側が持っている。
- * 選択肢には実際の配色の見本を出して、押す前に分かるようにする。
- */
-/**
- * コアの形の切り替え。見本は実物の CoreOrb をそのまま小さく描いているので、
- * 「押したらどう動くか」がその場で分かる（静止画のサムネイルではない）。
- */
-function CoreTypeSetting() {
-  const [kind, setKind] = useState<CoreType>("orb");
-  useEffect(() => { setKind(readCoreType()); }, []);
-
-  return (
-    <div className="mb-4 rounded-forge border border-panel p-3">
-      <div className="mb-2 text-[10px] tracking-[0.2em] text-muted label-mono">コアの形</div>
-      <div className="grid grid-cols-3 gap-2">
-        {CORE_TYPES.map((c) => {
-          const active = kind === c.key;
-          return (
-            <button
-              key={c.key}
-              type="button"
-              onClick={() => setKind(setCoreType(c.key))}
-              aria-pressed={active}
-              aria-label={c.label}
-              title={c.hint}
-              className="min-w-0 rounded-forge border p-1.5 text-center transition"
-              style={{
-                borderColor: active ? "var(--accent)" : "var(--panel-bd)",
-                background: active ? "var(--btn-bg)" : "transparent",
-              }}
-            >
-              <span className="mx-auto block h-[52px] w-[52px]">
-                <CoreOrb size={52} state="idle" type={c.key} />
-              </span>
-              <span className="mt-1 block truncate text-[9px] label-mono"
-                    style={{ color: active ? "var(--fg-strong)" : "var(--muted)" }}>
-                {c.label}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-      <p className="mt-1.5 text-[11px] leading-relaxed text-muted">
-        {CORE_TYPES.find((c) => c.key === kind)?.hint}
-      </p>
-    </div>
-  );
-}
-
-function SkinSetting() {
-  const [skin, setSkinState] = useState<Skin>("forge");
-
-  useEffect(() => {
-    const s = readSkin();
-    setSkinState(s);
-    applySkin(s);          // 保存値と実際の表示がずれないよう、開いた時に必ず揃える
-  }, []);
-
-  const pick = (next: Skin) => {
-    setSkinState(setSkin(next));
-  };
-
-  // 見本の色は、実際のトークンと同じ値を並べる（見本と中身がずれないように）
-  const SWATCH: Record<Skin, { bg: string; card: string; bd: string; ink: string; accent: string }> = {
-    cyber: { bg: "#080e20", card: "#111a33", bd: "#3d4a68", ink: "#ffffff", accent: "#cfd8ea" },
-    emerald: { bg: "#03201a", card: "#050e0c", bd: "#d4af37", ink: "#ffffff", accent: "#e7c65c" },
-    forge: { bg: "#0a0b0f", card: "#171a21", bd: "#3a3d45", ink: "#e8eaee", accent: "#00f3ff" },
-    aibou: { bg: "#f4f5fd", card: "#ffffff", bd: "#e3e6f5", ink: "#1b2440", accent: "#3b5bfd" },
-  };
-
-  return (
-    <div className="mb-4 rounded-forge border border-panel p-3">
-      <div className="mb-2 text-[10px] tracking-[0.2em] text-muted label-mono">見た目（テーマ）</div>
-      <div className="grid grid-cols-2 gap-2">
-        {SKINS.map((s) => {
-          const active = skin === s.key;
-          const c = SWATCH[s.key];
-          return (
-            <button
-              key={s.key}
-              type="button"
-              onClick={() => pick(s.key)}
-              aria-pressed={active}
-              title={s.hint}
-              className="min-w-0 rounded-forge border p-2 text-left transition"
-              style={{
-                borderColor: active ? "var(--accent)" : "var(--panel-bd)",
-                background: active ? "var(--btn-bg)" : "transparent",
-              }}
-            >
-              {/* 配色の見本（実際のトークンの色をそのまま並べる） */}
-              <span
-                className="mb-1.5 flex h-9 items-center gap-1 rounded-forge px-1.5"
-                style={{ background: c.bg, border: `1px solid ${c.bd}` }}
-                aria-hidden
-              >
-                <span className="h-5 flex-1 rounded" style={{ background: c.card, border: `1px solid ${c.bd}` }} />
-                <span className="h-5 w-1.5 rounded" style={{ background: c.accent }} />
-              </span>
-              <span className="block truncate text-[10px] label-mono" style={{ color: active ? "var(--fg-strong)" : "var(--muted)" }}>
-                {s.label}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-      <p className="mt-1.5 text-[11px] leading-relaxed text-muted">
-        {SKINS.find((s) => s.key === skin)?.hint}
-        ／ 画面の構成（モードの並びや操作）は変わりません。
-      </p>
-    </div>
-  );
-}
+/* 見た目の設定（テーマ・背景・コア）は components/AppearanceSettings.tsx に
+   移した。設定がテーマだけではなくなり、この画面に置いたままだと
+   page.tsx が「画面の骨組み」と「見た目の設定」の両方を持つことになる。 */
 
 function DiagRow({ label, value, ok }: { label: string; value: string; ok: boolean }) {
   return (
