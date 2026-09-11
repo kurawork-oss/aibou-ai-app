@@ -20,7 +20,7 @@
  */
 
 import { useEffect, useRef } from "react";
-import { Water } from "@/lib/water";
+import { QUALITY_STEPS, Water, imageFloor } from "@/lib/water";
 
 /* ── Constellation shapes (normalized coords + edge lists) ─────────── */
 interface ConstShape { name: string; pts: [number, number][]; edges: [number, number][] }
@@ -134,14 +134,24 @@ export default function Backdrop3D() {
        少し粗くて 60fps のほうが水に見える。だから**実測して自動で
        粗くする**（下の adapt）。 */
     const water = new Water({
-      cell: 3,          // ここから始める（いちばん細かい）
-      maxCells: 90000,  // 広い画面でも、これ以上は増やさない
+      cell: QUALITY_STEPS[0],   // いちばん細かい所から始める
+      maxCells: 160000,         // 広い画面でも、これ以上は増やさない
       damping: 0.988,
       rainEvery: 1.9,
       refract: 15,
     });
-    let waterCell = 3;
-    const fitWater = () => water.resize(w, h, waterCell);
+    let qi = 0;                 // 粗さの段（0 が最も細かい）
+    const fitWater = () => water.resize(w, h, QUALITY_STEPS[qi]);
+
+    /* 底に敷く絵。
+       読み込めたら差し替える。読めなければ既定の床のまま——背景の画像が
+       出ないだけで、水は動く（画像1枚のために画面が止まるほうが困る）。 */
+    const floorImg = new Image();
+    floorImg.decoding = "async";
+    floorImg.onload = () => {
+      water.setFloor(imageFloor(floorImg, floorImg.naturalWidth, floorImg.naturalHeight));
+    };
+    floorImg.src = "/skin-cyber-floor.webp";
 
     resize();
     fitWater();
@@ -304,10 +314,10 @@ export default function Backdrop3D() {
     const BUDGET = 7.5;            // 水に使ってよい時間（ms）
     const adapt = (ms: number) => {
       if (ms > BUDGET) { heavy++; light = 0; } else if (ms < BUDGET * 0.45) { light++; heavy = 0; }
-      if (heavy >= 30 && waterCell < 8) {
-        waterCell += 1; heavy = 0; fitWater();
-      } else if (light >= 180 && waterCell > 3) {
-        waterCell -= 1; light = 0; fitWater();
+      if (heavy >= 30 && qi < QUALITY_STEPS.length - 1) {
+        qi += 1; heavy = 0; fitWater();
+      } else if (light >= 180 && qi > 0) {
+        qi -= 1; light = 0; fitWater();
       }
     };
 

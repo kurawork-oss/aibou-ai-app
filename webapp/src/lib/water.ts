@@ -28,6 +28,14 @@
  * 自動で粗くする**（弱い端末で固まるより、少し粗いほうがいい）。
  */
 
+/**
+ * 粗さの段（1点あたりの画素数）。左ほど細かい。
+ *
+ * 1ずつ足し引きすると、細かい側では刻みが大きすぎる（3→4 で点数が半分近く
+ * 減る）。段で持って、1段ずつ上げ下げする。
+ */
+export const QUALITY_STEPS = [1.5, 2, 2.5, 3, 4, 5, 6, 8] as const;
+
 export interface WaterOptions {
   /** 1点あたりの画素数（下限＝いちばん細かいとき）。 */
   cell?: number;
@@ -92,6 +100,48 @@ export const defaultFloor: FloorPainter = (ctx, w, h, colors) => {
 };
 
 /**
+ * 画像を底に敷く。
+ *
+ * 画面いっぱいに、縦横の比を保って敷く（はみ出るぶんは切る）。
+ * 引き伸ばして比を崩すと、金属の照りが歪んで安っぽく見える。
+ *
+ * 明るい所を抑えるのが肝
+ * ----------------------
+ * 写真や作品は、真っ白から真っ黒まで使っていることが多い。そのまま
+ * 敷くと、白い所に載った文字が読めなくなる（実際そうなった——
+ * 「ENTERで送信」の行が銀に飲まれて消えた）。
+ *
+ * かといって全体を暗い膜で覆うと、絵の良さまで潰れる。だから
+ * **掛け算で明るい側だけを引き下げ**、暗い側はほぼそのまま残す。
+ * 形と流れは保ったまま、文字と張り合わなくなる。
+ *
+ * highlight は「いちばん明るい所をどこまで下げるか」（0〜1）。
+ */
+export function imageFloor(
+  img: CanvasImageSource, iw: number, ih: number, highlight = 0.52,
+): FloorPainter {
+  return (ctx, w, h) => {
+    const scale = Math.max(w / iw, h / ih);      // cover
+    const dw = iw * scale;
+    const dh = ih * scale;
+    ctx.drawImage(img, (w - dw) / 2, (h - dh) / 2, dw, dh);
+
+    // 掛け算で全体を下げる（白 255 → 255*highlight）
+    const v = Math.round(255 * Math.max(0, Math.min(1, highlight)));
+    ctx.globalCompositeOperation = "multiply";
+    ctx.fillStyle = `rgb(${v},${v},${v})`;
+    ctx.fillRect(0, 0, w, h);
+
+    // 暗い側が沈みすぎないよう、ごくうすく持ち上げる
+    ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = "rgba(10,16,34,1)";
+    ctx.fillRect(0, 0, w, h);
+
+    ctx.globalCompositeOperation = "source-over";
+  };
+}
+
+/**
  * 水面。
  *
  * `step()` で1コマ進め、`render()` で描く。どちらも呼ぶ側が持つ
@@ -123,7 +173,7 @@ export class Water {
   private colors: WaterColors | null = null;
 
   constructor(opts: WaterOptions = {}) {
-    this.minCell = Math.max(2, opts.cell ?? 4);
+    this.minCell = Math.max(1, opts.cell ?? 4);
     this.cell = this.minCell;
     this.maxCells = Math.max(2000, opts.maxCells ?? 60000);
     this.damping = Math.min(0.999, Math.max(0.8, opts.damping ?? 0.986));
@@ -147,8 +197,10 @@ export class Water {
     this.pxW = pxW;
     this.pxH = pxH;
 
+    // 上限を超えないところまで粗くする。1ずつ足すと細かい側で刻みが
+    // 大きすぎる（1.5→2.5 で点数が3割減る）ので、少しずつ掛けて寄せる。
     let cell = Math.max(this.minCell, cellOverride ?? this.minCell);
-    while ((pxW / cell) * (pxH / cell) > this.maxCells) cell += 1;
+    while ((pxW / cell) * (pxH / cell) > this.maxCells) cell *= 1.08;
     this.cell = cell;
 
     this.w = Math.max(8, Math.ceil(pxW / cell));
