@@ -243,6 +243,10 @@ def _run_stream(instruction: str, history=None, name: str = "AIbou", approval: b
                  "detail": f"{len(convo):,}字"})
 
     executed: list = []  # 実行したツール名の記録（最終フォールバック用）
+    # この用事の中で、外のページを何枚読んだか。
+    # 1枚でも読んだら、そこから先にAIが選ぶURLは**そのページに書いてあった
+    # 文字列**かもしれない。連鎖しうる道具には確認を挟む（risk.py）。
+    external_reads = 0
     failed: list = []    # 失敗したツールと理由（成功したように報告しないため）
     rules_shown: set = set()   # ツール別ルールを見せた相手（同じ物を繰り返さない）
 
@@ -294,12 +298,12 @@ def _run_stream(instruction: str, history=None, name: str = "AIbou", approval: b
         # 実行の前に人に聞くべきか。段階3（送る・投稿する・お金が動く）は
         # 承認モードを切っていても必ず聞く。設定の組み合わせで
         # 「黙ってメールが飛んだ」が起きないようにする。
-        if risk.needs_confirmation(tool, approval):
-            info = risk.describe(tool)
+        if risk.needs_confirmation(tool, approval, external_reads):
+            info = risk.describe(tool, external_reads)
             yield stamp({"phase": "approval", "step": step, "tool": tool,
                          "params": params, "note": (preface or "").strip(),
                          "level": info["level"], "level_label": info["label"],
-                         "why": info["why"],
+                         "why": info["why"], "chained": info.get("chained", False),
                          "always_confirm": info["always_confirm"]})
             yield stamp({"phase": "done", "steps": step - 1, "awaiting_approval": True})
             return
@@ -309,6 +313,8 @@ def _run_stream(instruction: str, history=None, name: str = "AIbou", approval: b
 
         result = tools.execute_tool(tool, params)
         executed.append(tool)
+        if tool in risk.CHAIN_AFTER_EXTERNAL:
+            external_reads += 1
         if _looks_failed(result):
             failed.append((tool, result))
         yield stamp({"phase": "observation", "step": step, "tool": tool, "result": result})

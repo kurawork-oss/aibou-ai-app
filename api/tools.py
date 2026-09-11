@@ -29,6 +29,7 @@ except Exception:  # pragma: no cover
 # 記憶・副業は api/ 内の自己完結モジュール（main.py と同じ参照の仕方）。
 from memory_store import mem_add, mem_recall
 import income
+import untrusted
 
 # vault は「ノート保存」用の任意モジュール。存在しない環境でも落ちないよう遅延的に扱う。
 # （api/ 内に vault.py が無い場合は None になり、save_note は Supabase 直書きへ縮退する。）
@@ -103,7 +104,7 @@ TOOL_DOCS: Dict[str, str] = {
     "notion_add":
         'Notionのページ/データベースにメモ（新規ページ）を追記する / params: { "title": "メモの見出し", "content": "本文" }',
     "create_automation":
-        'ノーコード自動化フロー（Zapier風）を作る。stepsのtypeは ai_generate / notify / create_task のみ / params: { "name": "フロー名", "steps": [{"type":"ai_generate","params":{"prompt":"..."}}] }',
+        'ノーコード自動化フロー（Zapier風）を作る。stepsのtypeは ai_generate / fetch / notify / create_task / params: { "name": "フロー名", "steps": [{"type":"ai_generate","params":{"prompt":"..."}}] }。fetch は外のURLを読む手順で、params.url に読みたいURLを書く（{input} も使える）',
     "run_automation":
         '既存の自動化フローを名前かIDで実行する / params: { "name": "フロー名", "input": "任意の入力" }',
     "create_mission":
@@ -760,7 +761,9 @@ def _do_web_search(params: dict) -> str:
     _present({"kind": "search", "query": query, "title": f"「{query}」の検索結果",
               "results": [{"title": r.get("title", ""), "url": r.get("url", ""),
                            "snippet": r.get("snippet", "")} for r in hits]})
-    return f"「{query}」の検索結果：\n" + "\n".join(lines)
+    # 見出しも要約も、書いたのは検索した相手ではなく**ページの持ち主**。
+    # 本文と同じく、命令ではなくデータとして囲う。
+    return untrusted.wrap("\n".join(lines), source="Web検索", kind=f"「{query}」の検索結果")
 
 
 def _do_web_read(params: dict) -> str:
@@ -777,9 +780,19 @@ def _do_web_read(params: dict) -> str:
         return f"ページを取得できませんでした：{res.get('error')}"
     title = res.get("title") or ""
     text = res.get("text", "")
+    final_url = res.get("url") or url
     # 「どこを読んだのか」を出す。AIの要約だけだと、元を当たれない。
-    _present({"kind": "page", "url": url, "title": title or url, "text": text})
-    return f"【{title}】\n{text}"
+    card = {"kind": "page", "url": final_url, "title": title or final_url, "text": text}
+    notes = untrusted.findings(text)
+    if notes:
+        # 見つけたら黙って捨てず、利用者の画面にも出す。
+        # ここを隠すと「なぜAIが変なことを言い出したか」が誰にも分からなくなる。
+        card["warning"] = "このページには、AIへの命令のような書き方があります（" + "／".join(notes) + "）"
+    if res.get("redirected_from"):
+        card["redirected_from"] = res["redirected_from"]
+    _present(card)
+    # AIへ渡すときは、命令ではなく**データ**として囲う
+    return untrusted.wrap(f"【{title}】\n{text}", source=final_url, kind="ページ本文")
 
 
 def _do_generate_image(params: dict) -> str:
@@ -964,7 +977,7 @@ def _do_notion_add(params: dict) -> str:
 
 def _do_create_automation(params: dict) -> str:
     """ノーコード自動化フロー（Zapier風）を作成する。steps=[{type,name,params}]。
-    type は ai_generate / notify / create_task。"""
+    type は ai_generate / fetch / notify / create_task。"""
     name = (params.get("name") or "").strip()
     if not name:
         return "自動化フローの名前が空です。"

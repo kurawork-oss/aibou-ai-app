@@ -157,7 +157,7 @@ SCHEMAS: Dict[str, Dict[str, Any]] = {
     "create_automation": {"fields": {
         "name": ("str", True, "フロー名"),
         "steps": ("steps", True,
-                  '手順の配列。各手順は {"type": "ai_generate|notify|create_task", '
+                  '手順の配列。各手順は {"type": "ai_generate|fetch|notify|create_task", '
                   '"params": {...}}'),
     }},
     "run_automation": {"fields": {

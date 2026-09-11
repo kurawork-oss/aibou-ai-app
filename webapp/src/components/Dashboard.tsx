@@ -26,12 +26,8 @@ import NeedsNotice from "@/components/NeedsNotice";
 import Whiteboard from "@/components/Whiteboard";
 import FlowBuilder from "@/components/FlowBuilder";
 import StepRunnersNote from "@/components/StepRunnersNote";
+import { STEP_META } from "@/lib/flowSteps";
 
-const STEP_META: Record<StepType, { label: string; color: string; field: string; placeholder: string }> = {
-  ai_generate: { label: "AI生成", color: "#00f3ff", field: "prompt", placeholder: "{input}を要約して…" },
-  notify: { label: "通知", color: "#60d394", field: "message", placeholder: "完了しました: {input}" },
-  create_task: { label: "タスク作成", color: "#ffd060", field: "title", placeholder: "タスク名…" },
-};
 
 // Miro/Zapier-style template chips — quick-start automations.
 const TEMPLATES = [

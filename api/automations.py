@@ -7,6 +7,7 @@ api/automations.py — ノーコード自動化（Zapier風フロー）のエン
 
 ステップ種別:
   - ai_generate : テキスト生成（{input} 等を置換）
+  - fetch       : 外のURLを読む（params.url。門番 netguard を必ず通る）
   - notify      : LINE/Discord/Slack へ通知
   - create_task : Active Tasks にタスクを作成
 
@@ -87,7 +88,7 @@ def create_flow(name: str, trigger: Optional[dict] = None, steps: Optional[list]
         }
         # AI STUDIO と同じ拡張（担当AI・根拠資料・実行条件）も保存する。
         # 指定が無ければ従来どおりの単純な自動化として動く。
-        for k in ("prompt", "ai_id", "notebook_id", "when"):
+        for k in ("prompt", "url", "ai_id", "notebook_id", "when"):
             v = s.get(k)
             if v:
                 norm[k] = v

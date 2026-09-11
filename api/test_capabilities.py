@@ -37,13 +37,25 @@ def test_web_search_empty_query():
 def test_web_read_strips_html(monkeypatch):
     page = "<html><head><title>T</title><style>.x{}</style></head><body><script>bad()</script><p>Hello world</p></body></html>"
 
-    class FakeResp:
-        text = page
-
-    monkeypatch.setattr(web.requests, "get", lambda *a, **k: FakeResp())
+    # 取得は netguard が持つようになった（行き先の検査とリダイレクトの
+    # 追跡がそこにあるため）。差し替える所も、そちらへ移す。
+    import netguard
+    monkeypatch.setattr(netguard, "fetch",
+                        lambda url, **kw: netguard.FetchResult(
+                            True, status=200, text=page, url=url, content_type="text/html"))
     res = web.web_read("https://x.com")
     assert res["ok"] is True and res["title"] == "T"
     assert "Hello world" in res["text"] and "bad()" not in res["text"]
+
+
+def test_web_read_refuses_internal_addresses():
+    """道具として呼んだときも、内向きのアドレスは断る。
+
+    web.py の中で requests を直に呼ぶ実装へ戻すと、ここが落ちる。
+    """
+    for url in ("http://127.0.0.1:1/", "http://169.254.169.254/", "file:///etc/passwd"):
+        res = web.web_read(url)
+        assert res["ok"] is False, f"{url} を通してしまう"
 
 
 def test_web_tools_via_dispatch(monkeypatch):

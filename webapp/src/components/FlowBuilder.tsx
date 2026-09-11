@@ -19,12 +19,8 @@ import {
   type Automation, type AutomationStep, type StepType, type StudioWorkflow,
   type StudioAI, type VaultNotebook,
 } from "@/lib/api";
+import { STEP_META } from "@/lib/flowSteps";
 
-const STEP_META: Record<StepType, { label: string; color: string; field: string; placeholder: string }> = {
-  ai_generate: { label: "AI生成", color: "#00f3ff", field: "prompt", placeholder: "{input}を要約して…" },
-  notify: { label: "通知", color: "#60d394", field: "message", placeholder: "完了しました: {input}" },
-  create_task: { label: "タスク作成", color: "#ffd060", field: "title", placeholder: "タスク名…" },
-};
 
 function Connector() {
   return (
@@ -165,8 +161,12 @@ export default function FlowBuilder({ target, onCreated, onError }: {
                 onChange={(e) => updateParam(i, e.target.value)}
                 placeholder={STEP_META[s.type].placeholder}
                 aria-label={`ステップ${i + 1}の内容`}
+                inputMode={s.type === "fetch" ? "url" : undefined}
                 className="w-full rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-2.5 py-1.5 text-sm text-fg-strong placeholder:text-muted focus:border-[var(--line)] focus:outline-none"
               />
+              {STEP_META[s.type].hint && (
+                <p className="mt-1 text-[10px] leading-relaxed text-muted">{STEP_META[s.type].hint}</p>
+              )}
 
               {/* AI STUDIO のワークフローと共通の拡張。AI生成のステップだけ
                   担当AIと根拠資料が意味を持つので、そこだけ出す。 */}

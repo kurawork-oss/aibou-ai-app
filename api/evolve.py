@@ -34,7 +34,7 @@ _SYS = (
     "params の形式:\n"
     '  app        → {"prompt": "Forgeに渡すアプリ生成プロンプト"}\n'
     '  custom_ai  → {"name": "AI名", "persona": "人格/役割", "model": "gemini-2.5-flash", "rules": "厳守ルール(ClaudeMD的)"}\n'
-    '  automation → {"name": "自動化名", "steps": [{"type": "ai_generate|notify|create_task", "name": "...", "params": {"prompt or message or title": "...（{input}使用可）"}}]}\n'
+    '  automation → {"name": "自動化名", "steps": [{"type": "ai_generate|fetch|notify|create_task", "name": "...", "params": {"prompt or message or title or url": "...（{input}使用可）"}}]}\n'
     '  answer     → {"text": "ユーザーへの回答(日本語)"}\n'
 )
 

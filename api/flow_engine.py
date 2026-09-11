@@ -10,7 +10,7 @@
 # ステップの形（欠けている項目は既定で動く）:
 #   {
 #     "name":        表示名,
-#     "type":        "ai_generate"（既定） | "notify" | "create_task",
+#     "type":        "ai_generate"（既定） | "fetch" | "notify" | "create_task",
 #     "prompt":      指示。{input} {original} {stepN} を差し込める,
 #     "params":      {"prompt": ..., "message": ..., "title": ...}（旧自動化の形）,
 #     "ai_id":       担当のカスタムAI（人格とルールを適用）,
@@ -18,14 +18,36 @@
 #     "when":        条件（満たさなければこのステップを飛ばす）
 #   }
 #
+# fetch（外から読む）について
+# ---------------------------
+# 手順はこれまで「AIに書かせる・知らせる・タスクにする」の3つしか無く、
+# **外の値を1つも読めなかった**。天気を見て傘の通知、在庫を見て補充のタスク、
+# 為替を見て判断——どれも作れない。それを作れるようにするのが fetch。
+#
+# ただし、外から来た文章はそのままAIへの指示として効いてしまう
+# （間接プロンプトインジェクション）。だから2つ守る:
+#
+#   ・行き先は netguard が検査する（内向きのアドレスへは出ていかない）
+#   ・AIへ渡すときは untrusted で囲う（命令ではなくデータとして扱わせる）
+#
+# 通知やタスクへ渡すのは**囲っていない素の文章**にする。囲いの説明文が
+# LINEの通知に混ざっても読みにくいだけで、そこにAIは居ない。
+#
 # 方針: 絶対に raise しない。1ステップ失敗しても続行し、理由を残す。
 # =====================================================================
 
+import json
 import re
 
 import llm
+import netguard
+import untrusted
 
-STEP_TYPES = ("ai_generate", "notify", "create_task")
+STEP_TYPES = ("ai_generate", "fetch", "notify", "create_task")
+
+#: fetch で受け取る文字数の上限（1ステップぶん）。
+#: 長いページを丸ごと次のプロンプトへ流すと、そこだけで枠を食い潰す。
+FETCH_CHARS = 8_000
 
 MAX_STEPS = 20
 KNOWLEDGE_CHARS = 12_000   # 1ステップに渡す資料の上限（プロンプトが膨らみすぎないように）
@@ -135,6 +157,47 @@ def _act_notify(text: str) -> dict:
         return {"ok": False, "error": f"通知に失敗しました: {e}"}
 
 
+def _act_fetch(url: str, max_chars: int = FETCH_CHARS) -> dict:
+    """外のURLを読む。{"ok", "text", "url", "error"}。
+
+    JSONはそのままの形で渡す（整形して渡すほうがAIは読み違えにくい）。
+    HTMLは本文だけ取り出す（タグごと渡すと、中身より記号のほうが多くなる）。
+    """
+    url = (url or "").strip()
+    if not url:
+        return {"ok": False, "error": "URLが空です"}
+    if not re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", url):
+        url = "https://" + url
+
+    res = netguard.fetch(url)
+    if not res.ok:
+        return {"ok": False, "error": res.error, "url": res.url}
+
+    body = res.text or ""
+    ctype = (res.content_type or "").lower()
+    if "json" in ctype:
+        try:
+            body = json.dumps(json.loads(body), ensure_ascii=False, indent=2)
+        except Exception:
+            pass          # 壊れたJSONなら、素のまま渡す（読めるかはAIに任せる）
+    elif "html" in ctype or "<html" in body[:400].lower():
+        try:
+            import web
+            body = web.extract_text(body)
+        except Exception:
+            pass
+
+    out = {"ok": True, "text": body[:max_chars], "url": res.url}
+    if len(body) > max_chars or res.truncated:
+        out["truncated"] = True
+    if len(res.hops) > 1:
+        out["redirected_from"] = res.hops[0]
+    notes = untrusted.findings(out["text"])
+    if notes:
+        out["warning"] = "読み取った文章に、AIへの命令のような書き方があります（" + "／".join(notes) + "）"
+    return out
+
+
 def _act_create_task(title: str, content: str) -> dict:
     try:
         import tasks as tasks_module
@@ -159,9 +222,17 @@ def run_steps(steps, input_text: str = "", resolve_ai=None) -> dict:
     """
     steps = list(steps or [])[:MAX_STEPS]
     results = []
-    outputs: list = []           # {stepN} 用に全ステップの出力を積む
+    outputs: list = []           # {stepN} 用に全ステップの出力を積む（素のまま）
     original = input_text or ""
     current = original
+
+    # AIへ渡すときだけ使う、囲った版。
+    #
+    # 外から読んだ文章は「命令ではなくデータ」として囲う必要があるが、
+    # 通知やタスクの本文にその囲いの説明が混ざると、ただ読みにくい。
+    # 渡す先で分ける——AIには囲った版、人には素の版。
+    safe_outputs: list = []
+    current_safe = original
 
     for i, step in enumerate(steps):
         step = step if isinstance(step, dict) else {}
@@ -171,14 +242,22 @@ def run_steps(steps, input_text: str = "", resolve_ai=None) -> dict:
             st = "ai_generate"
         name = step.get("name") or f"Step {i + 1}"
 
-        # 指示は新形式(prompt)を優先し、旧自動化の形(params)にも対応する
-        template = (step.get("prompt") or params.get("prompt")
-                    or params.get("message") or params.get("title") or "")
+        # 指示は新形式(prompt)を優先し、旧自動化の形(params)にも対応する。
+        # fetch は「読むURL」がそれにあたるので、params.url を先に見る
+        # （ここに url を入れ忘れると、URLの代わりに直前の出力を取りに行く）。
+        if st == "fetch":
+            template = (step.get("url") or params.get("url")
+                        or step.get("prompt") or params.get("prompt") or "")
+        else:
+            template = (step.get("prompt") or params.get("prompt")
+                        or params.get("message") or params.get("title") or "")
 
-        if st == "ai_generate" and not str(template).strip():
+        if st in ("ai_generate", "fetch") and not str(template).strip():
             outputs.append("")
             results.append({"step": i + 1, "name": name, "type": st, "output": "",
-                            "ok": False, "skipped": True, "reason": "指示が空のためスキップ"})
+                            "ok": False, "skipped": True,
+                            "reason": "URLが空のためスキップ" if st == "fetch"
+                                      else "指示が空のためスキップ"})
             continue
 
         met, reason = condition_met(step.get("when") or "", original, current)
@@ -196,8 +275,10 @@ def run_steps(steps, input_text: str = "", resolve_ai=None) -> dict:
 
         if st == "ai_generate":
             ai = resolve_ai(step.get("ai_id") or "") if resolve_ai else None
-            knowledge, nb_id, warn = knowledge_block(step.get("notebook_id") or "", text)
-            prompt = persona_prefix(ai) + knowledge + text
+            # AIに渡す指示は、囲った版で組み立てる
+            safe_text = fill(str(template), original, current_safe, safe_outputs)
+            knowledge, nb_id, warn = knowledge_block(step.get("notebook_id") or "", safe_text)
+            prompt = persona_prefix(ai) + knowledge + safe_text
             try:
                 out = llm.generate_text(prompt, max_tokens=2200) or ""
                 row["ok"] = True
@@ -213,7 +294,32 @@ def run_steps(steps, input_text: str = "", resolve_ai=None) -> dict:
                 row["warning"] = warn
             row["output"] = out
             outputs.append(out)
+            safe_outputs.append(out)   # AIが書いた物なので、囲う必要はない
             current = out            # 生成結果だけを次の {input} に渡す
+            current_safe = out
+
+        elif st == "fetch":
+            res = _act_fetch(text or current, int(params.get("max_chars") or FETCH_CHARS))
+            row["ok"] = res["ok"]
+            if res.get("error"):
+                row["error"] = res["error"]
+            if res.get("warning"):
+                row["warning"] = res["warning"]
+            if res.get("truncated"):
+                row["truncated"] = True
+            if res.get("redirected_from"):
+                row["redirected_from"] = res["redirected_from"]
+            got = res.get("text", "") if res["ok"] else ""
+            row["output"] = got
+            row["url"] = res.get("url") or (text or current)
+            outputs.append(got)
+            # 次のAIへは囲って渡す（ここが本体。素で渡すと、読んだページの
+            # 「〜してください」がそのまま指示になる）
+            safe_outputs.append(
+                untrusted.wrap(got, source=row["url"], kind="読み取った内容") if got else "")
+            if res["ok"]:
+                current = got
+                current_safe = safe_outputs[-1]
 
         elif st == "notify":
             res = _act_notify(text or current)
@@ -224,6 +330,7 @@ def run_steps(steps, input_text: str = "", resolve_ai=None) -> dict:
                 row["detail"] = res["detail"]
             row["output"] = current  # 通知は流れを変えない
             outputs.append(current)
+            safe_outputs.append(current_safe)
 
         else:  # create_task
             title = str(params.get("title") or text or current or "").strip()
@@ -236,11 +343,14 @@ def run_steps(steps, input_text: str = "", resolve_ai=None) -> dict:
                 row["detail"] = res["detail"]
             row["output"] = current
             outputs.append(current)
+            safe_outputs.append(current_safe)
 
         results.append(row)
 
-        # 生成が失敗したら以降は続けない（空の入力で後続を回しても意味がない）
-        if st == "ai_generate" and not row.get("ok"):
+        # 生成・取得が失敗したら以降は続けない
+        # （空の入力で後続を回しても意味がないうえ、「読めなかったのに
+        #   読めたことにして通知」がいちばん困る形になる）
+        if st in ("ai_generate", "fetch") and not row.get("ok"):
             break
 
     ran = [r for r in results if not r.get("skipped")]

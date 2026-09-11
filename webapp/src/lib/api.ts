@@ -565,6 +565,13 @@ export interface AgentEvent {
   why?: string;
   /** 承認モードを切っていても必ず聞く操作か。 */
   always_confirm?: boolean;
+  /**
+   * 危なさではなく「連鎖」で聞いているか。
+   *
+   * すでに外のページを読んだ後は、次に読むURLがそのページに書かれていた
+   * ものかもしれない。読むだけの操作なのに確認が出る理由がこれ。
+   */
+  chained?: boolean;
 
   /* ── setup_required のとき ── */
   /** 足りない連携（google / slack / notion / github）。 */
@@ -1912,7 +1919,14 @@ export async function sendNotify(message: string):
 }
 
 /* ---------------- Automations (no-code flows / Zapier-style) ---------------- */
-export type StepType = "ai_generate" | "notify" | "create_task";
+/**
+ * 手順の種類。
+ *
+ * fetch は「外のURLを読む」。これが無かったので、自動化は外の値を1つも
+ * 見られず、AIに書かせるだけの仕組みになっていた。
+ * 読む先はサーバー側の門番（netguard）を必ず通る。
+ */
+export type StepType = "ai_generate" | "fetch" | "notify" | "create_task";
 
 export interface AutomationStep {
   id?: string;

@@ -74,6 +74,8 @@ interface PendingAct {
   why?: string;
   /** 承認モードを切っていても必ず聞く操作か。 */
   alwaysConfirm?: boolean;
+  /** 危なさではなく、外のページを読んだ後の連鎖で聞いている。 */
+  chained?: boolean;
 }
 
 /**
@@ -577,6 +579,7 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
                       tool: ev.tool || "", params: ev.params || {}, note: ev.note,
                       level: ev.level, levelLabel: ev.level_label, why: ev.why,
                       alwaysConfirm: ev.always_confirm,
+                      chained: ev.chained,
                     } }
                   : m)));
                 break;
@@ -1685,6 +1688,13 @@ function MessageBubble({ message, onRegenerate, onApprove, onReject }: {
               {message.await.alwaysConfirm && (
                 <span className="text-[10px] text-muted">設定に関わらず必ず確認します</span>
               )}
+              {/* 「読むだけ」なのに確認が出る理由を、札で先に出す。
+                  これが無いと、危なくない操作で止まったように見える。 */}
+              {message.await.chained && (
+                <span className="rounded-full border border-[#c07aff55] px-2 py-0.5 text-[10px] text-[#c07aff]">
+                  ページ由来の可能性
+                </span>
+              )}
             </div>
             {message.await.why && (
               <div className="mt-1 text-[11px] leading-relaxed text-[#ffd060]">
@@ -1694,7 +1704,13 @@ function MessageBubble({ message, onRegenerate, onApprove, onReject }: {
             <div className="mt-0.5 text-[11px] text-fg-strong">
               {message.await.tool}{message.await.note ? ` — ${message.await.note}` : ""}
             </div>
-            <pre className="mt-1 max-h-24 overflow-auto whitespace-pre-wrap text-[10px] text-muted">
+            {message.await.chained && (
+              <p className="mt-1 text-[11px] leading-relaxed text-muted">
+                下のURLをよく見てください。会話の内容がURLに書き込まれていたら、
+                外へ持ち出そうとしています。心当たりが無ければ「やめる」を押してください。
+              </p>
+            )}
+            <pre className="mt-1 max-h-24 overflow-auto whitespace-pre-wrap break-all text-[10px] text-muted">
               {JSON.stringify(message.await.params, null, 1)}
             </pre>
             <div className="mt-1.5 flex gap-1.5">

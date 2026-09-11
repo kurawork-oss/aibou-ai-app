@@ -2,17 +2,29 @@
 # =====================================================================
 # web_search : DuckDuckGo の HTML エンドポイントを叩いて結果を抽出（APIキー不要）。
 # web_read   : URL を取得して本文テキストへ整形（タグ除去）。
-# requests だけで実装。取得失敗しても crash せず {ok:False, error} を返す。
+# 取得失敗しても crash せず {ok:False, error} を返す。
+#
+# 行き先の検査は netguard が持つ。ここで直接 requests.get を呼ばないこと——
+# 以前はここが素通しで、AIが選んだ任意のURL（外部ページの本文に書いてあった
+# ものを含む）をそのまま取りに行き、リダイレクトも自動で追っていた。
+# サーバーの内側（169.254.169.254 のクラウド資格情報など）へ届く形だった。
 # =====================================================================
 
 import html as html_lib
 import re
-from urllib.parse import unquote, urlparse
+from urllib.parse import unquote
+
+import netguard
 
 try:
     import requests
 except Exception:  # pragma: no cover
     requests = None
+
+#: ページ本文として受け取る上限。max_chars は「整形後に何字渡すか」で、
+#: こちらは「何byte受け取るか」。両方いる（巨大なファイルを指されたときに
+#: 効くのは後者）。
+_MAX_PAGE_BYTES = 1_500_000
 
 _UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
        "(KHTML, like Gecko) Chrome/122.0 Safari/537.36")
@@ -69,29 +81,47 @@ def web_search(query: str, n: int = 5) -> dict:
     return {"ok": True, "results": results}
 
 
-def web_read(url: str, max_chars: int = 4000) -> dict:
-    """URL を取得して本文テキストを返す。{ok, title, text, url}。"""
-    url = (url or "").strip()
-    if not url:
-        return {"ok": False, "error": "URLが空です"}
-    if not re.match(r"^https?://", url):
-        url = "https://" + url
-    if requests is None:
-        return {"ok": False, "error": "requests が利用できません"}
-    try:
-        parsed = urlparse(url)
-        if parsed.scheme not in ("http", "https"):
-            return {"ok": False, "error": "http(s) のURLのみ対応します"}
-        r = requests.get(url, headers={"User-Agent": _UA}, timeout=20)
-        page = r.text or ""
-    except Exception as e:
-        return {"ok": False, "error": str(e)[:200]}
+def extract_text(page: str) -> str:
+    """HTML から本文らしい文字だけを取り出す。
 
-    tm = _TITLE_RE.search(page)
-    title = _strip_tags(tm.group(1)) if tm else ""
-    body = _SCRIPT_RE.sub(" ", page)
+    自動化の fetch ステップからも呼ぶので、web_read の中に埋めずに出してある
+    （同じ整形を2か所に書くと、片方だけ直る）。
+    """
+    body = _SCRIPT_RE.sub(" ", page or "")
     body = re.sub(r"</(p|div|br|li|h[1-6]|tr)>", "\n", body, flags=re.I)
     text = html_lib.unescape(_TAG_RE.sub("", body))
     text = _WS_RE.sub(" ", text)
-    text = _NL_RE.sub("\n\n", text).strip()
-    return {"ok": True, "title": title, "text": text[:max_chars], "url": url}
+    return _NL_RE.sub("\n\n", text).strip()
+
+
+def web_read(url: str, max_chars: int = 4000) -> dict:
+    """URL を取得して本文テキストを返す。{ok, title, text, url}。
+
+    行き先は netguard が検査する（リダイレクトも1回ごとに）。断られたら
+    その理由をそのまま返す——「読めませんでした」だけだと、URLが悪いのか
+    こちらが止めたのかが分からない。
+    """
+    url = (url or "").strip()
+    if not url:
+        return {"ok": False, "error": "URLが空です"}
+    if not re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", url):
+        # 「example.com/a」のような書き方は https として扱う。
+        # ここで scheme を足さずに netguard へ渡すと、相対URL扱いで弾かれる
+        url = "https://" + url
+
+    res = netguard.fetch(url, max_bytes=_MAX_PAGE_BYTES)
+    if not res.ok:
+        return {"ok": False, "error": res.error, "url": res.url}
+    page = res.text or ""
+
+    tm = _TITLE_RE.search(page)
+    title = _strip_tags(tm.group(1)) if tm else ""
+    text = extract_text(page)
+    out = {"ok": True, "title": title, "text": text[:max_chars], "url": res.url}
+    # 転送された場合は、**最後に読んだURL**も返す（最初のURLだけ見せると、
+    # どこの文章を読んだのか分からなくなる）
+    if len(res.hops) > 1:
+        out["redirected_from"] = res.hops[0]
+    if res.truncated:
+        out["truncated"] = True
+    return out

