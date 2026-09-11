@@ -23,13 +23,14 @@ import sys
 from contextlib import asynccontextmanager
 from typing import List, Optional
 
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
+from fastapi import Body, Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 import agenda
 import agent
+import approvals
 import artifacts
 import autopilot
 import board
@@ -51,6 +52,7 @@ import rules
 import guide as guide_mod
 import tenancy
 import watch
+import webpush
 import inbox as inbox_mod
 import hfhub
 import imagegen
@@ -2569,6 +2571,95 @@ async def notifications_list(_auth: None = Depends(require_auth)):
 async def notifications_read(_auth: None = Depends(require_auth)):
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(None, notify.mark_all_read)
+
+
+# ── Web Push（端末に通知を届ける） ────────────────────────────────
+#
+# ここだけ「押すだけ」で完結する通知の道。LINE や Slack は先に相手方の
+# 登録が要るが、Web Push の鍵はこのサーバーが自分で作る。
+
+
+@app.get("/push/key")
+async def push_key():
+    """画面が購読を作るのに要る公開鍵。
+
+    認証を求めない。**公開鍵は秘密ではない**し、ここで止めると
+    ログイン前の画面から通知の可否すら出せなくなる。
+    """
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, lambda: {"key": webpush.public_key_b64()})
+
+
+@app.post("/push/subscribe")
+async def push_subscribe(payload: dict = Body(...), _auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, lambda: webpush.subscribe(payload or {}))
+
+
+@app.post("/push/unsubscribe")
+async def push_unsubscribe(payload: dict = Body(...), _auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    ep = (payload or {}).get("endpoint") or ""
+    return await loop.run_in_executor(None, lambda: webpush.unsubscribe(ep))
+
+
+@app.get("/push/status")
+async def push_status(_auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, webpush.status)
+
+
+@app.post("/push/test")
+async def push_test(_auth: None = Depends(require_auth)):
+    """1通送ってみる。届くかどうかは、実際に送ってみないと分からない。"""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(
+        None, lambda: webpush.send("AIbou", "通知はここに届きます。", url="/"))
+
+
+# ── 承認待ち（その場に居なくても答えられるようにする） ────────────
+
+
+@app.get("/approvals")
+async def approvals_list(_auth: None = Depends(require_auth)):
+    loop = asyncio.get_event_loop()
+
+    def _read():
+        approvals.expire_old()
+        return {"items": approvals.list_pending()}
+
+    return await loop.run_in_executor(None, _read)
+
+
+@app.post("/approvals/answer")
+async def approvals_answer(payload: dict = Body(...)):
+    """通知の「実行する／やめる」から呼ばれる。
+
+    **ログインを求めない。** ここを叩くのはサービスワーカーで、そちらには
+    画面が持っている鍵が渡らない（別の実行環境なので）。代わりに、
+    暗号化された通知の中にだけ入れた合言葉で確かめる——1件ごと・1回きり・
+    期限つき。合言葉を持っていること自体が、その端末の持ち主である証拠。
+    """
+    loop = asyncio.get_event_loop()
+    p = payload or {}
+    return await loop.run_in_executor(
+        None, lambda: approvals.answer(
+            str(p.get("id") or ""), str(p.get("decision") or ""), str(p.get("token") or "")))
+
+
+@app.post("/approvals/{approval_id}/decide")
+async def approvals_decide(approval_id: str, payload: dict = Body(...),
+                           _auth: None = Depends(require_auth)):
+    """アプリの画面から答える。合言葉は要らない（ログイン済みなので）。
+
+    通知用の口（/approvals/answer）と分けてある。1つの口で「合言葉か
+    ログインのどちらかがあればよい」にすると、片方の確認を緩めたときに
+    もう片方まで通ってしまう。入口を分けて、それぞれ1つだけ確かめる。
+    """
+    loop = asyncio.get_event_loop()
+    decision = str((payload or {}).get("decision") or "")
+    return await loop.run_in_executor(
+        None, lambda: approvals.answer_signed_in(approval_id, decision))
 
 
 # ── Board（Miro風ホワイトボード・複数ボード） ─────────────────────────

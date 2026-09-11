@@ -169,13 +169,13 @@ def tick_everyone() -> dict:
         out["ran"].extend(res.get("ran") or [])
         out["count"] += int(res.get("count") or 0)
 
-    def _round() -> None:
+    def _round(user_id: str = "") -> None:
         """1人ぶんの見回り。予約の実行と、見張りの両方をここで済ませる。
 
         見張りを別の周回にすると、保存先の差し替えをもう一度やることになる。
         同じ人のところにいる間に両方やるほうが、往復も少なく取り違えもない。
         """
-        _merge(tick())
+        _merge(tick(user_id))
         try:
             import watch
             if watch.tick(force=False).get("notified"):
@@ -186,7 +186,7 @@ def tick_everyone() -> dict:
 
     # 1) サーバー既定（持ち主 / 1人運用）
     try:
-        _round()
+        _round("")
     except Exception as e:
         print(f"[scheduler] default tick error: {e}")
 
@@ -205,7 +205,7 @@ def tick_everyone() -> dict:
                 continue
             token = config.bind_request_client(client)
             try:
-                _round()
+                _round(user_id)
                 out["users"] += 1
             finally:
                 config.reset_request_client(token)
@@ -217,8 +217,43 @@ def tick_everyone() -> dict:
     return out
 
 
-def tick() -> dict:
-    """実行時刻を過ぎた本日未実行のscheduleを実行する。{ran:[{id,instruction,result}]}。"""
+def _park_for_approval(schedule: dict, ev: dict, user_id: str = "") -> str:
+    """承認待ちを控えて、通知する。画面に出す一言を返す。
+
+    定期実行は人ごとに保存先を差し替えながら回っている。あとで実行する
+    ときに同じ所へ戻れるよう、いまの持ち主を一緒に控える。
+    """
+    try:
+        import approvals
+        row = approvals.ask(
+            ev.get("tool") or "", ev.get("params") or {},
+            note=f"定期実行「{schedule.get('instruction', '')}」の途中で確認が要ります",
+            source="schedule", user_id=user_id, why=ev.get("why") or "",
+            answer_url=_answer_url(),
+        )
+        return (f"確認待ちにしました（{ev.get('tool')}）。"
+                f"通知から実行するか、アプリの承認待ちから答えてください。[{row['id'][:8]}]")
+    except Exception as e:
+        return f"(承認待ちを作れませんでした: {e})"
+
+
+def _answer_url() -> str:
+    """通知の「実行する」が叩く先。
+
+    サービスワーカーからは**絶対URL**でないと届かない（アプリの置き場と
+    サーバーの置き場が違うため）。
+    """
+    import os
+    base = (os.getenv("PUBLIC_API_URL") or os.getenv("BACKEND_URL") or "").rstrip("/")
+    return f"{base}/approvals/answer" if base else "/approvals/answer"
+
+
+def tick(user_id: str = "") -> dict:
+    """実行時刻を過ぎた本日未実行のscheduleを実行する。{ran:[{id,instruction,result}]}。
+
+    `user_id` は「いま誰の保存先に居るか」。承認待ちを控えるときに要る
+    ——あとで実行するとき、同じ所へ戻る必要があるため。
+    """
     import agent
     ran = []
     for s in _due(list_schedules(1000)):
@@ -235,9 +270,17 @@ def tick() -> dict:
                     final = (f"[{res.get('name', '自動化')}] 実行 {res.get('ran', 0)}"
                              + (f" / スキップ {skipped}" if skipped else "") + "\n" + final)
             else:
+                waiting = None
                 for ev in agent.run_stream(s.get("instruction", ""), approval=False):
                     if ev.get("phase") == "final":
                         final = ev.get("text", "")
+                    elif ev.get("phase") == "approval":
+                        # ここへ来たら run_stream は止まる。今までは final が
+                        # 来ないまま抜けて、中身の無い通知だけが残っていた
+                        # ——**待っていること自体が誰にも伝わらなかった**。
+                        waiting = ev
+                if waiting:
+                    final = _park_for_approval(s, waiting, user_id)
         except Exception as e:
             final = f"(実行エラー: {e})"
         _mark_ran(s.get("id"))

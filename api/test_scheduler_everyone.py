@@ -40,7 +40,7 @@ def test_the_loop_runs_everyone_not_just_the_default(monkeypatch):
     """ここが本題。人ごとに保存先を差し替えてから回すこと。"""
     seen = []
 
-    def fake_tick():
+    def fake_tick(user_id=""):
         # そのときバインドされている保存先を記録する
         seen.append(config.get_supabase())
         return {"ran": [], "count": 0}
@@ -62,7 +62,7 @@ def test_each_user_sees_their_own_database(monkeypatch):
     """Aさんの予約がBさんのDBで実行されると、他人の予定が勝手に動く。"""
     ran_for = []
 
-    def fake_tick():
+    def fake_tick(user_id=""):
         client = config.get_supabase()
         ran_for.append(getattr(client, "name", "default"))
         return {"ran": [], "count": 0}
@@ -81,7 +81,7 @@ def test_each_user_sees_their_own_database(monkeypatch):
 
 def test_the_binding_is_released_afterwards(monkeypatch):
     """差し替えたまま抜けると、次のリクエストが他人のDBを掴む。"""
-    monkeypatch.setattr(scheduler, "tick", lambda: {"ran": [], "count": 0})
+    monkeypatch.setattr(scheduler, "tick", lambda user_id="": {"ran": [], "count": 0})
     monkeypatch.setattr(tenancy, "all_connected_users", lambda: ["u-a"])
     monkeypatch.setattr(tenancy, "client_for", lambda uid: object())
 
@@ -94,7 +94,7 @@ def test_one_broken_user_does_not_stop_the_others(monkeypatch):
     """1人のDBが落ちていても、他の人の朝の通知は届くべき。"""
     ok = []
 
-    def fake_tick():
+    def fake_tick(user_id=""):
         c = config.get_supabase()
         if getattr(c, "broken", False):
             raise RuntimeError("そのDBに繋がりません")
@@ -115,7 +115,7 @@ def test_one_broken_user_does_not_stop_the_others(monkeypatch):
 
 def test_results_are_added_up(monkeypatch):
     monkeypatch.setattr(scheduler, "tick",
-                        lambda: {"ran": [{"id": "x"}], "count": 1})
+                        lambda user_id="": {"ran": [{"id": "x"}], "count": 1})
     monkeypatch.setattr(tenancy, "all_connected_users", lambda: ["u-a", "u-b"])
     monkeypatch.setattr(tenancy, "client_for", lambda uid: object())
 
@@ -127,7 +127,7 @@ def test_results_are_added_up(monkeypatch):
 def test_nobody_connected_still_runs_the_default(monkeypatch):
     """1人運用でも、これまで通り自分の予約は動く。"""
     calls = []
-    monkeypatch.setattr(scheduler, "tick", lambda: calls.append(1) or {"ran": [], "count": 0})
+    monkeypatch.setattr(scheduler, "tick", lambda user_id="": calls.append(1) or {"ran": [], "count": 0})
     monkeypatch.setattr(tenancy, "all_connected_users", lambda: [])
 
     out = scheduler.tick_everyone()
@@ -138,7 +138,7 @@ def test_nobody_connected_still_runs_the_default(monkeypatch):
 def test_a_broken_ledger_does_not_kill_the_default(monkeypatch):
     """接続台帳が読めなくても、既定ぶんは回す。"""
     calls = []
-    monkeypatch.setattr(scheduler, "tick", lambda: calls.append(1) or {"ran": [], "count": 0})
+    monkeypatch.setattr(scheduler, "tick", lambda user_id="": calls.append(1) or {"ran": [], "count": 0})
 
     def boom():
         raise RuntimeError("台帳が読めません")
@@ -202,7 +202,7 @@ def test_the_notification_uses_that_persons_own_line_token(monkeypatch):
                         lambda url, payload, headers=None:
                         sent.append(headers["Authorization"]) or True)
 
-    def fake_tick():
+    def fake_tick(user_id=""):
         notify.send_line("おはようございます")
         return {"ran": [], "count": 0}
 

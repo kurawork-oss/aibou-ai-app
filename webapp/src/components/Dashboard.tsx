@@ -23,6 +23,7 @@ import {
 } from "@/lib/api";
 import Tilt3D from "@/components/Tilt3D";
 import NeedsNotice from "@/components/NeedsNotice";
+import PendingApprovals from "@/components/PendingApprovals";
 import Whiteboard from "@/components/Whiteboard";
 import FlowBuilder from "@/components/FlowBuilder";
 import StepRunnersNote from "@/components/StepRunnersNote";
@@ -81,6 +82,10 @@ export default function Dashboard() {
           ホワイトボードは鍵が無くても最後まで使えるので、画面の頭に
           出していると、使える物を使えないと言うことになる。 */}
       {tab === "auto" && <NeedsNotice mode="board_auto" />}
+      {/* 通知は届かないことがある（切っている・許可していない・圏外）。
+          そのとき通知だけが窓口だと「止まっていることが誰にも伝わらない」
+          に戻るので、開けば必ず見える所にも出す。 */}
+      {tab === "auto" && <PendingApprovals />}
 
       <div className="min-h-0 flex-1">
         {tab === "board" ? <Whiteboard /> : <AutomationBoard />}

@@ -70,7 +70,7 @@ export interface IncomeSummary {
  * そこで、確実に通る資格情報があるならそれを Authorization に残し、
  * 本人確認は別のヘッダで渡す。サーバーの設定がどの段階でも動く。
  */
-function authHeaders(extra?: Record<string, string>): Record<string, string> {
+export function authHeaders(extra?: Record<string, string>): Record<string, string> {
   const headers: Record<string, string> = { ...(extra || {}) };
   const jwt = getAccessToken();
 

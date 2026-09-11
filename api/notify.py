@@ -1,5 +1,5 @@
 """
-api/notify.py — 外部通知（LINE / Discord / Slack）。
+api/notify.py — 外部通知（Web Push / LINE / Discord / Slack）。
 
 Keychain に保存されたトークンを使い、ジョブやオートパイロットの結果をスマホへ届ける。
 標準ライブラリ(urllib)のみ。トークン未設定なら何もせず {"ok": False, "skipped": True}
@@ -145,10 +145,29 @@ def send_slack(message: str) -> dict:
         return {"ok": False, "error": str(e), "channel": "slack"}
 
 
+def send_push(message: str) -> dict:
+    """この端末へ直接届ける（Web Push）。
+
+    他の3つと違い、**相手方への登録が要らない**。鍵はこのサーバーが
+    自分で作るので、通知を許可した時点から届く。何も設定していない人に
+    とって、これが唯一届く道になる。
+    """
+    try:
+        import webpush
+        title, _, rest = (message or "").partition("\n")
+        res = webpush.send(title or "AIbou", rest.strip() or "", url="/")
+        if res.get("skipped"):
+            return {"ok": False, "skipped": True, "channel": "push"}
+        return {"ok": bool(res.get("ok")), "channel": "push", "detail": res}
+    except Exception as e:
+        return {"ok": False, "channel": "push", "error": str(e)[:160]}
+
+
 def notify_all(message: str) -> dict:
     """設定済みの全チャンネルへ送る。少なくとも1つ成功すれば ok=True。
     送信の成否に関わらず、アプリ内通知ログにも記録する。"""
-    results: List[dict] = [send_line(message), send_discord(message), send_slack(message)]
+    results: List[dict] = [send_push(message), send_line(message),
+                           send_discord(message), send_slack(message)]
     sent = [r for r in results if r.get("ok")]
     skipped = all(r.get("skipped") for r in results)
     # 内部ログに残す（ホーム画面の通知に出る）

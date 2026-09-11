@@ -21,6 +21,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import AiProviderSettings from "@/components/AiProviderSettings";
 import HfModels from "@/components/HfModels";
 import AppearanceSettings from "@/components/AppearanceSettings";
+import PushSettings from "@/components/PushSettings";
 import { CORE_TYPES, readCoreType, setCoreType, type CoreType } from "@/lib/coreType";
 import FeaturePacks from "@/components/FeaturePacks";
 import IntegrationsSettings from "@/components/IntegrationsSettings";
@@ -881,6 +882,7 @@ function SettingsPanel({
 
           {tab === "core" && (
             <>
+              <PushSettings />
               <AiProviderSettings />
               {/* 使う機能の入り切り。連携（外と繋ぐ）より先に置く。
                   「何をする人か」を決めてから、繋ぐ物を選ぶ順のほうが迷わない。 */}

@@ -312,6 +312,48 @@ CREATE TABLE IF NOT EXISTS notifications (
 );
 CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read, created_at DESC);
 
+-- 🔔 端末への通知の宛先（Web Push）
+--
+-- 「この端末に通知を届けてよい」という許可そのもの。endpoint がその端末の
+-- 郵便受けで、p256dh と auth はその端末だけが開ける鍵（本文はこの2つで
+-- 暗号化して送るので、経路の途中では中身が読めない）。
+--
+-- endpoint を主キーにしているのは、同じ端末を何度登録しても1行にするため。
+-- 端末が通知を切ると push サービスが 404/410 を返すので、その時点でこの行は
+-- サーバー側から消える（持ち続けても二度と届かない）。
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  endpoint   text PRIMARY KEY,
+  p256dh     text NOT NULL,
+  auth       text NOT NULL,
+  label      text DEFAULT '',          -- どの端末か（ブラウザ名など。人が見る用）
+  created_at timestamptz DEFAULT now()
+);
+
+-- ✋ 承認待ち（Approvals）
+--
+-- 取り返せない操作は必ず人に聞く（risk.py）。画面の前に居ないとき——
+-- 深夜の定期実行など——は、その用事をここに置いて通知で知らせる。
+--
+-- token は通知の中にだけ入れる使い捨ての合言葉。サービスワーカーには
+-- 画面のログイン情報が渡らないので、これが「その端末の持ち主である」
+-- 証明になる。答え終わったら空にする（1回きり）。
+-- user_id は実行するときに戻る保存先（定期実行は人ごとに切り替えながら
+-- 回るので、控えておかないと別の人のDBに対して実行してしまう）。
+CREATE TABLE IF NOT EXISTS approvals (
+  id         text PRIMARY KEY,
+  tool       text NOT NULL,
+  params     jsonb DEFAULT '{}'::jsonb,
+  note       text DEFAULT '',
+  why        text DEFAULT '',
+  source     text DEFAULT '',
+  user_id    text DEFAULT '',
+  token      text DEFAULT '',
+  status     text DEFAULT 'pending',   -- pending | done | rejected | failed | expired
+  result     text DEFAULT '',
+  created_at double precision
+);
+CREATE INDEX IF NOT EXISTS idx_approvals_status ON approvals(status, created_at DESC);
+
 -- 📄 エージェント成果物（Artifacts）— create_document / create_spreadsheet の保存先。
 -- content は Markdown / CSV などの小さめテキスト。Aibou内でダウンロードできる。
 CREATE TABLE IF NOT EXISTS artifacts (
