@@ -15,28 +15,42 @@
 import { test, expect } from "@playwright/test";
 import { enterApp, mockBackend, openManage, type Backend } from "./backend";
 
+/**
+ * 画面を出すのに要る問い合わせ**ではない**もの。
+ *
+ * ここで見たいのは「画面を1枚出すのに何往復しているか」なので、
+ * 画面と関係なく走る物は数えない。数えると、裏の仕事が増えるたびに
+ * 「数珠つなぎになった」と誤検知する。
+ *
+ *   /health      … 寝ているサーバーを起こすのが役目。何度でも叩く
+ *   /memory/sync … 記憶の合流。開いた数秒後にタイマーで1回走る
+ */
+const BACKGROUND = ["/health", "/memory/sync"];
+const isBackground = (path: string) => BACKGROUND.some((p) => path.startsWith(p));
+
 /** 最初の1本から数えて、どれだけ同時に飛んでいるか。 */
 function spread(be: Backend, withinMs = 200) {
-  if (!be.calls.length) return { total: 0, together: 0 };
-  const t0 = be.calls[0].at;
+  const calls = be.calls.filter((c) => !isBackground(c.path));
+  if (!calls.length) return { total: 0, together: 0 };
+  const t0 = calls[0].at;
   return {
-    total: be.calls.length,
-    together: be.calls.filter((c) => c.at - t0 <= withinMs).length,
+    total: calls.length,
+    together: calls.filter((c) => c.at - t0 <= withinMs).length,
   };
 }
 
 test("同じ物を2回聞かない（起動と管理タブ）", async ({ page }) => {
   const be = await mockBackend(page);
   await enterApp(page);
-  // /health は起きるまで叩くのが役目なので、そこは数えない
-  const dupOnBoot = be.duplicates().filter((d) => !d.startsWith("/health"));
+  // 画面と関係なく走る物（起こし・記憶の合流）は数えない
+  const dupOnBoot = be.duplicates().filter((d) => !isBackground(d));
   expect(dupOnBoot, `起動で同じ物を2回:\n${dupOnBoot.join("\n")}`).toEqual([]);
 
   be.reset();
   await openManage(page, "今日");
   await expect(page.getByText("PERSONAL COCKPIT")).toBeVisible({ timeout: 10_000 });
   await page.waitForTimeout(800);
-  const dup = be.duplicates().filter((d) => !d.startsWith("/health"));
+  const dup = be.duplicates().filter((d) => !isBackground(d));
   expect(dup, `管理タブで同じ物を2回:\n${dup.join("\n")}`).toEqual([]);
 });
 
@@ -55,7 +69,8 @@ test("管理タブの読み込みは、数珠つなぎにしない", async ({ pa
   // 全部が最初のひとかたまりで出ていること。1本でも後ろにずれていたら、
   // それは他の返事を待っている（生成物が実際そうなっていた）。
   expect(s.together, `${s.total}本のうち同時に出たのは${s.together}本`
-    + `\n並び:\n${be.calls.map((c) => `  +${c.at - be.calls[0].at}ms ${c.path}`).join("\n")}`)
+    + `\n並び:\n${be.calls.filter((c) => !isBackground(c.path))
+        .map((c, _i, a) => `  +${c.at - a[0].at}ms ${c.path}`).join("\n")}`)
     .toBe(s.total);
 });
 

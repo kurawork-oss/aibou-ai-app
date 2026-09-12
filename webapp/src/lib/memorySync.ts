@@ -171,6 +171,53 @@ async function run(): Promise<SyncOutcome> {
   return { ok: true, pushed, applied, more };
 }
 
+/* ── いつ走らせるか ─────────────────────────────────────────────── */
+
+/**
+ * しばらく待ってから、まとめて1回だけ合流する。
+ *
+ * なぜ待つのか
+ * ------------
+ * 覚えた直後に毎回走らせると、会話のたびに通信する。しかも記憶は
+ * 続けて増えることが多い（何度か話しかける）ので、そのぶん往復が増える。
+ * 少し待って**最後の1回にまとめる**。
+ *
+ * 記憶が揃うのが数秒遅れても困らない。困るのは「いつまでも揃わない」
+ * ほうなので、待ちは短めにしてある。
+ */
+const SETTLE_MS = 8000;
+let timer: ReturnType<typeof setTimeout> | null = null;
+
+export function scheduleSync(delay = SETTLE_MS): void {
+  if (syncBlockedReason()) return;
+  if (timer) clearTimeout(timer);
+  timer = setTimeout(() => {
+    timer = null;
+    void syncMemory().catch(() => null);
+  }, delay);
+}
+
+/** 待っている合流を取り消す（画面を離れるときなど）。 */
+export function cancelScheduledSync(): void {
+  if (timer) { clearTimeout(timer); timer = null; }
+}
+
+/* アプリを開いたときに1回だけ。
+   ここが無いと、**2台目の端末は設定画面を開くまで空のまま会話する**
+   ——記憶を合流させた意味が、いちばん効いてほしい場所で出ない。 */
+let bootDone = false;
+
+/**
+ * 開いたときの1回。最初の描画を邪魔しないよう、少し置いてから走らせる。
+ *
+ * 2回目以降は何もしない（画面を行き来するたびに走らせない）。
+ */
+export function syncOnBoot(delay = 2500): void {
+  if (bootDone) return;
+  bootDone = true;
+  scheduleSync(delay);
+}
+
 /**
  * この端末を、サーバーとの合流からいったん切り離す。
  *

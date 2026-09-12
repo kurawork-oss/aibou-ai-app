@@ -41,6 +41,8 @@ import { useSpeechRecognition } from "@/lib/voice";
 import { speakCore, stopCoreVoice, type CoreVoiceSettings, type VoiceEngine } from "@/lib/coreVoice";
 import { takeCompleteSentences } from "@/lib/speech";
 import * as memory from "@/lib/memory";
+import { worthRemembering } from "@/lib/worthRemembering";
+import { scheduleSync } from "@/lib/memorySync";
 import { trimHistory } from "@/lib/history";
 
 export interface ChatSettings {
@@ -645,8 +647,26 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
       }
       /* この発言自体も覚えておく。本人が言ったことは、あとで効く度合いが
          いちばん高い（好み・予定・体質など）。返答のほうは長くて要約でも
-         あるので、いまは取らない。 */
-      void memory.add(text, { source: "me", kind: "note" }).catch(() => null);
+         あるので、いまは取らない。
+
+         ただし**全部は覚えない**。会話には「うん」「これ直して」「どう？」が
+         大量にあり、そのまま入れると長期記憶がそれで埋まる。AIへ渡せるのは
+         6件なので、そこが埋まるぶん本当に効く記憶が届かなくなる
+         （実測で、6問中3問の上位にかけらが入っていた）。 */
+      const worth = worthRemembering(text);
+      if (worth.keep) {
+        void memory
+          .add(worth.text, {
+            source: "me",
+            // 「覚えて」と言われた物は、会話から拾った物とは別扱いにする。
+            // 上限に達したとき、こちらを後まで残すため。
+            kind: worth.importance >= 2 ? "fact" : "note",
+            importance: worth.importance,
+          })
+          // 覚えたら、ほかの端末にも行き渡らせる（まとめて後で1回）
+          .then(() => scheduleSync())
+          .catch(() => null);
+      }
 
       // Text path → SSE streaming.
       let acc = "";

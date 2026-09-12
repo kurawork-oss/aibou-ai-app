@@ -23,6 +23,7 @@ import HfModels from "@/components/HfModels";
 import AppearanceSettings from "@/components/AppearanceSettings";
 import PushSettings from "@/components/PushSettings";
 import MemorySettings from "@/components/MemorySettings";
+import { syncOnBoot } from "@/lib/memorySync";
 import { CORE_TYPES, readCoreType, setCoreType, type CoreType } from "@/lib/coreType";
 import FeaturePacks from "@/components/FeaturePacks";
 import IntegrationsSettings from "@/components/IntegrationsSettings";
@@ -136,6 +137,12 @@ function Hud() {
   useEffect(() => {
     if (isOwner === false && ownerOnlyViews.includes(view)) setView("chat");
   }, [isOwner, ownerOnlyViews, view]);
+
+  /* 記憶を、開いたときに1回だけサーバーと揃える。
+     これが無いと**2台目の端末は、設定画面を開くまで空のまま会話する**
+     ——合流を作った意味が、いちばん効いてほしい場所で出ない。
+     最初の描画を邪魔しないよう、少し置いてから走る（lib/memorySync.ts）。 */
+  useEffect(() => { syncOnBoot(); }, []);
 
   useEffect(() => {
     try {

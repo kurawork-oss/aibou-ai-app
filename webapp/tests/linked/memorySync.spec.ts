@@ -298,6 +298,62 @@ test("揃ったときは、上げた数と受け取った数を出す", async ({
   await expect(page.getByText(/件を上げ、.*件を受け取りました/)).toBeVisible({ timeout: 10_000 });
 });
 
+/* ── 設定画面を開かなくても揃うこと ─────────────────────────────── */
+
+test("アプリを開くだけで、記憶が揃う（設定を開かなくても）", async ({ page }) => {
+  /* ここが無かった間、合流は「記憶の画面を開いたとき」だけだった。
+     つまり**2台目の端末は、設定を開くまで空のまま会話する**——
+     記憶を合流させた意味が、いちばん効いてほしい場所で出ない。 */
+  const now = Date.now();
+  const server = memoryServer([
+    { id: "s1", text: "甲殻類アレルギーがある", kind: "fact", importance: 2,
+      createdAt: now, updatedAt: now },
+  ]);
+  const be = await setup(page, server);
+  await page.goto("/");
+  await enterApp(page);
+
+  // 設定にも記憶の画面にも触らない
+  await expect(async () => {
+    expect(be.count("/memory/sync"), "開いただけでは揃えに行かない").toBeGreaterThan(0);
+  }).toPass({ timeout: 20_000 });
+
+  // 本当に端末へ入っている（会話で引ける状態）
+  await expect(async () => {
+    const n = await page.evaluate(async () => {
+      const req = indexedDB.open("forge-memory", 1);
+      return new Promise<number>((done) => {
+        req.onsuccess = () => {
+          const db = req.result;
+          const all = db.transaction("items", "readonly").objectStore("items").getAll();
+          all.onsuccess = () => { done((all.result || []).length); db.close(); };
+          all.onerror = () => { done(-1); db.close(); };
+        };
+        req.onerror = () => done(-1);
+      });
+    });
+    expect(n, "揃えに行ったのに、端末へ入っていない").toBeGreaterThan(0);
+  }).toPass({ timeout: 20_000 });
+});
+
+test("画面を行き来しても、開くたびに揃え直さない", async ({ page }) => {
+  // 起動の合流は1回だけ。タブを押すたびに通信すると、そのぶん遅くなる
+  const server = memoryServer();
+  const be = await setup(page, server);
+  await page.goto("/");
+  await enterApp(page);
+  await expect(async () => {
+    expect(be.count("/memory/sync")).toBeGreaterThan(0);
+  }).toPass({ timeout: 20_000 });
+
+  const after = be.count("/memory/sync");
+  await page.getByLabel("Settings").click();
+  await page.getByRole("button", { name: "✕" }).click();
+  await page.waitForTimeout(3000);
+  expect(be.count("/memory/sync") - after,
+    "画面を開け閉てするたびに揃えに行っている").toBeLessThanOrEqual(1);
+});
+
 /* ── 運びすぎないこと ───────────────────────────────────────────── */
 
 test("開くたびに、全部を送り直さない", async ({ page }) => {

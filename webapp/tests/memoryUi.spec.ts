@@ -169,6 +169,50 @@ test("繋がっていない端末では、合流の欄が嘘をつかない", as
   await expect(page.getByRole("button", { name: "いま揃える" })).toBeDisabled();
 });
 
+test("会話のかけらは、記憶に入れない", async ({ page }) => {
+  /* 発言を全部そのまま覚えていた頃、長期記憶が「うん」「これ直して」で
+     埋まっていた。AIへ渡せるのは6件なので、そこが埋まるぶん本当に効く
+     記憶が届かない（実測で、6問中3問の上位にかけらが入っていた）。 */
+  await page.goto("/");
+  await enterApp(page);
+
+  const input = page.getByPlaceholder(/にメッセージ/);
+  for (const text of ["ありがとう", "これ直して", "どう？", "了解"]) {
+    await input.fill(text);
+    await input.press("Enter");
+    await page.waitForTimeout(500);
+  }
+  // 覚えるべきものは、同じ道を通っても残る
+  await input.fill("甲殻類アレルギーがある");
+  await input.press("Enter");
+  await page.waitForTimeout(900);
+
+  await openMemory(page);
+  const box = page.locator('section:has-text("覚えていること")');
+  await expect(box.getByText("甲殻類アレルギーがある", { exact: true }))
+    .toBeVisible({ timeout: 5_000 });
+  for (const junk of ["ありがとう", "これ直して", "どう？", "了解"]) {
+    await expect(box.getByText(junk, { exact: true }),
+      `「${junk}」が記憶に入っている`).toHaveCount(0);
+  }
+});
+
+test("「覚えて」と言えば、会話からでも強く覚える", async ({ page }) => {
+  await page.goto("/");
+  await enterApp(page);
+
+  const input = page.getByPlaceholder(/にメッセージ/);
+  await input.fill("火曜の午後は打ち合わせ。覚えておいて");
+  await input.press("Enter");
+  await page.waitForTimeout(1200);
+
+  await openMemory(page);
+  const box = page.locator('section:has-text("覚えていること")');
+  await expect(box.getByText(/火曜の午後は打ち合わせ/)).toBeVisible({ timeout: 5_000 });
+  // 「とても大事」で入っている（上限に達しても残る側）
+  await expect(page.getByLabel(/火曜の午後は打ち合わせ.* の大事さ/)).toHaveValue("2");
+});
+
 test("会話で話した内容も、端末に残る", async ({ page }) => {
   /* 画面から手で足すだけでは、記憶はほとんど溜まらない。
      話しかけた内容そのものが残ることが、長期記憶の本体。 */

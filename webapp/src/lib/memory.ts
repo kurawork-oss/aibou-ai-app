@@ -233,9 +233,27 @@ export async function clearAll(): Promise<void> {
 /**
  * 多すぎる分を落とす。
  *
- * 落とす順は「大事でない → 古い」。大事と印を付けた物は、古くても残す
- * （印を付けた人は、それを残したくて付けている）。
+ * 落とす順は「会話から拾った物 → 大事でない → 古い」。
+ *
+ * はじめは「大事でない → 古い」だけだった。が、それだと**昨日の雑談が
+ * 残って、半年前の「甲殻類アレルギー」が消える**。どちらも大事さ0なら、
+ * 古いほうから捨てるので、会話で毎日入ってくる物が必ず勝ってしまう。
+ * 長期記憶としては逆で、古くても効き続ける物のほうが価値がある。
+ *
+ * そこで「どこから来たか」を先に見る。fact（自分で入れた・「覚えて」と
+ * 言った・AIが事実として入れた）は、note（会話から拾った）より後に残す。
+ *
+ * 並べ方だけ `dropOrder` に出してある。2000件を超えさせないと動かない
+ * 場所なので、順番そのものを直に確かめられるようにするため。
  */
+export function dropOrder(live: MemoryItem[]): MemoryItem[] {
+  const curated = (r: MemoryItem) => (r.kind === "fact" ? 1 : 0);
+  return [...live].sort(
+    (a, b) => (curated(a) - curated(b))
+           || (a.importance - b.importance)
+           || (a.updatedAt - b.updatedAt));
+}
+
 async function prune(): Promise<void> {
   const rows = await allRaw();
   const cutoff = Date.now() - TOMBSTONE_DAYS * 86_400_000;
@@ -244,11 +262,7 @@ async function prune(): Promise<void> {
 
   const over = live.length - MAX_ITEMS;
   const drop = [...stale];
-  if (over > 0) {
-    const ordered = [...live].sort(
-      (a, b) => (a.importance - b.importance) || (a.updatedAt - b.updatedAt));
-    drop.push(...ordered.slice(0, over));
-  }
+  if (over > 0) drop.push(...dropOrder(live).slice(0, over));
   if (!drop.length) return;
 
   const db = await openDb();
