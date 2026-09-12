@@ -14,7 +14,7 @@
 
 import { test, expect, type Page } from "@playwright/test";
 
-const FLOOR = "/skin-cyber-floor.webp";
+const FLOOR = "/skin-chrome-tall.webp";
 
 async function enterApp(page: Page) {
   // EntryGate → BootScreen（接続先が無いので、すぐ「ENTER OFFLINE」が出る）
@@ -53,7 +53,7 @@ function countRequests(page: Page, path: string) {
 /* ── 落とす物を減らせているか ──────────────────────────────────── */
 
 test("水を使わないテーマでは、背景の画像を落とさない", async ({ page }) => {
-  // 前はここが素通しで、白いテーマの人にも 118KB を毎回配っていた。
+  // 前はここが素通しで、白いテーマの人にも 190KB を毎回配っていた。
   await page.goto("/");
   await page.evaluate(() => localStorage.setItem("forge_skin", "aibou"));
 
@@ -83,7 +83,7 @@ test("見た目の一覧を開いても、本体は落ちない（見本だけ�
 
   expect(hits, "一覧を開いただけで本体を落としている").toHaveLength(0);
   // 見本のほうは出ている（一覧が空っぽではない）
-  const thumb = page.locator('img[src*="skin-cyber-floor-thumb"]');
+  const thumb = page.locator('img[src*="skin-chrome-tall-thumb"]');
   await expect(thumb.first()).toBeVisible();
 });
 

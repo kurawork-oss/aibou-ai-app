@@ -12,8 +12,9 @@
  * ファイルが 87KB になり、画質も落ちていた。元から一気に書けば起きない。
  *
  * 使い方:
- *   node tools/make-bg.mjs <元の画像> <出す名前>
+ *   node tools/make-bg.mjs <元の画像> [出す名前] [品質]
  *   例) node tools/make-bg.mjs ~/chrome.png skin-chrome-wide
+ *       node tools/make-bg.mjs ~/tall.jpg skin-chrome-tall 86
  *
  * 出す物:
  *   public/<名前>.webp        本体（選んだときだけ落とす）
@@ -28,9 +29,16 @@ import sharp from "sharp";
 import { statSync } from "node:fs";
 import { basename, resolve } from "node:path";
 
-/* 本体の品質。この絵は滑らかな階調なので、低いと紺の所に帯が出る。
-   90 で 1672×941 が約126KB——縦の絵（118KB）と同じくらいに収まる。 */
-const QUALITY = 90;
+/* 本体の品質。滑らかな階調の絵なので、低すぎると紺の所に帯が出る。
+   既定は 90。ただし**測ってから決めること**——下の「ずれ」が同じなら、
+   低いほうを選ぶ。実例:
+
+     横の絵 1672×941   q90 126KB（ずれ 1.23）
+     縦の絵 1200×2133  q90 235KB（ずれ 1.22）/ q86 185KB（ずれ 1.36）
+
+   縦は q86 にした。50KB 減って、ずれは 0.14/255 しか増えない。
+   この絵を落とすのはスマホの人なので、そこは軽いほうがよい。 */
+const QUALITY = Number(process.argv[4]) || 90;
 /* 見本の大きさ。一覧のカードは実測で 92×58 前後なので、その2倍強。
    本体をそのまま出すと、一覧を開いた瞬間に全部落ちる。 */
 const THUMB = { width: 320, height: 180, quality: 74 };
