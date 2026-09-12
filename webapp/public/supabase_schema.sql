@@ -123,6 +123,15 @@ CREATE TABLE IF NOT EXISTS agent_memory (
 );
 CREATE INDEX IF NOT EXISTS idx_agent_memory_user ON agent_memory(user_id, created_at DESC);
 
+-- 端末と合流させるための2列。
+--   updated_at … 「前回の合流より後に変わった物」を引くための目印
+--   deleted_at … 墓標。行ごと消すと、次の合流で端末側から復活してしまう
+-- 端末（IndexedDB）と同じ形にしてある。id は端末が作った UUID をそのまま使う
+-- ので、対応表は要らない。
+ALTER TABLE agent_memory ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();
+ALTER TABLE agent_memory ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
+CREATE INDEX IF NOT EXISTS idx_agent_memory_sync ON agent_memory(user_id, updated_at DESC);
+
 -- =====================================================================
 -- 🚀 Next.js webapp（FastAPI バックエンド）が使う新テーブル
 -- これらが無くてもアプリはメモリ・フォールバックで動くが、

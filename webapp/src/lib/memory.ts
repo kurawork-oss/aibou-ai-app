@@ -257,6 +257,70 @@ async function prune(): Promise<void> {
   db.close();
 }
 
+/* ── 合流（サーバーと揃える） ───────────────────────────────────── */
+
+/**
+ * 前回の合流より後に、この端末で変わったぶん。**墓標も含む**。
+ *
+ * 消したことを送らないと、サーバー側に残った同じ記憶が次の合流で
+ * 降りてきて**復活する**。「忘れて」と言ったことが戻ってくるのは、
+ * 覚えないことより体感が悪い。
+ */
+export async function changedSince(ts: number): Promise<MemoryItem[]> {
+  const rows = await allRaw();
+  return rows.filter((r) => (r.updatedAt || 0) > ts);
+}
+
+/**
+ * サーバーから来た記憶を取り込む。戻り値は実際に変わった件数。
+ *
+ * ぶつかったときは**新しいほうが勝つ**（updatedAt で比べる）。同じ時刻なら
+ * 手元を残す——降ってきた物で上書きしても中身は同じで、`source` だけが
+ * 「自分」から「同期」に変わってしまうため。
+ *
+ * 外から来た値なので、形は信じない。id と時刻が無い物は落とす。
+ */
+export async function applyRemote(items: unknown[]): Promise<number> {
+  if (!Array.isArray(items) || !items.length) return 0;
+
+  const rows = await allRaw();
+  const mine = new Map(rows.map((r) => [r.id, r]));
+  let changed = 0;
+
+  for (const raw of items) {
+    if (!raw || typeof raw !== "object") continue;
+    const r = raw as Record<string, unknown>;
+    const id = typeof r.id === "string" ? r.id.trim() : "";
+    if (!id) continue;
+
+    const updatedAt = Number(r.updatedAt) || 0;
+    if (!updatedAt) continue;
+    const cur = mine.get(id);
+    if (cur && (cur.updatedAt || 0) >= updatedAt) continue;
+
+    const deletedAt = Number(r.deletedAt) || 0;
+    const text = typeof r.text === "string" ? r.text.slice(0, 2000) : "";
+    // 中身も墓標も無い物は、取り込む意味が無い（壊れた行）
+    if (!text.trim() && !deletedAt) continue;
+
+    const kind: MemoryKind = r.kind === "fact" ? "fact" : "note";
+    const next: MemoryItem = {
+      id,
+      text: deletedAt ? "" : text,
+      kind,
+      importance: Math.max(0, Math.min(2, Number(r.importance) || 0)),
+      createdAt: Number(r.createdAt) || updatedAt,
+      updatedAt,
+      source: "server",
+      ...(deletedAt ? { deletedAt } : {}),
+    };
+    if (await put(next)) changed++;
+  }
+
+  if (changed) await prune();
+  return changed;
+}
+
 /* ── 思い出す ───────────────────────────────────────────────────── */
 
 export interface RecalledMemory {

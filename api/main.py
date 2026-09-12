@@ -82,6 +82,7 @@ import transcribe as transcribe_mod
 import vault
 import video_script
 from memory_store import mem_add, mem_recall, mem_recent
+import memory_sync as memory_sync_store
 
 async def _scheduler_loop():
     """常駐ループ：60秒ごとに定期実行を確認する（best-effort）。
@@ -494,6 +495,27 @@ class MemoryAddRequest(BaseModel):
     role: str = "user"
     content: str
     importance: Optional[int] = 0
+
+
+class MemoryItem(BaseModel):
+    """端末（webapp/src/lib/memory.ts）が持っている記憶1件。"""
+    id: str
+    text: str = ""
+    kind: str = "note"
+    importance: int = 0
+    createdAt: int = 0
+    updatedAt: int = 0
+    deletedAt: Optional[int] = None
+
+
+class MemorySyncRequest(BaseModel):
+    """前回の合流より後に、端末で変わったぶん。
+
+    `since` はサーバーが前回返した目印（サーバーの時計）。端末の時計を
+    使うと、ずれているぶんだけ記憶を取りこぼす。
+    """
+    since: int = 0
+    items: List[MemoryItem] = []
 
 
 class Scene(BaseModel):
@@ -1345,6 +1367,22 @@ async def memory_add(req: MemoryAddRequest, _auth: None = Depends(require_auth),
 async def memory_recent(limit: int = 20, _auth: None = Depends(require_auth)):
     """直近の記憶を返す。Supabaseが無ければ空リスト。"""
     return {"items": mem_recent(limit=limit)}
+
+
+@app.post("/memory/sync")
+async def memory_sync(req: MemorySyncRequest, _auth: None = Depends(require_auth),
+                      _db: str = Depends(use_own_database)):
+    """端末の記憶とサーバーの記憶を合流させる。
+
+    ここに `require_storage` を付けていないのは、**保存先が無い人にも
+    断りの理由を返したい**から。409 にすると画面は「失敗しました」しか
+    出せないが、この口は `ok=false` と一緒に理由の文を返すので、
+    「この端末の中だけです。繋ぐとほかの端末とも揃います」と書ける。
+    保存そのものは memory_sync 側が Supabase を持たない限り行わない。
+    """
+    items = [i.model_dump() for i in (req.items or [])]
+    return await asyncio.get_event_loop().run_in_executor(
+        None, lambda: memory_sync_store.sync(int(req.since or 0), items))
 
 
 @app.get("/income/summary")

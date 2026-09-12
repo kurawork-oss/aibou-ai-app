@@ -3072,3 +3072,61 @@ export async function artifactCreate(
   if (!res.ok && !d.error) return { error: d.detail ?? `保管できませんでした (${res.status})` };
   return d;
 }
+
+/* ── 記憶の合流 ──────────────────────────────────────────────────── */
+
+/** サーバーから降りてくる記憶1件（端末の MemoryItem と同じ形）。 */
+export interface RemoteMemoryItem {
+  id: string;
+  text: string;
+  kind: string;
+  importance: number;
+  createdAt: number;
+  updatedAt: number;
+  deletedAt?: number;
+  source?: string;
+}
+
+export interface MemorySyncResponse {
+  ok: boolean;
+  /** 次にここから続ける、という目印（サーバーの時計）。 */
+  at: number;
+  /** まだ運びきれていないぶんがある。 */
+  more?: boolean;
+  pushed?: number;
+  pulled?: number;
+  items?: RemoteMemoryItem[];
+  /** ok=false のときに、人に見せる理由。 */
+  reason?: string;
+  error?: string;
+}
+
+/**
+ * POST /memory/sync — 端末の記憶とサーバーの記憶を合流させる。
+ *
+ * 失敗を投げない。記憶は「繋がっていれば揃う」物で、繋がっていない人の
+ * 画面を止める理由にはならない——理由を返して、画面がそう書けばよい。
+ */
+export async function memorySync(
+  since: number, items: unknown[],
+): Promise<MemorySyncResponse> {
+  const res = await fetch(`${requireApiUrl()}/memory/sync`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ since, items }),
+  });
+  const d = (await res.json().catch(() => ({}))) as Partial<MemorySyncResponse> & { detail?: string };
+  if (!res.ok) {
+    /* 401/403 は、番号だけ出しても次の手が分からない。ここだけ言い換える
+       ——「通してよいか」を決めるのはサーバーなので、画面側で先回りして
+       判断はしない（構成によって通る道が違う）が、返ってきた断りは
+       人の言葉に直す。 */
+    const fallback = res.status === 401 || res.status === 403
+      ? "サーバーに断られました。ログインし直すと揃えられます。"
+      : `合流できませんでした (${res.status})`;
+    return { ok: false, at: since, reason: d.reason ?? d.detail ?? d.error ?? fallback };
+  }
+  return { ok: Boolean(d.ok), at: Number(d.at) || since, more: d.more,
+           pushed: d.pushed ?? 0, pulled: d.pulled ?? 0,
+           items: Array.isArray(d.items) ? d.items : [], reason: d.reason };
+}

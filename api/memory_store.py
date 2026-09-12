@@ -123,21 +123,57 @@ def mem_add(role: str, content: str, importance: int = 0) -> bool:
         return False
 
 
-def mem_recent(limit: int = 20) -> List[dict]:
-    """直近の記憶を created_at 降順で返す。無ければ []（絶対にraiseしない）。"""
+_ALIVE_OK = "_aibou_alive_filter_ok"      # deleted_at で絞り込めるDBか
+
+
+def _fetch(cols: str, limit: int) -> List[dict]:
+    """記憶を読む。消された物（墓標）は外す。
+
+    なぜ外すのか
+    ------------
+    端末で「忘れて」と言われた記憶は、合流でサーバー側にも墓標が立つ。
+    ここで外さないと、**消したはずのことをサーバーが思い出し続ける**。
+    覚えてくれないことより、消したのに戻ってくるほうが体感は悪い。
+
+    なぜ失敗したら外さずに読み直すのか
+    ----------------------------------
+    deleted_at 列が無い古いDBでは、この条件を付けると問い合わせごと失敗する。
+    そこで諦めると、**記憶が丸ごと空になる**——合流できないのは仕方ないが、
+    そのせいで何も思い出せなくなるのは別の話で、しかも「なんとなく賢くない」
+    としか見えない。落ちるなら、落ちる前の状態へ戻るほうがよい。
+
+    （合流のときに墓標の中身は空にしてあるので、絞り込めないDBでも
+      消した文章そのものは出てこない。ここは二枚目の備え。）
+    """
     c = get_supabase()
     if not c:
         return []
+
+    def base():
+        return (c.table("agent_memory").select(cols)
+                .eq("user_id", DEFAULT_USER_ID))
+
+    if getattr(c, _ALIVE_OK, None) is not False:
+        try:
+            rows = (base().is_("deleted_at", "null")
+                    .order("created_at", desc=True)
+                    .limit(limit).execute().data) or []
+            _remember(c, _ALIVE_OK, True)
+            return rows
+        except Exception:
+            # 一度分かったら、以降は無駄に2回投げない
+            _remember(c, _ALIVE_OK, False)
+
     try:
-        rows = (c.table("agent_memory")
-                .select("id,role,content,importance,created_at")
-                .eq("user_id", DEFAULT_USER_ID)
-                .order("created_at", desc=True)
-                .limit(max(1, int(limit or 20)))
-                .execute().data) or []
-        return rows
+        return (base().order("created_at", desc=True)
+                .limit(limit).execute().data) or []
     except Exception:
         return []
+
+
+def mem_recent(limit: int = 20) -> List[dict]:
+    """直近の記憶を created_at 降順で返す。無ければ []（絶対にraiseしない）。"""
+    return _fetch("id,role,content,importance,created_at", max(1, int(limit or 20)))
 
 
 def mem_recall(query: str = "", limit: int = 8) -> str:
@@ -194,15 +230,7 @@ def mem_recall(query: str = "", limit: int = 8) -> str:
     if cached and (time.monotonic() - cached[0]) < _ROWS_TTL:
         rows = cached[1]
     if rows is None:
-        try:
-            rows = (c.table("agent_memory")
-                    .select("role,content,importance")
-                    .eq("user_id", DEFAULT_USER_ID)
-                    .order("created_at", desc=True)
-                    .limit(120)
-                    .execute().data) or []
-        except Exception:
-            return ""
+        rows = _fetch("role,content,importance", 120)
         _remember(c, _ROWS_CACHE, (time.monotonic(), rows))
     if not rows:
         return ""

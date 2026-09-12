@@ -16,9 +16,12 @@
  * 別の場所にあるので、それも消したい人のために「どこにあるか」を出す。
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import * as memory from "@/lib/memory";
 import { recall } from "@/lib/recall";
+import {
+  forgetSyncMark, lastSyncedAt, syncBlockedReason, syncMemory, type SyncOutcome,
+} from "@/lib/memorySync";
 
 const IMPORTANCE = [
   { v: 0, label: "ふつう" },
@@ -33,6 +36,9 @@ export default function MemorySettings() {
   const [where, setWhere] = useState<string>("device");
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
+  const [sync, setSync] = useState<SyncOutcome | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const blocked = syncBlockedReason();
 
   const load = useCallback(async () => {
     setItems((await memory.all()).sort((a, b) => b.updatedAt - a.updatedAt));
@@ -40,6 +46,29 @@ export default function MemorySettings() {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+
+  /** サーバーと揃える。画面には**実際に動いた数**だけを出す。 */
+  const runSync = useCallback(async (manual: boolean) => {
+    if (blocked) { setSync({ ok: false, pushed: 0, applied: 0, more: false, reason: blocked }); return; }
+    setSyncing(true);
+    const out = await syncMemory();
+    setSyncing(false);
+    setSync(out);
+    // 受け取った物があるときだけ読み直す（毎回だと一覧がちらつく）
+    if (out.applied > 0) await load();
+    if (manual && out.ok && out.pushed === 0 && out.applied === 0) {
+      setNote("すでに揃っています。");
+    }
+  }, [blocked, load]);
+
+  /* 開いたときに1回だけ揃える。押させないと揃わないと、
+     「2台目が空のまま」に気づくのが遅れる。 */
+  const auto = useRef(false);
+  useEffect(() => {
+    if (auto.current || blocked) return;
+    auto.current = true;
+    void runSync(false);
+  }, [blocked, runSync]);
 
   const addOne = async () => {
     const text = draft.trim();
@@ -65,8 +94,15 @@ export default function MemorySettings() {
     if (!window.confirm("この端末が覚えていることを全部消します。元に戻せません。")) return;
     setBusy(true);
     await memory.clearAll();
+    /* 合流の目印も捨てる。残したままだと、次の合流で「前回より後に
+       変わった物は無い」と判断して、サーバー側の記憶が降りてこない
+       ——消したはずがサーバーに残り、この端末からは見えないという、
+       いちばん分かりにくい状態になる。 */
+    forgetSyncMark();
     await load();
-    setNote("端末の記憶を消しました。");
+    setNote(blocked
+      ? "端末の記憶を消しました。"
+      : "端末の記憶を消しました。次に揃えると、サーバー側の記憶が入り直します。");
     setBusy(false);
   };
 
@@ -173,10 +209,49 @@ export default function MemorySettings() {
       )}
       {note && <p className="mt-1.5 text-[11px] text-muted">{note}</p>}
 
-      <p className="mt-2 text-[11px] leading-relaxed text-muted">
-        ※ Supabase を繋いでいる場合、サーバー側にも記憶があります。そちらは
-        この一覧には出ません（消すには Supabase の <code>agent_memory</code> を消します）。
-      </p>
+      {/* サーバーとの合流。ここが無いと「2台目が空のまま」に気づけない。 */}
+      <div className="mt-2 border-t border-panel pt-2">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[10px] tracking-[0.2em] text-muted label-mono">サーバーとの合流</span>
+          <button
+            type="button"
+            disabled={syncing || !!blocked}
+            onClick={() => void runSync(true)}
+            className="rounded-forge border px-2 py-1 text-[10px] disabled:opacity-40"
+            style={{ borderColor: "var(--btn-bd)", background: "var(--btn-bg)", color: "var(--fg-strong)" }}
+          >
+            {syncing ? "揃えています…" : "いま揃える"}
+          </button>
+        </div>
+
+        <p className="mt-1.5 text-[11px] leading-relaxed text-muted">
+          {blocked ? (
+            <span>{blocked}他の端末とは揃いません。</span>
+          ) : sync && !sync.ok ? (
+            <span style={{ color: "#ffd060" }}>{sync.reason}</span>
+          ) : sync?.ok ? (
+            <>
+              {sync.pushed === 0 && sync.applied === 0
+                ? "揃っています。"
+                : `${sync.pushed}件を上げ、${sync.applied}件を受け取りました。`}
+              {sync.more && "（まだ残りがあります。もう一度押すと続きを運びます）"}
+              {lastSyncedAt() > 0 && (
+                <span className="label-mono">
+                  {" "}最後に揃えたのは {new Date(lastSyncedAt()).toLocaleString("ja-JP")}
+                </span>
+              )}
+            </>
+          ) : (
+            "揃えると、ほかの端末や機種変のあとでも同じことを覚えています。"
+          )}
+        </p>
+
+        <p className="mt-1 text-[11px] leading-relaxed text-muted">
+          運ぶのは、この一覧にある<b>覚えておいてほしいこと</b>だけです。会話の
+          記録そのものはサーバーに置いたままで、端末へは降りてきません
+          （降ろすと、この端末の枠が会話で埋まってしまうため）。
+        </p>
+      </div>
     </section>
   );
 }

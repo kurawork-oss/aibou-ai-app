@@ -156,6 +156,19 @@ test("大事さを変えられる", async ({ page }) => {
   await expect(page.getByLabel(/毎朝の薬を忘れない の大事さ/)).toHaveValue("2");
 });
 
+test("繋がっていない端末では、合流の欄が嘘をつかない", async ({ page }) => {
+  /* この組は接続先なし（NEXT_PUBLIC_API_URL 空）で動く。
+     ここで「揃えました」と出たり、押せるのに何も起きないボタンが
+     あったりすると、本人は2台目でも揃うつもりで使い続ける。 */
+  await page.goto("/");
+  await enterApp(page);
+  await openMemory(page);
+
+  await expect(page.getByText("サーバーとの合流")).toBeVisible();
+  await expect(page.getByText(/接続先が設定されていないため/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "いま揃える" })).toBeDisabled();
+});
+
 test("会話で話した内容も、端末に残る", async ({ page }) => {
   /* 画面から手で足すだけでは、記憶はほとんど溜まらない。
      話しかけた内容そのものが残ることが、長期記憶の本体。 */
