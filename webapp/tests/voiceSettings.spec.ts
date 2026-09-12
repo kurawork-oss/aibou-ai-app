@@ -30,6 +30,8 @@ test("何も保存していない人は、等倍の速さ・標準の高さで�
   await page.goto("/");
   await enterApp(page);
   await page.getByLabel("Settings").click();
+  // 声の設定は「声」タブへ移した（前は物置の CORE の中）
+  await page.getByRole("button", { name: "声", exact: true }).click();
   await expect(page.getByLabel("Talk speed")).toHaveValue("1", { timeout: 5_000 });
   await expect(page.getByLabel("Voice pitch")).toHaveValue("1");
 });
@@ -38,6 +40,8 @@ test("声の設定に、出どころ・声・速さ・高さ・試聴がそろ�
   await page.goto("/");
   await enterApp(page);
   await page.getByLabel("Settings").click();
+  // 声の設定は「声」タブへ移した（前は物置の CORE の中）
+  await page.getByRole("button", { name: "声", exact: true }).click();
 
   await expect(page.getByText("VOICE SOURCE")).toBeVisible({ timeout: 5_000 });
   await expect(page.getByRole("button", { name: /端末の声/ })).toBeVisible();
@@ -56,6 +60,8 @@ test("音声が入っていない端末では、鳴らないことをはっき�
   test.skip(voices > 0, "この環境には音声が入っているため、この確認は不要");
 
   await page.getByLabel("Settings").click();
+  // 声の設定は「声」タブへ移した（前は物置の CORE の中）
+  await page.getByRole("button", { name: "声", exact: true }).click();
   await expect(page.getByText(/この端末には音声が入っていない/)).toBeVisible({ timeout: 5_000 });
 });
 
@@ -64,6 +70,8 @@ test("バックエンド未接続なら、サーバーの声は選べない", as
   await page.goto("/");
   await enterApp(page);
   await page.getByLabel("Settings").click();
+  // 声の設定は「声」タブへ移した（前は物置の CORE の中）
+  await page.getByRole("button", { name: "声", exact: true }).click();
   await expect(page.getByRole("button", { name: /サーバーの声/ })).toBeDisabled();
 });
 
@@ -73,6 +81,8 @@ test("試聴ボタンを押しても画面が壊れない（音声が無い端�
   await page.goto("/");
   await enterApp(page);
   await page.getByLabel("Settings").click();
+  // 声の設定は「声」タブへ移した（前は物置の CORE の中）
+  await page.getByRole("button", { name: "声", exact: true }).click();
   await page.getByRole("button", { name: /この声で試聴/ }).click();
   await page.waitForTimeout(1200);
   // 「再生中…」のまま固まらず、押せる状態に戻ること
@@ -84,6 +94,8 @@ test("速さと高さを変えて保存すると、次に開いたときも残�
   await page.goto("/");
   await enterApp(page);
   await page.getByLabel("Settings").click();
+  // 声の設定は「声」タブへ移した（前は物置の CORE の中）
+  await page.getByRole("button", { name: "声", exact: true }).click();
 
   await page.getByLabel("Talk speed").fill("1.35");
   await page.getByLabel("Voice pitch").fill("1.2");
@@ -103,6 +115,8 @@ test("速さと高さを変えて保存すると、次に開いたときも残�
   await page.reload({ waitUntil: "domcontentloaded" });
   await enterApp(page);
   await page.getByLabel("Settings").click();
+  // 声の設定は「声」タブへ移した（前は物置の CORE の中）
+  await page.getByRole("button", { name: "声", exact: true }).click();
   await expect(page.getByLabel("Talk speed")).toHaveValue("1.35");
   await expect(page.getByLabel("Voice pitch")).toHaveValue("1.2");
 });

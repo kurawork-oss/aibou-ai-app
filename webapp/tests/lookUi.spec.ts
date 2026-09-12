@@ -40,6 +40,19 @@ function bgCard(page: Page, label: string) {
   return page.getByRole("button", { name: label, exact: true }).locator("xpath=..");
 }
 
+/**
+ * 見た目の一覧を開く。
+ *
+ * テーマ・背景・コアの見本は畳んである（全部並べると縦1779px＝画面4枚に
+ * なるため）。中のボタンを押すテストは、先にその まとまり を開く。
+ */
+async function openFold(page: Page, title: "画面のテーマ" | "背景" | "コアの形") {
+  const head = page.getByRole("button", { name: new RegExp(`^${title}`) }).first();
+  await expect(head).toBeVisible({ timeout: 8_000 });
+  if ((await head.getAttribute("aria-expanded")) !== "true") await head.click();
+  await page.waitForTimeout(250);
+}
+
 /** そのURLへの通信を数える（部分一致ではなく、末尾で見る）。 */
 function countRequests(page: Page, path: string) {
   const hits: string[] = [];
@@ -78,6 +91,7 @@ test("見た目の一覧を開いても、本体は落ちない（見本だけ�
   await page.getByLabel("Settings").click();
   await page.getByRole("button", { name: "見た目" }).click();
   await expect(page.getByText("画面のテーマ")).toBeVisible({ timeout: 5_000 });
+  await openFold(page, "背景");
   await expect(page.getByRole("button", { name: /水たまり・銀/ })).toBeVisible();
   await page.waitForTimeout(800);
 
@@ -98,6 +112,7 @@ test("選んだときに落として、次からは端末の物を使う", async
   await page.getByLabel("Settings").click();
   await page.getByRole("button", { name: "見た目" }).click();
   await expect(page.getByText("画面のテーマ")).toBeVisible({ timeout: 5_000 });
+  await openFold(page, "背景");
 
   const first = countRequests(page, FLOOR);
   await page.getByRole("button", { name: "水たまり・銀", exact: true }).click();
@@ -159,6 +174,7 @@ test("レトロは角を落とさず、影をぼかさない", async ({ page }) 
   await enterApp(page);
   await page.getByLabel("Settings").click();
   await page.getByRole("button", { name: "見た目" }).click();
+  await openFold(page, "画面のテーマ");
   await page.getByRole("button", { name: /RETRO（ドット）/ }).click();
 
   const look = await page.evaluate(() => {
@@ -186,6 +202,7 @@ test("レトロでも、丸いままにする物は丸い（コアの枠など�
   await enterApp(page);
   await page.getByLabel("Settings").click();
   await page.getByRole("button", { name: "見た目" }).click();
+  await openFold(page, "画面のテーマ");
   await page.getByRole("button", { name: /RETRO（ドット）/ }).click();
   await page.getByRole("button", { name: "✕" }).click();
 
@@ -282,6 +299,7 @@ test("背景はテーマと別に選べて、再読込しても残る", async ({
   await page.getByLabel("Settings").click();
   await page.getByRole("button", { name: "見た目" }).click();
   await expect(page.getByText("画面のテーマ")).toBeVisible({ timeout: 5_000 });
+  await openFold(page, "背景");
 
   // 紺のテーマのまま、背景だけ星空にする
   await page.getByRole("button", { name: /星空/ }).click();
@@ -303,6 +321,7 @@ test("画像が要る背景は、画像が無いうちは選べない", async ({
   await page.getByLabel("Settings").click();
   await page.getByRole("button", { name: "見た目" }).click();
   await expect(page.getByText("画面のテーマ")).toBeVisible({ timeout: 5_000 });
+  await openFold(page, "背景");
   await expect(page.getByText("画像を保存すると選べます").first()).toBeVisible();
   await expect(page.getByRole("button", { name: /自分の画像＋水/ })).toBeDisabled();
 });
@@ -313,6 +332,7 @@ test("無地を選ぶと、背景の canvas ごと出さない", async ({ page }
   await enterApp(page);
   await page.getByLabel("Settings").click();
   await page.getByRole("button", { name: "見た目" }).click();
+  await openFold(page, "背景");
   await page.getByRole("button", { name: /無地/ }).click();
   await expect(async () => {
     expect(await page.evaluate(() => document.documentElement.dataset.bg)).toBe("plain");
@@ -387,6 +407,7 @@ test("水を張らない「銀の流れ」は、canvas ではなく CSS が絵�
   await page.getByLabel("Settings").click();
   await page.getByRole("button", { name: "見た目" }).click();
   await expect(page.getByText("画面のテーマ")).toBeVisible({ timeout: 5_000 });
+  await openFold(page, "背景");
 
   await page.getByRole("button", { name: "銀の流れ", exact: true }).click();
   await expect(async () => {
@@ -563,6 +584,7 @@ for (const skin of ["retro", "custom"] as const) {
     await page.getByLabel("Settings").click();
     await page.getByRole("button", { name: "見た目" }).click();
     await expect(page.getByText("画面のテーマ")).toBeVisible({ timeout: 5_000 });
+  await openFold(page, "背景");
     await page.waitForTimeout(600);            // 字が届いてから測る
     const settings = await clipped(page);
 
@@ -625,6 +647,7 @@ test("自分の画像を保存すると、背景になり、縮んで残る", as
   await page.getByLabel("Settings").click();
   await page.getByRole("button", { name: "見た目" }).click();
   await expect(page.getByText("画面のテーマ")).toBeVisible({ timeout: 5_000 });
+  await openFold(page, "背景");
 
   expect(await putBigImage(page), "画像を渡せなかった").toBe(true);
 
@@ -649,6 +672,7 @@ test("画像を消すと、背景が無地へ逃げる（真っ黒にならな�
   await page.getByLabel("Settings").click();
   await page.getByRole("button", { name: "見た目" }).click();
   await expect(page.getByText("画面のテーマ")).toBeVisible({ timeout: 5_000 });
+  await openFold(page, "背景");
   expect(await putBigImage(page, 1200, 800)).toBe(true);
   await expect(async () => {
     expect(await page.evaluate(() => document.documentElement.dataset.bg)).toBe("user-flat");
@@ -667,6 +691,7 @@ test("自分の画像は、再読込しても残る", async ({ page }) => {
   await page.getByLabel("Settings").click();
   await page.getByRole("button", { name: "見た目" }).click();
   await expect(page.getByText("画面のテーマ")).toBeVisible({ timeout: 5_000 });
+  await openFold(page, "背景");
   expect(await putBigImage(page, 1000, 600)).toBe(true);
   await expect(async () => {
     expect(await page.evaluate(() => document.documentElement.dataset.bg)).toBe("user-flat");
@@ -704,6 +729,7 @@ test("テーマを離れても、背景の膜の濃さは消えない", async ({
   // 別のテーマへ移る（色は片付くが、膜は背景の設定なので残る）
   await page.getByLabel("Settings").click();
   await page.getByRole("button", { name: "見た目" }).click();
+  await openFold(page, "画面のテーマ");
   await page.getByRole("button", { name: /CYBER（紺）/ }).click();
   await expect(async () => {
     expect(await page.evaluate(() => document.documentElement.dataset.skin)).toBe("cyber");

@@ -73,6 +73,8 @@ async function enterApp(page: Page) {
 
 async function openMemory(page: Page) {
   await page.getByLabel("Settings").click();
+  // 記憶は専用のタブへ移した（前は「CORE」という物置の中にあった）
+  await page.getByRole("button", { name: "記憶", exact: true }).click();
   await expect(page.getByText("覚えていること")).toBeVisible({ timeout: 8_000 });
 }
 

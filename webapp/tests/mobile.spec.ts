@@ -180,7 +180,7 @@ test("設定を開いても、押せるものが44px以上ある", async ({ page
   await expect(page.getByText("CORE SETTINGS")).toBeVisible();
 
   const bad: string[] = [];
-  for (const t of ["CORE", "PERSONA", "KEYCHAIN", "HF", "DIAGNOSTICS"]) {
+  for (const t of ["基本", "声", "記憶", "見た目", "つなぐ", "KEYCHAIN", "DIAGNOSTICS"]) {
     await page.getByRole("button", { name: t, exact: true }).click();
     await page.waitForTimeout(400);
     const { small, clipped } = await measure(page, MIN_TAP);

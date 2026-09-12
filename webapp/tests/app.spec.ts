@@ -132,15 +132,25 @@ test("Chat: history toggle opens the panel", async ({ page }) => {
 
 
 /* ── 見た目（スキン）の切り替え ─────────────────────────────────── */
+/** 見た目の中のまとまりを開く（テーマ・背景・コアの見本は畳んである）。 */
+async function openFold(page: Page, title: string) {
+  const head = page.getByRole("button", { name: new RegExp(`^${title}`) }).first();
+  await expect(head).toBeVisible({ timeout: 8_000 });
+  if ((await head.getAttribute("aria-expanded")) !== "true") await head.click();
+  await page.waitForTimeout(250);
+}
+
 test("Settings 見た目 has the theme picker with every skin", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
   await page.getByLabel("Settings").click();
   await page.getByRole("button", { name: "見た目" }).click();
-  await expect(page.getByText("画面のテーマ")).toBeVisible({ timeout: 5_000 });
+  await openFold(page, "画面のテーマ");
+  /* 畳んだ見出しにも「いま選んでいる物」の名前が出るので、同じ名前の
+     押し物が2つになる（見出しと一覧）。一覧のほう＝後ろを見る。 */
   for (const name of [/CYBER（紺）/, /EMERALD（緑金）/, /FORGE（宇宙）/, /AIbou（ライト）/,
                     /RETRO（ドット）/, /CUSTOM（自分で）/]) {
-    await expect(page.getByRole("button", { name })).toBeVisible();
+    await expect(page.getByRole("button", { name }).last()).toBeVisible();
   }
 });
 
@@ -162,6 +172,7 @@ test("テーマを切り替えると、地の色も文字色も変わる", async
   await enterApp(page);
   await page.getByLabel("Settings").click();
   await page.getByRole("button", { name: "見た目" }).click();
+  await openFold(page, "画面のテーマ");
 
   const look = () => page.evaluate(() => {
     const cs = getComputedStyle(document.documentElement);
@@ -231,17 +242,19 @@ test("Settings CORE has the core-shape picker and it persists", async ({ page })
   await enterApp(page);
   await page.getByLabel("Settings").click();
   await page.getByRole("button", { name: "見た目" }).click();
-  await expect(page.getByText("コアの形")).toBeVisible({ timeout: 5_000 });
+  await openFold(page, "コアの形");
   // 見本は実物のコアを小さく描いている（静止画ではない）
-  await expect(page.getByRole("button", { name: "ピラミッド" })).toBeVisible();
-  await page.getByRole("button", { name: "クリスタル" }).click();
+  await expect(page.getByRole("button", { name: "ピラミッド" }).last()).toBeVisible();
+  await page.getByRole("button", { name: "クリスタル" }).last().click();
   expect(await page.evaluate(() => localStorage.getItem("forge_core_type"))).toBe("crystal");
   // 再読込しても選んだ形のまま
   await page.reload({ waitUntil: "domcontentloaded" });
   await enterApp(page);
   await page.getByLabel("Settings").click();
   await page.getByRole("button", { name: "見た目" }).click();
-  await expect(page.getByRole("button", { name: "クリスタル" })).toHaveAttribute("aria-pressed", "true");
+  await openFold(page, "コアの形");
+  await expect(page.getByRole("button", { name: "クリスタル" }).last())
+    .toHaveAttribute("aria-pressed", "true");
 });
 
 test("A broken saved core shape falls back to the default", async ({ page }) => {
@@ -251,7 +264,10 @@ test("A broken saved core shape falls back to the default", async ({ page }) => 
   await enterApp(page);
   await page.getByLabel("Settings").click();
   await page.getByRole("button", { name: "見た目" }).click();
-  await expect(page.getByRole("button", { name: "コア", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await openFold(page, "コアの形");
+  // 見出しにも「コア」と出るので、一覧のほう＝後ろを見る
+  await expect(page.getByRole("button", { name: "コア", exact: true }).last())
+    .toHaveAttribute("aria-pressed", "true");
 });
 
 
@@ -309,27 +325,28 @@ test("Settings gear icon is clickable and opens panel", async ({ page }) => {
   await expect(page.getByText("CORE SETTINGS")).toBeVisible({ timeout: 5_000 });
 });
 
-test("Settings panel has 6 tabs", async ({ page }) => {
+test("設定は、用で分かれた7つのタブに畳んである", async ({ page }) => {
+  /* 前は CORE が物置で、無関係な12組（通知・記憶・AI・機能・連携・名前・
+     声5種）が1枚に積まれていた——縦1406px、押せる物29個。
+     枚数ではなく「目当てに辿り着くまでに何を素通りするか」を減らす。 */
   await page.goto("/");
   await enterApp(page);
   await page.getByLabel("Settings").click();
-  await expect(page.getByText("CORE", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("PERSONA", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("KEYCHAIN", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "HF" })).toBeVisible();
-  await expect(page.getByText("DIAGNOSTICS", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "見た目" })).toBeVisible();
+  for (const t of ["基本", "声", "記憶", "見た目", "つなぐ", "KEYCHAIN", "DIAGNOSTICS"]) {
+    await expect(page.getByRole("button", { name: t, exact: true }),
+      `タブ「${t}」が無い`).toBeVisible();
+  }
 });
 
 test("Settings HF tab explains it needs the backend when offline", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
   await page.getByLabel("Settings").click();
-  await page.getByRole("button", { name: "HF" }).click();
+  await page.getByRole("button", { name: "つなぐ" }).click();
   // 会話・コード・画像・文字起こしに割り当てる、という説明が出る
   await expect(page.getByText(/会話・コード・画像生成・文字起こし/)).toBeVisible({ timeout: 5_000 });
   // バックエンド未接続なら、その理由をはっきり出す（黙って空にしない）
-  await expect(page.getByText(/バックエンド接続後に使えます/)).toBeVisible();
+  await expect(page.getByText(/バックエンド接続後に使えます/).first()).toBeVisible();
 });
 
 test("Settings tab bar does not overflow at phone width", async ({ page }) => {
@@ -341,15 +358,33 @@ test("Settings tab bar does not overflow at phone width", async ({ page }) => {
   const overflow = await page.evaluate(() =>
     document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(1);
-  // 5つ目のタブも押せる（幅が潰れて隠れていない）
-  await page.getByRole("button", { name: "HF" }).click();
-  await expect(page.getByText(/バックエンド接続後に使えます/)).toBeVisible({ timeout: 5_000 });
+
+  /* **どのタブも枠の中にある**こと。横1列に詰めていた頃、幅320〜360pxでは
+     右端のタブが枠の外に出ていて、しかも横スクロールもできなかった
+     ——その画面へ行く道が無かった。いまは折り返している。 */
+  const out = await page.evaluate(() => {
+    const names = ["基本", "声", "記憶", "見た目", "つなぐ", "KEYCHAIN", "DIAGNOSTICS"];
+    const tabs = [...document.querySelectorAll("button")]
+      .filter((b) => names.includes((b.textContent || "").trim()));
+    if (!tabs.length) return ["タブが見つからない"];
+    const row = tabs[0].parentElement!.getBoundingClientRect();
+    return tabs.filter((t) => {
+      const r = t.getBoundingClientRect();
+      return r.right > row.right + 1 || r.left < row.left - 1;
+    }).map((t) => (t.textContent || "").trim());
+  });
+  expect(out, `枠から出ているタブ: ${out.join(", ")}`).toEqual([]);
+
+  // いちばん端のタブも実際に押せる
+  await page.getByRole("button", { name: "つなぐ", exact: true }).click();
+  await expect(page.getByText(/バックエンド接続後に使えます/).first()).toBeVisible({ timeout: 5_000 });
 });
 
-test("Settings CORE tab shows voice + talk speed controls", async ({ page }) => {
+test("声のタブに、声と速さがそろっている", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
   await page.getByLabel("Settings").click();
+  await page.getByRole("button", { name: "声", exact: true }).click();
   await expect(page.getByText("CORE VOICE")).toBeVisible();
   await expect(page.getByText("TALK SPEED")).toBeVisible();
   await expect(page.getByLabel("Talk speed")).toBeVisible();
@@ -394,11 +429,11 @@ test("KEYCHAIN: encrypted vault stores a key offline (ciphertext at rest)", asyn
   await expect(page.getByText(/SET · SE••••23/)).toBeVisible({ timeout: 5_000 });
 });
 
-test("Settings PERSONA tab shows presets", async ({ page }) => {
+test("基本のタブに、性格のプリセットがある", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
   await page.getByLabel("Settings").click();
-  await page.getByText("PERSONA", { exact: true }).first().click();
+  await page.getByRole("button", { name: "基本", exact: true }).click();
   await expect(page.getByRole("button", { name: "JARVIS" })).toBeVisible();
   await expect(page.getByText("FRIENDLY")).toBeVisible();
   await expect(page.getByText("SECRETARY")).toBeVisible();
@@ -411,7 +446,7 @@ test("Settings DIAGNOSTICS tab shows connection status", async ({ page }) => {
   await page.getByLabel("Settings").click();
   // Scope to the tab button — the CORE tab's AI-provider note also mentions
   // "DIAGNOSTICS", so a plain getByText would match two elements.
-  await page.getByRole("button", { name: "DIAGNOSTICS" }).click();
+  await page.getByRole("button", { name: "DIAGNOSTICS", exact: true }).click();
   await expect(page.getByText("LINK STATUS")).toBeVisible();
   await expect(page.getByText("FRONTEND")).toBeVisible();
 });
@@ -1169,10 +1204,11 @@ test("Settings CORE shows AI provider section (offline note)", async ({ page }) 
 });
 
 /* ── Google + DB integrations (ui-r24) ── */
-test("Settings CORE shows Google/DB integration note (offline)", async ({ page }) => {
+test("つなぐタブに、Google連携・DBの案内が出る（オフライン）", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
   await page.getByLabel("Settings").click();
+  await page.getByRole("button", { name: "つなぐ", exact: true }).click();
   await expect(page.getByText(/Google連携・DB永続化は、バックエンド接続後/)).toBeVisible({ timeout: 5_000 });
 });
 

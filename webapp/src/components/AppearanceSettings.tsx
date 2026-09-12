@@ -192,6 +192,48 @@ function BackgroundThumb(
   return <CanvasThumb kind={def.key} />;
 }
 
+/* ── 畳めるまとまり ──────────────────────────────────────────────── */
+
+/**
+ * 見出しを押すと開閉する枠。**いま何を選んでいるかは、閉じたままでも見える。**
+ *
+ * なぜ畳むのか
+ * ------------
+ * この画面はテーマ6種・背景9種・コア7種の見本を全部並べていたので、
+ * 実測で縦 1779px（スマホの画面4枚ぶん）、押せる物26個あった。
+ * 「背景を変えたい」だけの人も、テーマの一覧を丸ごと素通りすることになる。
+ *
+ * ただし畳むと「いま何色なのか」が分からなくなる——それでは設定画面の
+ * 用を成さない。なので**選んでいる物の名前を見出しの右に出す**。
+ * 開かずに確かめられるなら、閉じていても困らない。
+ */
+function Fold(
+  { title, current, open, onToggle, children }: {
+    title: string;
+    /** いま選んでいる物の名前。閉じているときに見える。 */
+    current: string;
+    open: boolean;
+    onToggle: () => void;
+    children: React.ReactNode;
+  },
+) {
+  return (
+    <section className="rounded-forge border border-panel">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="flex w-full items-center gap-2 px-3 py-2.5 text-left"
+      >
+        <span className="text-[10px] tracking-[0.2em] text-muted label-mono">{title}</span>
+        <span className="ml-auto truncate text-[11px] text-fg-strong">{current}</span>
+        <span aria-hidden className="shrink-0 text-[10px] text-muted">{open ? "▲" : "▼"}</span>
+      </button>
+      {open && <div className="px-3 pb-3">{children}</div>}
+    </section>
+  );
+}
+
 /* ── ダウンロードの状態 ──────────────────────────────────────────── */
 
 type DlState = { have: boolean; busy: boolean; pct: number; failed?: boolean };
@@ -282,6 +324,11 @@ export default function AppearanceSettings() {
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   const wide = useWideScreen();
+  /* 開くのは1つだけ。3つとも開けられるようにすると、結局いまと同じ
+     長さに戻る。既定は全部閉じ——開いた瞬間に「いま何を選んでいるか」が
+     3行で分かるほうが、いきなり見本の壁を見せられるより早い。 */
+  const [fold, setFold] = useState<"skin" | "bg" | "core" | null>(null);
+  const toggle = (k: "skin" | "bg" | "core") => setFold((c) => (c === k ? null : k));
   const { state: dl, fetchAsset, drop } = useAssetState(BACKGROUNDS, wide);
   /* 取っておけるかは端末による。できない所で「✓ 端末にあり」と出すと嘘になる。 */
   const [keepable, setKeepable] = useState(true);
@@ -382,8 +429,8 @@ export default function AppearanceSettings() {
   return (
     <div className="space-y-4">
       {/* ── 画面のテーマ ─────────────────────────────────────────── */}
-      <section className="rounded-forge border border-panel p-3">
-        <div className="mb-2 text-[10px] tracking-[0.2em] text-muted label-mono">画面のテーマ</div>
+      <Fold title="画面のテーマ" open={fold === "skin"} onToggle={() => toggle("skin")}
+            current={SKINS.find((x) => x.key === skin)?.label ?? ""}>
         <div className="grid grid-cols-2 gap-2">
           {SKINS.map((s) => {
             const active = skin === s.key;
@@ -421,7 +468,7 @@ export default function AppearanceSettings() {
           {SKINS.find((s) => s.key === skin)?.hint}
           ／ 画面の構成（モードの並びや操作）は変わりません。
         </p>
-      </section>
+      </Fold>
 
       {/* ── カスタムの色（テーマが custom のときだけ）─────────────── */}
       {skin === "custom" && (
@@ -489,8 +536,10 @@ export default function AppearanceSettings() {
       )}
 
       {/* ── 背景 ─────────────────────────────────────────────────── */}
-      <section className="rounded-forge border border-panel p-3">
-        <div className="mb-1 text-[10px] tracking-[0.2em] text-muted label-mono">背景</div>
+      <Fold title="背景" open={fold === "bg"} onToggle={() => toggle("bg")}
+            current={bg === "auto"
+              ? `おまかせ（${backgroundDef(autoKeyFor(skin, !!userUrl)).label}）`
+              : backgroundDef(bg).label}>
         <p className="mb-2 text-[11px] leading-relaxed text-muted">
           一覧に出しているのは小さな見本だけです。通信が要るものは、選んだときに落とします。
         </p>
@@ -633,11 +682,11 @@ export default function AppearanceSettings() {
             長い辺 2048 まで縮めて保存します（画面より大きい画像は、重くなるだけで見た目は変わりません）。
           </p>
         </div>
-      </section>
+      </Fold>
 
       {/* ── コア ─────────────────────────────────────────────────── */}
-      <section className="rounded-forge border border-panel p-3">
-        <div className="mb-1 text-[10px] tracking-[0.2em] text-muted label-mono">コアの形</div>
+      <Fold title="コアの形" open={fold === "core"} onToggle={() => toggle("core")}
+            current={CORE_TYPES.find((c) => c.key === core)?.label ?? ""}>
         <p className="mb-2 text-[11px] leading-relaxed text-muted">
           見本は止まった絵です（動かすと、この画面を開くだけで重くなるため）。選ぶと本物が動きます。
           形は画像ではなく計算なので、落とす物はありません（選んだときに描き方だけ読み込みます）。
@@ -673,7 +722,7 @@ export default function AppearanceSettings() {
         <p className="mt-1.5 text-[11px] leading-relaxed text-muted">
           {CORE_TYPES.find((c) => c.key === core)?.hint}
         </p>
-      </section>
+      </Fold>
     </div>
   );
 }

@@ -32,6 +32,8 @@ async function enterApp(page: Page) {
 
 async function openMemory(page: Page) {
   await page.getByLabel("Settings").click();
+  // 記憶は専用のタブへ移した（前は「CORE」という物置の中にあった）
+  await page.getByRole("button", { name: "記憶", exact: true }).click();
   await expect(page.getByText("覚えていること")).toBeVisible({ timeout: 8_000 });
 }
 
@@ -78,10 +80,16 @@ test("同じことを何度言っても、記憶は増えない", async ({ page 
   await openMemory(page);
 
   for (let i = 0; i < 3; i++) await remember(page, "コーヒーはブラック");
-  await page.waitForTimeout(400);
-  const all = await listed(page);
-  expect(all.filter((t) => t === "コーヒーはブラック").length,
-    `同じ記憶が ${all.length} 件ある`).toBe(1);
+
+  /* 決め打ちの待ちにしない。2回目以降は**増やさずに触れ直す**だけなので、
+     `remember` は文がすでに見えている時点ですぐ返る。そのあと一覧を
+     読み直すまでの間に数えると、機械が混んでいるときだけ落ちる
+     ——実際、単独では10回通るのに他のファイルと並べると落ちていた。 */
+  await expect(async () => {
+    const all = await listed(page);
+    expect(all.filter((t) => t === "コーヒーはブラック").length,
+      `出ている記憶: ${all.join(" / ")}`).toBe(1);
+  }).toPass({ timeout: 8_000 });
 });
 
 test("覚えたことを忘れさせられる", async ({ page }) => {

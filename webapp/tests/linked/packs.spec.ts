@@ -17,6 +17,8 @@ import { enterApp, mockBackend } from "./backend";
 async function openSettings(page: import("@playwright/test").Page) {
   await page.getByLabel("Settings").click();
   await expect(page.getByText("CORE SETTINGS")).toBeVisible();
+  // 機能の入り切りは「つなぐ」タブへ移した
+  await page.getByRole("button", { name: "つなぐ", exact: true }).click();
 }
 
 /** そのかたまりの行（指で触るのはここ）。 */

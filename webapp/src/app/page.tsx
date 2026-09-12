@@ -568,7 +568,6 @@ function MobileNav({ view, onChange, onSettings }:
   );
 }
 
-
 /**
  * 管理タブの中の切り替え。よく開く4つと「もっと」。
  *
@@ -630,7 +629,6 @@ function ManageBar({ view, onChange, isOwner }:
     </div>
   );
 }
-
 
 function ModeLauncher({ view, onChange, items: navItems }:
   { view: View; onChange: (v: View) => void; items: { key: View; label: string }[] }) {
@@ -749,21 +747,40 @@ function GearIcon() {
 
 /* ─── Settings Panel (enhanced) ──────────────────────────────────── */
 
-type SettingsTab = "core" | "look" | "persona" | "keychain" | "hf" | "diagnostics";
+type SettingsTab = "core" | "voice" | "memory" | "look" | "connect" | "keychain" | "diagnostics";
 
 /**
  * タブの見出し。
  *
- * 幅は**中身に合わせる**（等分しない）。等分すると、いちばん長い
- * DIAGNOSTICS が枠に入らず切れる。名前を縮めれば収まるが、押す物の名前が
- * 変わるのは、見た目の話ではなく操作の話なので触らない。
+ * **用で分ける。中の作りで分けない。**
+ *
+ * 前は CORE / 見た目 / PERSONA / KEYCHAIN / HF / DIAGNOSTICS だった。
+ * このうち CORE が物置になっていて、通知・記憶・AIの提供元・機能の
+ * 入り切り・連携・名前・声5種——**無関係な12組**が1枚に積まれていた。
+ * 実測で縦 1406px（スマホの画面3.2枚ぶん）、押せる物29個。
+ *
+ * 名前のほうも、KEYCHAIN / HF / DIAGNOSTICS は**中の呼び名**であって、
+ * 「何をしたいときにここへ来るか」を言っていない。
+ *
+ * KEYCHAIN と DIAGNOSTICS は**名前を変えていない**。中の呼び名で分かり
+ * にくいのはその通りだが、アプリと API の案内文が25か所で「設定 →
+ * KEYCHAIN へ」「DIAGNOSTICS 参照」と書いている。名前だけ変えると、
+ * **案内が存在しない場所を指す**——分かりにくいより、そちらのほうが悪い。
+ * 名前を変えるなら、案内も同時に直すこと。
+ *
+ * 枚数は7枚に増えたが、見るべき指標は枚数ではなく**目当てに辿り着くまでに
+ * 何を素通りするか**。1枚が3.2画面ぶんあるほうが、1枚増えるより重い。
+ * 機能は減らしていない——置き場所を変えただけ。
+ *
+ * 幅は中身に合わせる（等分しない）。等分すると長い名前が枠に入らない。
  */
 const SETTINGS_TABS: { key: SettingsTab; label: string }[] = [
-  { key: "core", label: "CORE" },
-  { key: "look", label: "見た目" },
-  { key: "persona", label: "PERSONA" },
-  { key: "keychain", label: "KEYCHAIN" },
-  { key: "hf", label: "HF" },
+  { key: "core", label: "基本" },          // 名前・性格・AI・通知
+  { key: "voice", label: "声" },            // 話し方まわり
+  { key: "memory", label: "記憶" },         // 覚えていること
+  { key: "look", label: "見た目" },         // テーマ・背景・コア
+  { key: "connect", label: "つなぐ" },      // 機能・外部サービス・モデル
+  { key: "keychain", label: "KEYCHAIN" },   // 鍵。名前は変えない（下記）
   { key: "diagnostics", label: "DIAGNOSTICS" },
 ];
 
@@ -867,8 +884,13 @@ function SettingsPanel({
           <button type="button" onClick={onClose} className="text-muted transition hover:text-fg-strong">✕</button>
         </div>
 
-        {/* Tab bar */}
-        <div className="flex border-b border-panel">
+        {/* Tab bar
+            **折り返す**。横1列に詰めていたので、幅320〜360pxの端末では
+            右端の DIAGNOSTICS が枠の外に出ていた。しかも overflow は
+            visible のままで横スクロールもできず、**その画面へ行く道が
+            無かった**。横スクロールにする手もあるが、隠れている物がある
+            ことに気づけない。2段にすれば、行き先が全部見える。 */}
+        <div className="flex flex-wrap border-b border-panel">
           {SETTINGS_TABS.map((t) => (
             <button
               key={t.key}
@@ -888,15 +910,21 @@ function SettingsPanel({
         <div className="max-h-[60vh] overflow-y-auto p-5">
           {tab === "look" && <AppearanceSettings />}
 
-          {tab === "core" && (
+          {/* 覚えていること。1枚に独立させてある——ここは設定というより
+              「中身を見て、要らない物を消す」場所で、用が他と違う。 */}
+          {tab === "memory" && <MemorySettings />}
+
+          {/* 外と繋ぐ物をひとまとめ。機能の入り切り → 連携 → 鍵 → モデルの順。
+              「何をする人か」を決めてから、繋ぐ物を選ぶほうが迷わない。 */}
+          {tab === "connect" && (
             <>
-              <PushSettings />
-              <MemorySettings />
-              <AiProviderSettings />
-              {/* 使う機能の入り切り。連携（外と繋ぐ）より先に置く。
-                  「何をする人か」を決めてから、繋ぐ物を選ぶ順のほうが迷わない。 */}
               <FeaturePacks />
               <IntegrationsSettings />
+            </>
+          )}
+
+          {tab === "core" && (
+            <>
               <label className="mb-1 block text-[10px] tracking-[0.2em] text-muted label-mono">ASSISTANT NAME</label>
               <input
                 value={name}
@@ -904,7 +932,49 @@ function SettingsPanel({
                 placeholder={DEFAULT_NAME}
                 className="mb-4 w-full rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2.5 text-sm text-fg-strong placeholder:text-muted focus:border-[var(--line)] focus:shadow-glow focus:outline-none"
               />
+              {/* 性格は名前のすぐ隣に置く。「どう呼ぶか」と「どう振る舞うか」は
+                  続けて決めるものなので、別のタブに離さない（前は別タブだった）。 */}
+              <div className="mb-3 text-[10px] tracking-[0.2em] text-muted label-mono">PRESETS</div>
+              <div className="mb-4 grid grid-cols-2 gap-1.5">
+                {PERSONA_PRESETS.map((p) => (
+                  <button
+                    key={p.label}
+                    type="button"
+                    onClick={() => setPersona(p.value)}
+                    className="rounded-forge border px-2.5 py-2 text-left transition"
+                    style={{
+                      borderColor: persona === p.value ? "var(--accent)" : "var(--panel-bd)",
+                      background: persona === p.value ? "var(--btn-bg)" : "transparent",
+                    }}
+                  >
+                    <span className="block text-[10px] tracking-[0.16em] text-fg-strong label-mono">{p.label}</span>
+                  </button>
+                ))}
+              </div>
 
+              <label className="mb-1 block text-[10px] tracking-[0.2em] text-muted label-mono">CUSTOM PERSONA</label>
+              <textarea
+                value={persona}
+                onChange={(e) => setPersona(e.target.value)}
+                rows={5}
+                placeholder="例: 冷静で知的、先を読んで行動し、ユーザーをさん付けで呼ぶ。"
+                className="mb-4 w-full resize-none rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2.5 text-sm text-fg-strong placeholder:text-muted focus:border-[var(--line)] focus:shadow-glow focus:outline-none"
+              />
+
+              <button
+                type="button"
+                onClick={() => onSave({ name, persona, voice: ttsVoice, browserVoice, voiceEngine: engine, rate, pitch }, voice)}
+                className="w-full rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] py-2.5 text-[11px] tracking-[0.2em] text-fg-strong shadow-glow transition hover:shadow-glow-strong label-mono"
+              >
+                SAVE & SYNC
+              </button>
+              <AiProviderSettings />
+              <PushSettings />
+            </>
+          )}
+
+          {tab === "voice" && (
+            <>
               <label className="mb-4 flex cursor-pointer items-center justify-between">
                 <span className="text-[10px] tracking-[0.2em] text-muted label-mono">SPOKEN REPLIES</span>
                 <ToggleSwitch checked={voice} onChange={setVoice} />
@@ -1034,45 +1104,6 @@ function SettingsPanel({
             </>
           )}
 
-          {tab === "persona" && (
-            <>
-              <div className="mb-3 text-[10px] tracking-[0.2em] text-muted label-mono">PRESETS</div>
-              <div className="mb-4 grid grid-cols-2 gap-1.5">
-                {PERSONA_PRESETS.map((p) => (
-                  <button
-                    key={p.label}
-                    type="button"
-                    onClick={() => setPersona(p.value)}
-                    className="rounded-forge border px-2.5 py-2 text-left transition"
-                    style={{
-                      borderColor: persona === p.value ? "var(--accent)" : "var(--panel-bd)",
-                      background: persona === p.value ? "var(--btn-bg)" : "transparent",
-                    }}
-                  >
-                    <span className="block text-[10px] tracking-[0.16em] text-fg-strong label-mono">{p.label}</span>
-                  </button>
-                ))}
-              </div>
-
-              <label className="mb-1 block text-[10px] tracking-[0.2em] text-muted label-mono">CUSTOM PERSONA</label>
-              <textarea
-                value={persona}
-                onChange={(e) => setPersona(e.target.value)}
-                rows={5}
-                placeholder="例: 冷静で知的、先を読んで行動し、ユーザーをさん付けで呼ぶ。"
-                className="mb-4 w-full resize-none rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2.5 text-sm text-fg-strong placeholder:text-muted focus:border-[var(--line)] focus:shadow-glow focus:outline-none"
-              />
-
-              <button
-                type="button"
-                onClick={() => onSave({ name, persona, voice: ttsVoice, browserVoice, voiceEngine: engine, rate, pitch }, voice)}
-                className="w-full rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] py-2.5 text-[11px] tracking-[0.2em] text-fg-strong shadow-glow transition hover:shadow-glow-strong label-mono"
-              >
-                SAVE & SYNC
-              </button>
-            </>
-          )}
-
           {tab === "keychain" && (
             <>
               {/* 同じ設定が2か所にあると、どちらが本物か分からなくなる。
@@ -1109,7 +1140,7 @@ function SettingsPanel({
             </>
           )}
 
-          {tab === "hf" && (
+          {tab === "connect" && (
             <>
               <div className="mb-3 text-[10px] leading-relaxed text-muted">
                 HuggingFace のモデルを登録して、<b className="text-fg">会話・コード・画像生成・文字起こし</b>に
