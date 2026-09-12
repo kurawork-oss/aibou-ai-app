@@ -903,12 +903,62 @@ html[data-skin="emerald"] .glass-silver {
    同じ data-bg を見ているので、二重に持たない。
    ═══════════════════════════════════════════════════════════════════ */
 
+/* 背景の層は、**必ず画面と同じ大きさ**にする。
+   ──────────────────────────────────────────────────────────────────
+   ここが長いあいだ壊れていた。
+
+   canvas は「置き換え要素」なので、width / height 属性が**そのまま
+   レイアウト上の大きさ**になる。`position: fixed; inset: 0` を付けても、
+   幅と高さが auto のままだと引き伸ばされない（インセットのほうが
+   無視される）。
+
+   Backdrop3D は canvas の解像度を `画面の広さ × devicePixelRatio`
+   （最大2倍）で取っている。綺麗に描くために必要な指定だが、そのせいで
+   **箱の大きさまで2倍になっていた**。実測:
+
+     スマホ dpr=3   画面 390×740  → 背景の箱 780×1480（2.00倍）
+     ノートPC 125%  画面 1536×864 → 背景の箱 1920×1080（1.25倍）
+     ノートPC dpr=2 画面 1440×900 → 背景の箱 2880×1800（2.00倍）
+
+   つまり実機では、背景の**左上の一部だけ**が引き伸ばされて映っていた。
+   「思っていたよりアップで、画質が悪い」の正体はこれ。水を使うかどうか、
+   絵の解像度がいくつか、とは関係が無い。
+
+   テストで見つからなかったのは、Playwright の既定が dpr=1 だから
+   ——ちょうどこの不具合が消える唯一の値で、ずっと測っていた。
+   いまは tests/backdropFit.spec.ts が実機と同じ倍率で見張っている。 */
+.forge-backdrop {
+  width: 100%;
+  height: 100%;
+}
+
 /* canvas が何も描かない背景では、要素ごと出さない。
    （中身が空でも、全画面の要素が1枚あると合成の対象にはなる） */
 html[data-bg="plain"] .forge-backdrop,
-html[data-bg="emerald"] .forge-backdrop,
+html[data-bg="emerald"] .forge-backdrop { display: none; }
+
+/* 絵を敷く背景は、**canvas と同じ「画面いっぱいの固定層」**に描く。
+   （canvas 自体は何も描かない。要素だけ借りる）
+
+   なぜ html の背景 + background-attachment: fixed をやめたか
+   ──────────────────────────────────────────────────────────────────
+   `fixed` は「画面にぴたりと貼る」つもりの指定だが、**iOS の Safari は
+   これを素直に扱わない**。貼る相手が画面ではなく文書全体になり、
+   ページが縦に長いぶんだけ絵が拡大される。結果、スマホで開くと絵の
+   一部が大写しになる——「思っていたよりアップで、画質も悪い」の形。
+   アプリ内ブラウザ（LINE等）も同じ Safari なので、そこでも起きる。
+
+   `position: fixed; inset: 0` の要素なら、貼る相手は必ず画面そのもの。
+   どのブラウザでも同じ大きさになる。canvas は水の背景で既にこの形で
+   置いてあるので、同じ層を使い回す。 */
 html[data-bg="chrome-flat"] .forge-backdrop,
-html[data-bg="user-flat"] .forge-backdrop { display: none; }
+html[data-bg="user-flat"] .forge-backdrop {
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  /* 絵が届くまでの地色。真っ白から紺へ切り替わるのを見せない */
+  background-color: #050b1a;
+}
 
 /* 用意した絵を、水を通さずにそのまま敷く。
    ──────────────────────────────────────────────────────────────────
@@ -940,7 +990,7 @@ html[data-bg="user-flat"] .forge-backdrop { display: none; }
 
    上下（0.85）だけ濃いのは、文字と押し物がそこに集まっているため。
    真ん中は 0.60 で、絵の流れがはっきり見える。 */
-html[data-bg="chrome-flat"] {
+html[data-bg="chrome-flat"] .forge-backdrop {
   background-image:
     linear-gradient(
       to bottom,
@@ -950,12 +1000,6 @@ html[data-bg="chrome-flat"] {
       rgba(2, 6, 18, 0.85) 100%
     ),
     var(--asset-bg, none);
-  background-size: cover;
-  background-position: center;
-  background-attachment: fixed;
-  background-repeat: no-repeat;
-  /* 絵が届くまでの地色。真っ白から紺へ切り替わるのを見せない */
-  background-color: #050b1a;
 }
 
 /* 文字の影。膜だけでは足りない分を、**文字のすぐ後ろだけ**で補う。
@@ -995,17 +1039,13 @@ html[data-bg="emerald"] {
    膜（--veil）を画像の**上**に重ねる。写真は明るい所を持っていることが
    多く、そのままだと上に載る文字が読めなくなる（送ってもらった銀の
    画像で実際に起きた）。濃さは設定で変えられる。 */
-html[data-bg="user-flat"] {
+html[data-bg="user-flat"] .forge-backdrop {
   background-image:
     linear-gradient(
       rgba(var(--veil-color, 0, 0, 0), var(--veil, 0.35)),
       rgba(var(--veil-color, 0, 0, 0), var(--veil, 0.35))
     ),
     var(--user-bg, none);
-  background-size: cover;
-  background-position: center;
-  background-attachment: fixed;
-  background-repeat: no-repeat;
 }
 
 /* ═══════════════════════════════════════════════════════════════════

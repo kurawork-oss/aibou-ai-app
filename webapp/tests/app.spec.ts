@@ -126,7 +126,7 @@ test("Chat: history toggle opens the panel", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
   // Bottom-left toggle opens the full-height history panel.
-  await page.getByLabel("Chat history").click();
+  await page.getByRole("button", { name: "Chat history" }).click();
   await expect(page.getByText("＋ 新しいチャット")).toBeVisible({ timeout: 5_000 });
 });
 
@@ -1018,7 +1018,7 @@ test.describe("desktop layout", () => {
   test("Chat history opens as a full-height left panel", async ({ page }) => {
     await page.goto("/");
     await enterApp(page);
-    await page.getByLabel("Chat history").click();
+    await page.getByRole("button", { name: "Chat history" }).click();
     const newChat = page.getByText("＋ 新しいチャット");
     await expect(newChat).toBeVisible({ timeout: 5_000 });
     const panelBox = await newChat.boundingBox();
@@ -1095,7 +1095,7 @@ test("CHAT renders assistant markdown with highlighted code + copy", async ({ pa
   });
   await page.goto("/");
   await enterApp(page);
-  await page.getByLabel("Chat history").click();
+  await page.getByRole("button", { name: "Chat history" }).click();
   await page.getByText("markdown test").click();
   // Markdown structures render as real elements (not literal symbols)
   await expect(page.locator(".md h1", { hasText: "見出し" })).toBeVisible({ timeout: 5_000 });

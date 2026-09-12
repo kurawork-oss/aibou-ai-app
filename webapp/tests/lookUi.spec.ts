@@ -371,10 +371,16 @@ test("縦長の画面では、これまで通り縦の絵のまま", async ({ pa
   expect(wide, `縦長の画面で横長の絵を落としている: ${wide.join(", ")}`).toHaveLength(0);
 });
 
-test("水を張らない「銀の流れ」は、canvas を回さずに絵を敷く", async ({ page }) => {
-  /* これが「画質が悪い」への本当の答え。水を通すと、絵は格子の細かさ
-     （1440×900 で 481×301）までしか持てない。CSS に直接渡せば、画面の
-     実解像度でそのまま出る。 */
+test("水を張らない「銀の流れ」は、canvas ではなく CSS が絵を敷く", async ({ page }) => {
+  /* 水を通すと、絵は格子の細かさ（1440×900 で 481×301）までしか持てない。
+     CSS に直接渡せば、画面の実解像度でそのまま出る。
+
+     絵は canvas と**同じ層**（画面いっぱいの固定要素）に敷いてある。
+     はじめは層ごと隠して html の背景にしていたが、
+     `background-attachment: fixed` を iOS が素直に扱わないので、
+     画面に貼る役目を固定要素のほうへ移した。
+     そのため「要素が出ていないこと」ではなく、
+     **毎コマ描いていないこと**を見る。 */
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/");
   await enterApp(page);
@@ -394,12 +400,44 @@ test("水を張らない「銀の流れ」は、canvas を回さずに絵を敷�
     expect(url, "絵が CSS に渡っていない").toContain("url(");
   }).toPass({ timeout: 10_000 });
 
-  // canvas は出ていない（「いちばん軽い」を名乗る以上、本当に止まっている）
-  const shown = await page.evaluate(() => {
-    const el = document.querySelector(".forge-backdrop");
-    return el ? getComputedStyle(el).display : "missing";
+  /* 絵が **canvas ではなく CSS から出ている**こと。
+     ここが鮮明さの理由そのもの——canvas を通すと、絵は canvas の
+     解像度までしか持てない。CSS なら画面の実解像度で出る。
+
+     数え方: canvas の中身を読む。水なら不透明な絵が焼かれているが、
+     こちらは1画素も描いていない（＝全部透明）はず。
+
+     はじめは requestAnimationFrame の回数で測ろうとしたが、この画面は
+     コアがいつも回っているので毎秒120回あり、背景のぶんを取り出せない。
+     「何回描いたか」ではなく「何が描かれているか」を見るほうが素直。 */
+  await page.getByRole("button", { name: "✕" }).click();
+  await page.waitForTimeout(800);
+  const painted = await page.evaluate(() => {
+    const el = document.querySelector(".forge-backdrop") as HTMLCanvasElement | null;
+    if (!el) return null;
+    const ctx = el.getContext("2d");
+    if (!ctx) return null;
+    const d = ctx.getImageData(0, 0, Math.min(el.width, 64), Math.min(el.height, 64)).data;
+    let opaque = 0;
+    for (let i = 3; i < d.length; i += 4) if (d[i] > 0) opaque++;
+    return { opaque, total: d.length / 4 };
   });
-  expect(shown, "水を使わない背景なのに canvas が出ている").toBe("none");
+  expect(painted, "絵を敷く層が無い").not.toBeNull();
+  expect(painted!.opaque,
+    `canvas に ${painted!.opaque}/${painted!.total} 画素描かれている（CSSで敷いていない）`)
+    .toBe(0);
+
+  // 絵の層は画面ぴったり（実機の倍率での検証は tests/backdropFit.spec.ts）
+  const fit = await page.evaluate(() => {
+    const el = document.querySelector(".forge-backdrop");
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { w: Math.round(r.width), h: Math.round(r.height),
+             vw: innerWidth, vh: innerHeight };
+  });
+  expect(fit, "絵を敷く層が無い").not.toBeNull();
+  expect(Math.abs(fit!.w - fit!.vw)).toBeLessThanOrEqual(1);
+  expect(Math.abs(fit!.h - fit!.vh)).toBeLessThanOrEqual(1);
 });
 
 /**

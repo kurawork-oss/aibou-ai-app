@@ -1059,6 +1059,18 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
       <div className="mt-2 shrink-0" ref={composerRef}>
         {/* 会話 / 司令塔（実行）の切替。何ができるモードなのかを明示する。 */}
         <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+          {/* 狭い画面では、履歴の取っ手をここに並べる。
+              浮かせたままだと、この切り替えの上に重なって隠してしまう。 */}
+          {!historyOpen && (
+            <button
+              type="button"
+              onClick={() => setHistoryOpen(true)}
+              aria-label="Chat history"
+              className="flex min-[860px]:hidden items-center gap-1.5 rounded-forge border border-panel px-2.5 py-1 text-[10px] tracking-[0.12em] text-muted label-mono"
+            >
+              <HistoryIcon /> 履歴
+            </button>
+          )}
           <div className="flex overflow-hidden rounded-forge border border-panel">
             {([[false, "💬 会話"], [true, "⚙ 実行（司令塔）"]] as const).map(([on, label]) => (
               <button key={label} type="button" onClick={() => setAgentMode(on)}
@@ -1538,14 +1550,19 @@ function ChatHistory({
 
   return (
     <>
-      {/* Bottom-left toggle handle — opens the full-height history panel.
-          Hidden while the panel is open. */}
+      {/* 左下に浮かせる取っ手。開いている間は出さない。
+
+          **広い画面でだけ浮かせる。** 会話の列は max-w-2xl（672px）で
+          中央に置いてあるので、画面が 840px より狭いと、この取っ手が
+          列の上に重なる——スマホでは「会話／実行」の切り替えを覆って
+          いた（押せない側が見えない、という形で出る）。
+          狭いときは、下の入力まわりに同じボタンを並べて出す。 */}
       {!open && (
         <button
           type="button"
           onClick={() => onOpenChange(true)}
           aria-label="Chat history"
-          className="fixed bottom-24 left-3 z-40 flex items-center gap-1.5 rounded-full border border-[var(--panel-bd)] bg-[var(--chrome)] px-3 py-2 text-[10px] tracking-[0.16em] text-fg-strong shadow-glow backdrop-blur transition hover:shadow-glow-strong label-mono"
+          className="fixed bottom-24 left-3 z-40 hidden min-[860px]:flex items-center gap-1.5 rounded-full border border-[var(--panel-bd)] bg-[var(--chrome)] px-3 py-2 text-[10px] tracking-[0.16em] text-fg-strong shadow-glow backdrop-blur transition hover:shadow-glow-strong label-mono"
         >
           <HistoryIcon /> 履歴
         </button>
