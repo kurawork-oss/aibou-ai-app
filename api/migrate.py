@@ -9,6 +9,7 @@
 # =====================================================================
 
 import os
+from typing import List, Tuple
 
 import keychain
 
@@ -26,6 +27,14 @@ EXPECTED_TABLES = [
 ]
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
+# supabase/migrations/ にある追加のSQL（pgvector・RLSなど）。
+# ここを流していなかったので、**意味検索の土台が誰のDBにも作られていなかった**
+# ——memory_store は match_memories RPC を呼び、embedding 列へ書こうとするのに、
+# どちらもDBに存在しない状態。手で Supabase CLI を叩いた人だけ動いていた。
+_MIGRATION_DIRS = [
+    os.path.join(os.path.dirname(_HERE), "supabase", "migrations"),
+    "/app/supabase/migrations",
+]
 # ローカル(repo root) / Docker(/app に同梱) 両対応で探す。
 _SCHEMA_CANDIDATES = [
     os.path.join(_HERE, "supabase_schema.sql"),
@@ -65,6 +74,32 @@ def _read_schema() -> str:
     return ""
 
 
+def migration_scripts() -> List[Tuple[str, str]]:
+    """流すSQLを、流す順に返す。`[(名前, 中身), ...]`
+
+    先に本体（supabase_schema.sql）、そのあと supabase/migrations/ を名前順。
+    後者は pgvector と RPC を作る——**ここを流していなかったので、
+    意味検索の土台が自動セットアップでは一度も作られていなかった。**
+    """
+    out: List[Tuple[str, str]] = []
+    body = _read_schema()
+    if body:
+        out.append(("supabase_schema.sql", body))
+    for d in _MIGRATION_DIRS:
+        try:
+            if not os.path.isdir(d):
+                continue
+            for name in sorted(os.listdir(d)):
+                if not name.endswith(".sql"):
+                    continue
+                with open(os.path.join(d, name), "r", encoding="utf-8") as f:
+                    out.append((name, f.read()))
+            break        # 見つかった1か所だけ使う（同じ物を2回流さない）
+        except Exception:
+            continue
+    return out
+
+
 def run_migrations(url: str = "") -> dict:
     """接続文字列があればスキーマを実行してテーブルを作成する。
 
@@ -72,26 +107,46 @@ def run_migrations(url: str = "") -> dict:
     するため。以前は os.environ を一時的に書き換えて渡していたが、環境変数は
     プロセス全体で共有なので、同じ瞬間に別の人の要求が走ると、その人のDDLが
     こちらのDBに流れうる。引数なら混ざらない。
+
+    **1本ずつ流す。** 前は全部を1回の execute に渡していたので、どこか1文が
+    失敗すると（たとえば `create extension vector` の権限が無いDB）**残り全部が
+    流れなかった**。いまは1本ずつ試し、落ちた物は名前と理由を返す
+    ——黙って「ok」にしない。
     """
     url = (url or db_url()).strip()
     if not url:
         return {"ok": False, "skipped": True, "reason": "SUPABASE_DB_URL が未設定です（KEYCHAINで設定できます）"}
-    sql = _read_schema()
-    if not sql:
+    scripts = migration_scripts()
+    if not scripts:
         return {"ok": False, "error": "スキーマファイルが見つかりませんでした"}
     try:
         import psycopg2  # 遅延 import（未インストール環境でも import 時に落とさない）
     except Exception as e:
         return {"ok": False, "error": f"psycopg2 が利用できません: {e}"}
+
+    ran: List[str] = []
+    failed: List[dict] = []
     try:
         conn = psycopg2.connect(url, connect_timeout=15)
         conn.autocommit = True
-        with conn.cursor() as cur:
-            cur.execute(sql)  # psycopg2 は複数ステートメントを一括実行できる
-        conn.close()
-        return {"ok": True, "ran": True, "tables": len(EXPECTED_TABLES)}
     except Exception as e:
         return {"ok": False, "error": str(e)[:300]}
+    try:
+        for name, sql in scripts:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(sql)   # psycopg2 は複数ステートメントを一括実行できる
+                ran.append(name)
+            except Exception as e:
+                failed.append({"script": name, "error": str(e)[:200]})
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    return {"ok": bool(ran) and not failed, "ran": ran, "failed": failed,
+            "tables": len(EXPECTED_TABLES)}
 
 
 def table_status() -> dict:

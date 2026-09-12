@@ -116,7 +116,18 @@ def mem_add(role: str, content: str, importance: int = 0) -> bool:
         vec = embed(str(content)) if _recall_note(c, _SEMANTIC_FLAG, None) is not False else None
         if vec:
             row["embedding"] = vec
-        c.table("agent_memory").insert(row).execute()
+        try:
+            c.table("agent_memory").insert(row).execute()
+        except Exception:
+            # embedding 列が無いDB（pgvectorを流していない）では、この1文で
+            # **記憶そのものが保存されない**。意味検索はあれば嬉しい追加機能
+            # なので、ベクトルを落として本文だけでも残す。
+            # ここを諦めていた間、そのDBの人の記憶は1件も入らなかった。
+            if "embedding" not in row:
+                raise
+            row.pop("embedding", None)
+            _remember(c, _SEMANTIC_FLAG, False)   # 以降ベクトル化も試さない
+            c.table("agent_memory").insert(row).execute()
         _forget_rows_cache()      # 書いた直後に古い一覧で答えないように
         return True
     except Exception:

@@ -147,7 +147,10 @@ def test_run_migrations_with_mocked_db(monkeypatch):
         def __exit__(self, *a):
             return False
         def execute(self, sql):
-            executed["sql"] = sql
+            # 1本ずつ流すようになったので、全部を覚えておく。
+            # 最後の1本だけ見ていると、追加のSQL（pgvector等）が末尾に来た
+            # 時点で「スキーマが流れていない」と誤判定する。
+            executed.setdefault("sql", []).append(sql)
 
     class FakeConn:
         autocommit = False
@@ -161,7 +164,12 @@ def test_run_migrations_with_mocked_db(monkeypatch):
     monkeypatch.setitem(sys.modules, "psycopg2", fake)
 
     res = migrate.run_migrations()
-    assert res["ok"] is True and "CREATE TABLE" in executed["sql"]
+    assert res["ok"] is True
+    assert any("CREATE TABLE" in q for q in executed["sql"]), "本体のスキーマが流れていない"
+    # 追加のSQL（supabase/migrations/）も流れること
+    assert any("match_memories" in q for q in executed["sql"]), \
+        "pgvector の追加SQLが流れていない（意味検索の土台が作られない）"
+    assert executed.get("closed") is True
 
 
 def test_table_status_no_config(monkeypatch):
