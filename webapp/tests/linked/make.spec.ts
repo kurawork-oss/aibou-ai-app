@@ -11,7 +11,7 @@
  */
 
 import { test, expect, type Page } from "@playwright/test";
-import { enterApp, mockBackend, type Backend } from "./backend";
+import { enablePack, enterApp, mockBackend, type Backend } from "./backend";
 
 /** 管理タブの「もっと」から、その画面を開く。 */
 async function openMore(page: Page, label: string | RegExp, mark: string | RegExp) {
@@ -72,6 +72,7 @@ test("SNSの文案が作れなかったら、そう言う", async ({ page }) => 
   const be = await mockBackend(page);
   be.set("/x/status", { json: { connected: false } });
   be.set("/sns/generate", { status: 503, json: { detail: "AIの利用券が設定されていません" } });
+  enablePack(be, "share");      // 既定では切ってあるので、入口が出ない
   await enterApp(page);
   await openMore(page, /SNS/, /SNS投稿サポート/);
 
@@ -87,6 +88,7 @@ test("Xに繋いでいないときは、投稿ボタンを出さずに次の手�
   // いちばん困る。出さずに、どうすれば送れるかを書く。
   const be = await mockBackend(page);
   be.set("/x/status", { json: { configured: false, missing: ["X_API_KEY"], autopost_allowed: false, limit: 280 } });
+  enablePack(be, "share");      // 既定では切ってあるので、入口が出ない
   be.set("/sns/generate", { json: { ok: true, platform: "x", limit: 280, posts: [
     { text: "新商品を出しました。", hashtags: ["#新商品"], length: 10, over_limit: false },
   ] } });
@@ -105,6 +107,7 @@ test("Xに繋いであれば、押したときだけ送ると明記する", asyn
   // 勝手に投稿されないことを、投稿ボタンの隣で言う。
   const be = await mockBackend(page);
   be.set("/x/status", { json: { configured: true, missing: [], autopost_allowed: false, limit: 280 } });
+  enablePack(be, "share");      // 既定では切ってあるので、入口が出ない
   be.set("/sns/generate", { json: { ok: true, platform: "x", limit: 280, posts: [
     { text: "新商品を出しました。", hashtags: ["#新商品"], length: 10, over_limit: false },
   ] } });

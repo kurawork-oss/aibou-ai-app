@@ -30,7 +30,7 @@ import {
   API_URL,
   streamChat, vision, agentActStream, agentExecute,
   conversationsList, conversationGet, conversationSave, conversationDelete,
-  capabilities, runCommand, setupPending, setupResume,
+  capabilitiesShared, runCommand, setupPending, setupResume,
   type ChatTurn, type AgentEvent, type CommandItem, type CommandResult,
   type MadeItem,
 } from "@/lib/api";
@@ -782,7 +782,7 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
     if (!API_URL) return;
     let alive = true;
     const load = () => {
-      capabilities()
+      capabilitiesShared()
         .then((d) => { if (alive) setCommands(d.commands); })
         .catch(() => { /* # が出ないだけ。会話はふつうに動く */ });
     };

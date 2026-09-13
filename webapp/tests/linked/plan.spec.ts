@@ -11,7 +11,7 @@
  */
 
 import { test, expect, type Page } from "@playwright/test";
-import { enterApp, mockBackend, type Backend } from "./backend";
+import { enablePack, enterApp, mockBackend, type Backend } from "./backend";
 
 /**
  * 管理タブの「もっと」から画面を開く。
@@ -92,6 +92,7 @@ test("作れなかったときに、作った顔をしない", async ({ page }) 
 
 /* ── 副業（承認してから外に出す） ───────────────────────────────── */
 function withIncome(be: Backend) {
+  enablePack(be, "income");     // 既定では切ってあるので、入口が出ない
   be.set("/income/summary", { json: { pending: 1, approved: 0, done: 0, failed: 0 } });
   be.set("/income/jobs", { json: { items: [
     { id: "j1", theme: "雪のロッジの環境音", status: "pending", created_at: "2026-09-01T00:00:00Z" },

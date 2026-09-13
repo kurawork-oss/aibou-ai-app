@@ -25,6 +25,7 @@
  */
 
 import type { WidgetId } from "@/lib/homeLayout";
+import { forgetCapabilities } from "@/lib/api";
 
 /**
  * 画面の一覧。**ここが唯一の定義**（page.tsx はこれを読む）。
@@ -58,9 +59,15 @@ export function isView(v: string): v is ShellView {
 export const PACKS_CHANGED = "forge:packs-changed";
 
 export function announcePacksChanged() {
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(new Event(PACKS_CHANGED));
-  }
+  if (typeof window === "undefined") return;
+  /* 覚えている「できること」を**ここで1回だけ**捨てる。
+     受け側それぞれに捨てさせると、受け手の数だけ取り直すことになる
+     （実際、2か所が捨ててから取り直して往復が2回になった）。
+
+     動的 import にしていたら、捨て終わる前にイベントが飛んで、受け側が
+     古い物を掴んだ——**切ったはずの機能が候補に残る**。同期で捨てる。 */
+  forgetCapabilities();
+  window.dispatchEvent(new Event(PACKS_CHANGED));
 }
 
 /** 下のナビ。ここは2つだけにする。 */
@@ -98,19 +105,47 @@ export const MANAGE_SURFACES: {
  * 一覧としても残す。
  */
 export const MORE_SURFACES: {
-  key: string; label: string; view: ShellView; hint: string; ownerOnly?: boolean;
+  key: string; label: string; view: ShellView; hint: string;
+  ownerOnly?: boolean; pack?: string;
 }[] = [
-  { key: "studio", label: "つくる", view: "studio", hint: "アプリ・LP・素材" },
-  { key: "code", label: "コード", view: "code", hint: "リポジトリを触る" },
-  { key: "sns", label: "SNS", view: "sns", hint: "投稿文を作る" },
-  { key: "capture", label: "録音", view: "capture", hint: "録音・文字起こし" },
+  { key: "studio", label: "つくる", view: "studio", hint: "アプリ・LP・素材", pack: "make" },
+  { key: "code", label: "コード", view: "code", hint: "リポジトリを触る", pack: "dev" },
+  { key: "sns", label: "SNS", view: "sns", hint: "投稿文を作る", pack: "share" },
+  { key: "capture", label: "録音", view: "capture", hint: "録音・文字起こし", pack: "make" },
   { key: "vault", label: "資料", view: "vault", hint: "入れた資料から答える" },
   { key: "me", label: "きろく", view: "me", hint: "日々のこと" },
   { key: "autopilot", label: "ゴール", view: "autopilot", hint: "分解して進める" },
-  { key: "income", label: "副業", view: "income", hint: "収益の自動化", ownerOnly: true },
+  { key: "income", label: "副業", view: "income", hint: "収益の自動化",
+    ownerOnly: true, pack: "income" },
   { key: "extend", label: "連携", view: "extend", hint: "外のサービスと繋ぐ" },
   { key: "guide", label: "説明書", view: "guide", hint: "使い方" },
 ];
+
+/**
+ * いま案内してよい入口だけに絞る。
+ *
+ * **画面は1つも消していない。案内の数を減らすだけ。**
+ * `pack` の付いた入口は、設定 →「つなぐ」でそのかたまりを入れている人にだけ
+ * 出す。既定では 発信(share)・開発(dev)・副業(income) が切ってあるので、
+ * その3つは案内に出ない——使いたくなったら設定で入れれば戻る。
+ *
+ * `#` の候補一覧はサーバー側（capabilities.py）が同じパックで絞っている。
+ * ここで別の基準にすると「`#` には出るのに一覧には無い」というずれが出る
+ * ので、**同じ名前のパックで揃える**。
+ *
+ * packs を渡せないとき（接続先が無い＝オフライン）は絞らない。
+ * 繋がっていない人に、理由の分からない欠けた一覧を見せないため。
+ */
+export function visibleSurfaces<T extends { ownerOnly?: boolean; pack?: string }>(
+  list: T[], opts: { isOwner?: boolean | null; packs?: string[] | null } = {},
+): T[] {
+  const { isOwner = null, packs = null } = opts;
+  return list.filter((s) => {
+    if (s.ownerOnly && isOwner === false) return false;
+    if (s.pack && packs && !packs.includes(s.pack)) return false;
+    return true;
+  });
+}
 
 /** その画面が、どちらのタブに属するか。 */
 export function tabOf(view: ShellView): TabKey {

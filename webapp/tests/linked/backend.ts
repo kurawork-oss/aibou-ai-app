@@ -58,6 +58,9 @@ const PACKS: State["packs"] = [
   { key: "make", label: "つくる", hint: "画像・スライド・資料", enabled: true, always: false },
   { key: "share", label: "発信する", hint: "SNS・LP・記事", enabled: false, always: false },
   { key: "dev", label: "開発", hint: "コード・GitHub", enabled: true, always: false },
+  /* 本物（api/capabilities.py）に合わせて置く。無いと enablePack が
+     空振りして、「入れたのに入口が出ない」と読めてしまう。 */
+  { key: "income", label: "副業", hint: "収益の自動化", enabled: false, always: false },
 ];
 
 /** 決まった形が要る所（空を返すと画面が落ちる所）だけ、既定を書く。 */
@@ -98,6 +101,18 @@ function defaults(state: State): Record<string, Reply> {
       return { json: { ok: true, kind: "done", tool: `tool_${hit.cmd}`, result: `${hit.label}：やりました` } };
     },
   };
+}
+
+/**
+ * その機能のかたまりを「使う」状態にする。
+ *
+ * 既定では 発信(share)・開発(dev)・副業(income) が切ってあり、管理タブの
+ * 入口にも出ない（画面は消していない。設定で入れれば戻る）。
+ * その画面を見るテストは、**先にここで入れてから**開く
+ * ——入口が無いのは仕様どおりなので、そこで落ちても何も分からない。
+ */
+export function enablePack(be: Backend, key: string): void {
+  be.state.packs = be.state.packs.map((p) => (p.key === key ? { ...p, enabled: true } : p));
 }
 
 /** その page の通信を差し替える。テストの先頭で1回呼ぶ。 */

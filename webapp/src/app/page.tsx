@@ -14,7 +14,9 @@
 
 import {
   MANAGE_SURFACES, MORE_SURFACES, RUN_VIEW, isView, surfaceOf, tabOf,
+  visibleSurfaces,
   type ShellView,
+  PACKS_CHANGED,
 } from "@/lib/shell";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -50,7 +52,7 @@ import Keychain from "@/components/Keychain";
 import LifeMode from "@/components/LifeMode";
 import Tasks from "@/components/Tasks";
 import Vault from "@/components/Vault";
-import { API_URL, health, profileGet } from "@/lib/api";
+import { API_URL, capabilitiesShared, health, profileGet } from "@/lib/api";
 import {
   loadVoiceSettings, saveVoiceSettings, speakCore, stopCoreVoice, type VoiceEngine,
 } from "@/lib/coreVoice";
@@ -143,6 +145,26 @@ function Hud() {
      ——合流を作った意味が、いちばん効いてほしい場所で出ない。
      最初の描画を邪魔しないよう、少し置いてから走る（lib/memorySync.ts）。 */
   useEffect(() => { syncOnBoot(); }, []);
+
+  /* 使っている機能のかたまり。管理タブの入口を、これで絞る。
+     取れないとき（接続先が無い）は null のまま＝絞らない——繋がっていない
+     人に、理由の分からない欠けた一覧を見せないため。
+     `/capabilities` は会話側も要るので、共有して1回にしてある。 */
+  const [packs, setPacks] = useState<string[] | null>(null);
+  useEffect(() => {
+    if (!API_URL) return;
+    let alive = true;
+    const load = () => {
+      capabilitiesShared()
+        .then((d) => {
+          if (alive) setPacks(d.packs.filter((p) => p.enabled).map((p) => p.key));
+        })
+        .catch(() => { /* 絞らないだけ。画面は動く */ });
+    };
+    load();
+    window.addEventListener(PACKS_CHANGED, load);
+    return () => { alive = false; window.removeEventListener(PACKS_CHANGED, load); };
+  }, []);
 
   useEffect(() => {
     try {
@@ -348,7 +370,7 @@ function Hud() {
 
           {/* 管理タブの中の切り替え。実行（会話）のときは出さない。 */}
           {loaded && tabOf(view as ShellView) === "manage" && (
-            <ManageBar view={view} onChange={setView} isOwner={isOwner} />
+            <ManageBar view={view} onChange={setView} isOwner={isOwner} packs={packs} />
           )}
 
           {/* 画面本体は「残った高さ」を使う。上の案内や切り替えが場所を
@@ -574,11 +596,14 @@ function MobileNav({ view, onChange, onSettings }:
  * 「もっと」に残りを入れてあるのは、`#` を知らない人の行き止まりを
  * 作らないため。会話から呼べるのと、一覧としてたどれるのは別の話。
  */
-function ManageBar({ view, onChange, isOwner }:
-  { view: View; onChange: (v: View) => void; isOwner: boolean | null }) {
+function ManageBar({ view, onChange, isOwner, packs }:
+  { view: View; onChange: (v: View) => void; isOwner: boolean | null;
+    packs: string[] | null }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const here = surfaceOf(view as ShellView);
-  const more = MORE_SURFACES.filter((m) => !(m.ownerOnly && isOwner === false));
+  /* 使っていない機能の入口は案内しない（画面は消していない。設定で
+     入れ直せば戻る）。`#` の候補もサーバー側で同じパックで絞っている。 */
+  const more = visibleSurfaces(MORE_SURFACES, { isOwner, packs });
 
   return (
     <div className="mx-auto w-full max-w-5xl shrink-0">

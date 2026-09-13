@@ -2555,6 +2555,29 @@ export async function capabilities(): Promise<{
   return { packs: asArray<FeaturePack>(d.packs), commands: asArray<CommandItem>(d.commands) };
 }
 
+/* ── できることの共有 ────────────────────────────────────────────
+ *
+ * `/capabilities` は2か所が要る——会話の `#` の候補と、管理タブの入口の
+ * 絞り込み。素直に両方が呼ぶと、開くたびに同じ物を2回聞くことになる。
+ * 寝ている無料バックエンドでは、その1往復がそのまま待ち時間になる。
+ *
+ * なので**最初の1回を共有する**。機能の入り切りを変えたときだけ捨てる
+ * （捨てないと、切ったはずの機能が案内に残る）。
+ */
+let capsShared: Promise<{ packs: FeaturePack[]; commands: CommandItem[] }> | null = null;
+
+export function capabilitiesShared(): Promise<{ packs: FeaturePack[]; commands: CommandItem[] }> {
+  if (!capsShared) {
+    capsShared = capabilities().catch((e) => { capsShared = null; throw e; });
+  }
+  return capsShared;
+}
+
+/** 覚えている物を捨てる（機能の入り切りを変えたとき）。 */
+export function forgetCapabilities(): void {
+  capsShared = null;
+}
+
 /**
  * POST /capabilities/packs — 使う機能のかたまりを切り替える。
  *
