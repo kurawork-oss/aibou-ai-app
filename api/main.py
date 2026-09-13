@@ -83,6 +83,7 @@ import vault
 import video_script
 from memory_store import mem_add, mem_recall, mem_recent
 import memory_sync as memory_sync_store
+import toolgate
 
 async def _scheduler_loop():
     """常駐ループ：60秒ごとに定期実行を確認する（best-effort）。
@@ -1159,14 +1160,24 @@ async def chat(req: ChatRequest, _auth: None = Depends(require_auth)):
     # （Supabase 未接続ならサーバー側が空、古い画面なら端末側が空）。
     memory_block = merge_memory(memory_block, req.memory)
     system_prompt = build_system_prompt(req.name, req.persona, memory_block)
-    # ツール実行を許可（行動を頼まれた時だけマーカーを使う旨をルール付けする）
-    system_prompt += (
-        # 使う物だけを渡す（agent と同じ理由）
-        "\n\n" + agent._tools_doc() + "\n"
-        "【ツールの使い方】行動（記憶・通知・副業投入・メモ保存など）を明確に頼まれた時だけ、"
-        "返答の冒頭で必ず " + tools.TOOL_CALL_MARKER + '{"tool":"名","params":{...}} を1行で出すこと。'
-        "通常の会話・質問では絶対に使わないこと。"
-    )
+
+    # 道具の説明書を、その発言に積むかどうか（toolgate.py）。
+    #
+    # 会話の system prompt の79%が説明書だった（4,360字中3,464字・27個）。
+    # 「ありがとう」にも毎回積んでいて、しかも同じプロンプトの中で
+    # 「通常の会話・質問では絶対に使わないこと」と書いている。
+    # 入力が多いほど最初の1文字まで遅くなり、費用も増える。
+    use_tools, _why = toolgate.needs_tools(req.message)
+    if use_tools:
+        system_prompt += (
+            # 使う物だけを渡す（agent と同じ理由）
+            "\n\n" + agent._tools_doc() + "\n"
+            "【ツールの使い方】行動（記憶・通知・副業投入・メモ保存など）を明確に頼まれた時だけ、"
+            "返答の冒頭で必ず " + tools.TOOL_CALL_MARKER + '{"tool":"名","params":{...}} を1行で出すこと。'
+            "通常の会話・質問では絶対に使わないこと。"
+        )
+    else:
+        system_prompt += "\n\n" + toolgate.NO_TOOLS_NOTE
     prompt = build_conversation(system_prompt, req.history, req.message)
     marker = tools.TOOL_CALL_MARKER
 

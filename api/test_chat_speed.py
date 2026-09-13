@@ -101,3 +101,72 @@ def test_制限時間は環境変数で変えられる():
     assert main.RECALL_BUDGET_WITH_LOCAL > 0
     assert main.RECALL_BUDGET_ALONE > main.RECALL_BUDGET_WITH_LOCAL, \
         "端末が空のときのほうが短いと、新しい端末で記憶が使えない"
+
+
+# ── 道具の説明書を、毎回は積まない ──────────────────────────────────
+#
+# 会話の system prompt の79%が説明書だった（4,360字中3,464字・27個）。
+# 「ありがとう」にも毎回積んでいて、しかも同じプロンプトの中で
+# 「通常の会話・質問では絶対に使わないこと」と書いている。
+
+import toolgate
+
+
+ACTION = [
+    "明日15時に歯医者の予定を入れて",
+    "牛乳を買うのをタスクに追加",
+    "このメール読んで要約して",
+    "今日の天気は？",
+    "最新のニュース教えて",
+    "Notionから議事録探して",
+    "GitHubのissue作って",
+    "来週の予定を見せて",
+    "スライド作って",
+    "あとでリマインドして",
+    "為替どうなってる",
+    "転職しようか迷っていて、いまの職場の条件を整理して比べたい",  # 長い依頼
+]
+
+CHAT = [
+    "ありがとう", "なるほど", "うん", "そうなんだ", "おはよう", "すごいね",
+    "わかった", "疲れた", "Pythonのリスト内包表記って何？", "それどういう意味？",
+    "日本の首都は？", "どう思う？",
+]
+
+
+@pytest.mark.parametrize("text", ACTION)
+def test_行動を頼まれたら_必ず道具を積む(text):
+    """外し過ぎる失敗は「できるはずのことをやってくれない」になる。
+    そちらのほうが、少し遅いより悪い。"""
+    ok, why = toolgate.needs_tools(text)
+    assert ok, f"「{text}」で道具を外している（理由: {why}）"
+
+
+@pytest.mark.parametrize("text", CHAT)
+def test_ふつうの会話では_道具を積まない(text):
+    ok, why = toolgate.needs_tools(text)
+    assert not ok, f"「{text}」に説明書3,464字を積んでいる（理由: {why}）"
+
+
+def test_外したときは_代わりの案内を添える():
+    """何も言わないと、モデルは「私にはできません」と答えてしまう。
+    **できないのではなく、いま渡していないだけ**だと分かるようにする。"""
+    assert "実行" in toolgate.NO_TOOLS_NOTE
+    assert len(toolgate.NO_TOOLS_NOTE) < 200, "代わりの案内が長すぎては意味が無い"
+
+
+def test_判断の理由が必ず残る():
+    for text in ["ありがとう", "タスク追加して", ""]:
+        _ok, why = toolgate.needs_tools(text)
+        assert why, f"「{text}」でなぜそう判断したのか分からない"
+
+
+def test_積むときと積まないときで_長さが大きく違う():
+    """ここが縮んでいなければ、判断を足した意味が無い。"""
+    import agent
+    import main as m
+    base = len(m.build_system_prompt("AIbou", "", ""))
+    doc = len(agent._tools_doc())
+    lite = base + len(toolgate.NO_TOOLS_NOTE)
+    full = base + doc
+    assert lite < full * 0.4, f"減っていない（{lite} / {full}）"
