@@ -833,6 +833,51 @@ def merge_memory(server_block: str, client_block: Optional[str]) -> str:
     return head + "\n" + "\n".join(lines[:24])
 
 
+# ── 記憶の想起に、制限時間を置く ────────────────────────────────────
+#
+# なぜ要るのか
+# ------------
+# 想起は**返事の1文字目より前**に終わらせる必要がある。つまりここでの
+# 待ち時間は、そのまま「話しかけてから喋り出すまで」になる。
+#
+# 実測（Render→Gemini/Supabase の往復を模した値）:
+#
+#   意味検索が効くDB   毎メッセージ 2往復 / 410ms（埋め込み320 + RPC90）
+#   効かないDB         1通目だけ1往復、以降は20秒キャッシュで 0往復
+#
+# 意味検索の土台（pgvector）はこれまでどのDBにも作られていなかったので、
+# 実際には後者だった。それを直した結果、**全員が毎回410ms待つ**ことになる。
+# 直した意味はあるが、そのぶん遅くなるのを黙って受け入れる理由は無い。
+#
+# どう決めたか
+# ------------
+# 端末側はすでに自分の記憶を引いて送ってきている（通信なし・即時）。
+# なので「サーバー側の想起」は**上乗せ**であって、必須ではない。
+#
+#   端末から記憶が届いている → 短く待つ。間に合わなければ端末の物で始める
+#   端末が空（新しい端末）   → 長めに待つ。ここで諦めると本当に何も無い
+#
+# 間に合わなかった想起は、裏で走り切ってキャッシュを温める。次の発言で
+# 効くので、捨てているわけではない。
+RECALL_BUDGET_WITH_LOCAL = float(os.environ.get("RECALL_BUDGET_MS", "260")) / 1000
+RECALL_BUDGET_ALONE = float(os.environ.get("RECALL_BUDGET_ALONE_MS", "900")) / 1000
+
+
+async def recall_within_budget(message: str, client_memory: Optional[str]) -> str:
+    """制限時間つきで想起する。間に合わなければ空を返す（呼ぶ側が端末の分と混ぜる）。"""
+    budget = RECALL_BUDGET_WITH_LOCAL if (client_memory or "").strip() else RECALL_BUDGET_ALONE
+    loop = asyncio.get_event_loop()
+    fut = loop.run_in_executor(None, lambda: mem_recall(message, limit=8))
+    try:
+        return await asyncio.wait_for(asyncio.shield(fut), timeout=budget)
+    except asyncio.TimeoutError:
+        # 走らせたままにする。止められないし、止める必要もない
+        # ——走り切ればキャッシュが温まり、次の発言が速くなる。
+        return ""
+    except Exception:
+        return ""
+
+
 def build_system_prompt(name: Optional[str], persona: Optional[str], memory_block: str) -> str:
     """アシスタントの基本人格＋persona＋想起した記憶 を1つのsystem promptに合成する。"""
     assistant_name = (name or "AIbou").strip() or "AIbou"
@@ -1109,9 +1154,7 @@ async def chat(req: ChatRequest, _auth: None = Depends(require_auth)):
     # Supabase も埋め込みも同期呼び出しなので、そのまま await 無しで呼ぶと
     # 返事が始まるまでの間ずっとイベントループを止めてしまう（他の人の
     # リクエストごと止まる）。別スレッドへ逃がす。
-    memory_block = await asyncio.get_event_loop().run_in_executor(
-        None, lambda: mem_recall(req.message, limit=8)
-    )
+    memory_block = await recall_within_budget(req.message, req.memory)
     # 端末から届いた記憶と混ぜる。どちらか片方しか無いこともある
     # （Supabase 未接続ならサーバー側が空、古い画面なら端末側が空）。
     memory_block = merge_memory(memory_block, req.memory)
