@@ -1925,32 +1925,31 @@ async def account_profile(claims: dict = Depends(current_claims)):
 async def guide(_auth: None = Depends(require_auth), claims: dict = Depends(current_claims)):
     """アプリの使い方（画面のガイドとCHATが同じ内容を見る）。
 
-    持ち主専用のモードは、持ち主以外の説明書には出さない
-    （使えない機能の説明が並ぶと、壊れているように見えるため）。
+    出さないのは2種類。
+      ・持ち主専用のモード（持ち主以外には見せない）
+      ・使わない設定にしてあるかたまりのモード
+
+    2つめが長いあいだ抜けていた。既定では 発信・開発・副業 が切ってあるので、
+    初期状態の人は説明書で「コードを書く」「投稿案」を読み、そこへ行こうと
+    して**管理タブのどこにも入口が無い**ことに気づく。案内だけあって行き先が
+    無いのは、機能が無いより悪い。
     """
     owner = is_owner_claims(claims)
-    return {
-        "sections": guide_mod.sections(owner=owner),
-        "modes": guide_mod.modes(owner=owner),
-        "is_owner": owner,
-        **guide_mod.status(owner=owner),
-    }
+    loop = asyncio.get_event_loop()
 
+    def _build():
+        try:
+            packs = capabilities.enabled_packs(owner)
+        except Exception:
+            packs = None          # 読めないなら絞らない（欠けた一覧より全部）
+        return {
+            "sections": guide_mod.sections(owner=owner, packs=packs),
+            "modes": guide_mod.modes(owner=owner, packs=packs),
+            "is_owner": owner,
+            **guide_mod.status(owner=owner, packs=packs),
+        }
 
-@app.get("/guide")
-async def guide(_auth: None = Depends(require_auth), claims: dict = Depends(current_claims)):
-    """アプリの使い方（画面のガイドとCHATが同じ内容を見る）。
-
-    持ち主専用のモードは、持ち主以外の説明書には出さない
-    （使えない機能の説明が並ぶと、壊れているように見えるため）。
-    """
-    owner = is_owner_claims(claims)
-    return {
-        "sections": guide_mod.sections(owner=owner),
-        "modes": guide_mod.modes(owner=owner),
-        "is_owner": owner,
-        **guide_mod.status(owner=owner),
-    }
+    return await loop.run_in_executor(None, _build)
 
 
 # ── HF MODELS：HuggingFaceのモデルを登録して役割に割り当てる ──────────

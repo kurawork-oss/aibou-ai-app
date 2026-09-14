@@ -133,6 +133,21 @@ def test_profile_tells_the_ui_who_you_are(owner_is_set):
     assert "income" in d["owner_only_modes"]
 
 
+from contextlib import contextmanager
+
+
+@contextmanager
+def _packs_on(names):
+    """使う機能のかたまりを、その場だけ差し替える。"""
+    import capabilities
+    real = capabilities.enabled_packs
+    capabilities.enabled_packs = lambda is_owner=True: list(names)
+    try:
+        yield
+    finally:
+        capabilities.enabled_packs = real
+
+
 def test_guide_hides_owner_only_modes_from_employees(owner_is_set):
     """使えない機能の説明が並ぶと「壊れている」と受け取られる。"""
     emp = call("get", "/guide", None, token_for("emp-1", "employee@example.com")).json()
@@ -141,8 +156,20 @@ def test_guide_hides_owner_only_modes_from_employees(owner_is_set):
     assert emp["mode_count"] == len(emp["modes"])
     assert "CHAT" in labels and "TASKS" in labels        # 共通モードは出る
 
+    # 持ち主でも、使う機能のかたまりを入れていなければ出ない。
+    # INCOME の入口（管理 → もっと）も同じ条件なので、説明書だけ先に
+    # 出しても行き先が無い。**入れてから**出る、が正しい。
     boss = call("get", "/guide", None, token_for("boss-1", "boss@example.com")).json()
-    assert "INCOME" in [m["label"] for m in boss["modes"]]
+    assert "INCOME" not in [m["label"] for m in boss["modes"]], \
+        "副業を入れていないのに、説明書に出ている"
+
+    import capabilities
+    with _packs_on(["core", "income"]):
+        boss2 = call("get", "/guide", None, token_for("boss-1", "boss@example.com")).json()
+        assert "INCOME" in [m["label"] for m in boss2["modes"]], \
+            "副業を入れたのに、説明書に出ない"
+        assert boss2["mode_count"] == len(boss2["modes"])
+        assert capabilities is not None
 
 
 def test_owner_check_does_not_trust_the_client(owner_is_set):

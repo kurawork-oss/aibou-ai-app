@@ -915,3 +915,29 @@ def test_home_summary_aggregates():
     assert "open" in data["tasks"]
     assert "active" in data["missions"]
     assert "unread" in data["notifications"]
+
+
+# ── 同じ道を二度定義しない ────────────────────────────────────────
+#
+# `/guide` が**2回**定義されていた。FastAPI は先に登録したほうを使うので、
+# 後ろの1つは丸ごと死んでいた。困るのは「動かない」ことではなく、
+# **直したつもりが効かない**こと——後ろを直した人には、何も起きない。
+#
+# 目でレビューしても見つけにくい（数百行離れている）ので、数える。
+
+def test_同じ道を二度定義していない():
+    from collections import Counter
+    seen = Counter()
+    for r in app.routes:
+        path = getattr(r, "path", None)
+        methods = getattr(r, "methods", None) or set()
+        if not path:
+            continue
+        for m in methods:
+            if m in ("HEAD", "OPTIONS"):
+                continue
+            seen[(m, path)] += 1
+    dupes = [f"{m} {p} ×{n}" for (m, p), n in seen.items() if n > 1]
+    assert not dupes, (
+        "同じ道が二度定義されています。後ろの1つは動きません:\n  "
+        + "\n  ".join(sorted(dupes)))

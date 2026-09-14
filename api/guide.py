@@ -129,17 +129,39 @@ SECTIONS = [
 ]
 
 
-def _visible(items: list, owner: bool) -> list:
-    """持ち主専用の項目を、持ち主以外には見せない。
+def _visible(items: list, owner: bool, packs=None) -> list:
+    """いま案内してよい項目だけにする。
 
     使えない機能の説明が並ぶと「押しても動かない＝壊れている」と受け取られる。
+
+    絞るのは2つ。
+      ・持ち主専用か
+      ・使う機能のかたまり（パック）を入れているか
+
+    2つめが長いあいだ抜けていた。既定では 発信・開発・副業 が切ってあるので、
+    初期状態の人は説明書で「コードを書く」「投稿案」を読み、そこへ行こうと
+    して**管理タブのどこにも入口が無い**ことに気づく。案内だけあって行き先が
+    無いのは、機能が無いより悪い（自分の設定がおかしいのかと探すことになる）。
+
+    `#` の候補も、管理タブの入口も、AIに渡す道具も、同じパックで絞っている。
+    ここだけ絞っていなかった。
+
+    packs=None のときは絞らない（説明書の画面以外からの呼び出しを壊さない）。
     """
-    return [dict(x) for x in items if owner or not x.get("owner_only")]
+    out = []
+    for x in items:
+        if x.get("owner_only") and not owner:
+            continue
+        pack = x.get("pack")
+        if packs is not None and pack and pack not in packs:
+            continue
+        out.append(dict(x))
+    return out
 
 
-def sections(owner: bool = True) -> list:
+def sections(owner: bool = True, packs=None) -> list:
     """画面のガイドに出す構造化データ。"""
-    return _visible(SECTIONS, owner)
+    return _visible(SECTIONS, owner, packs)
 
 # ── 全モードの説明書 ───────────────────────────────────────────────
 # image は webapp/public/guide/ に置いた実画面（初回に開いたときの見た目）。
@@ -217,7 +239,7 @@ MODES = [
         ],
     },
     {
-        "id": "code", "label": "CODE", "name": "コードを書く", "image": "/guide/code.webp",
+        "pack": "dev", "id": "code", "label": "CODE", "name": "コードを書く", "image": "/guide/code.webp",
         "what": "「こういうものを作って」と日本語で頼むと、プログラムを書いて、その場で動かして見せてくれます。",
         "how": [
             "テンプレート（WEBアプリ / Python / 空）から始める",
@@ -228,7 +250,7 @@ MODES = [
         "tips": ["GitHubと繋ぐには、設定 → KEYCHAIN に GitHub の利用券（GITHUB_TOKEN）が要ります。プログラムを書かない人は使わなくて大丈夫です。"],
     },
     {
-        "id": "studio", "label": "STUDIO", "name": "作る", "image": "/guide/studio.webp",
+        "pack": "make", "id": "studio", "label": "STUDIO", "name": "作る", "image": "/guide/studio.webp",
         "what": "アプリ・ホームページ・資料をつくる画面。上のタブで「何を作るか」を選ぶ。",
         "how": [
             "アプリ … やりたいことを書くと、ブラウザでそのまま動くアプリができる。"
@@ -240,7 +262,7 @@ MODES = [
         "tips": ["画像を作るAIは、設定から別のものに変えられます（既定のままでも使えます）。"],
     },
     {
-        "id": "capture", "label": "CAPTURE", "name": "録画・録音",
+        "pack": "make", "id": "capture", "label": "CAPTURE", "name": "録画・録音",
         "image": "/guide/capture.webp",
         "what": "画面や声を録って、文字起こし・ナレーションまで行う画面。",
         "how": [
@@ -254,7 +276,7 @@ MODES = [
         ],
     },
     {
-        "id": "sns", "label": "SNS", "name": "投稿案", "image": "/guide/sns.webp",
+        "pack": "share", "id": "sns", "label": "SNS", "name": "投稿案", "image": "/guide/sns.webp",
         "what": "X や Instagram の投稿文を、媒体に合わせて複数案つくります。",
         "how": [
             "媒体とテーマを決めて生成する",
@@ -268,7 +290,7 @@ MODES = [
         ],
     },
     {
-        "id": "income", "label": "INCOME", "name": "副業ジョブ", "image": "/guide/income.webp",
+        "pack": "income", "id": "income", "label": "INCOME", "name": "副業ジョブ", "image": "/guide/income.webp",
         "owner_only": True,          # 持ち主だけのモード
         "what": "素材づくりなどの作業を積んで、承認してから進める画面。",
         "how": ["テーマを投入すると素案が積まれる", "内容を見て、承認 / 却下する"],
@@ -337,9 +359,12 @@ MODES = [
 ]
 
 
-def modes(owner: bool = True) -> list:
-    """全モードの説明書。"""
-    return _visible(MODES, owner)
+def modes(owner: bool = True, packs=None) -> list:
+    """いま案内してよいモードの説明書。
+
+    packs を渡すと、使う機能のかたまりで絞る（渡さなければ全部）。
+    """
+    return _visible(MODES, owner, packs)
 
 
 
@@ -380,8 +405,12 @@ def prompt_block() -> str:
     ])
 
 
-def status(owner: bool = True) -> dict:
+def status(owner: bool = True, packs=None) -> dict:
     """UIが出し分けるための要約。
+
+    **件数は、実際に返す一覧と同じ絞り方で数える。** ここを絞らずに数えると、
+    「16件」と言いながら13件しか返さないことになる。以前これで踏んだので、
+    テストで固定してある。
 
     shared_data は「みんなが同じ置き場を使っている」かどうか。ここを固定値に
     しておくと、利用者ごとのDB接続を入れたあとも「共有です」と言い続けて
@@ -392,8 +421,8 @@ def status(owner: bool = True) -> dict:
     per_user_db = bool(config.SUPABASE_JWT_SECRET)
     return {
         "app": APP_NAME,
-        "section_count": len(sections(owner)),
-        "mode_count": len(modes(owner)),
+        "section_count": len(sections(owner, packs)),
+        "mode_count": len(modes(owner, packs)),
         "beta": True,
         "shared_data": not per_user_db,
     }
