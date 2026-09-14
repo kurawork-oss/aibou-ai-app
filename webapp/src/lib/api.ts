@@ -2585,6 +2585,40 @@ export async function capabilities(): Promise<{
   return { packs: asArray<FeaturePack>(d.packs), commands: asArray<CommandItem>(d.commands) };
 }
 
+/**
+ * 自己診断の1件ぶん（仕様§5・§6）。
+ *
+ * 「使えません」だけでは足りない。**なぜ**と**次に何をするか**まで
+ * 揃って、はじめて次の一歩が踏める。`why` と `next` は使えない物には
+ * 必ず付いてくる（サーバー側のテストで固定してある）。
+ */
+export interface CapabilityState {
+  id: string;
+  name: string;
+  status: "connected" | "available" | "not_connected" | "authentication_required"
+    | "permission_required" | "configuration_required" | "unavailable" | "error";
+  connected: boolean;
+  kind: string;
+  pack: string;
+  tools: string[];
+  why?: string;
+  next?: string;
+  /** 押しても始まらない（持ち主のアプリ登録待ち）。押させないために要る。 */
+  needs_owner?: boolean;
+  account?: string;
+  action?: { kind: string; provider?: string; path?: string; name?: string };
+}
+
+/** GET /capabilities/status — いま何ができて、何ができないか。 */
+export async function capabilityStatus(): Promise<CapabilityState[]> {
+  const res = await fetch(`${requireApiUrl()}/capabilities/status`, {
+    headers: authHeaders(), cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`状態を取得できませんでした (${res.status})`);
+  const d = (await res.json().catch(() => ({}))) as { items?: CapabilityState[] };
+  return asArray<CapabilityState>(d.items);
+}
+
 /* ── できることの共有 ────────────────────────────────────────────
  *
  * `/capabilities` は2か所が要る——会話の `#` の候補と、管理タブの入口の

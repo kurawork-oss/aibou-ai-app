@@ -149,7 +149,9 @@ CAPABILITIES: List[dict] = [
 
 # 説明だけあって # を出さない道具（AIには渡すが、直行の入口は作らない）。
 # list_state は watch_report と役目が重なるので、人には1つだけ見せる。
-_HIDDEN_TOOLS = {"list_state", "schedule_list", "complete_task"}
+# self_check は「何ができる？」と聞かれたときに**推測せず調べる**ための物で、
+# 人が # から打つ場面が無い（一覧は設定→つなぐに出ている）。
+_HIDDEN_TOOLS = {"list_state", "schedule_list", "complete_task", "self_check"}
 
 
 # ── どのパックが有効か ───────────────────────────────────────────────

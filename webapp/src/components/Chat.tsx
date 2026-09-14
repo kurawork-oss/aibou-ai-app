@@ -23,7 +23,7 @@ import {
   type ClipboardEvent,
   type KeyboardEvent,
 } from "react";
-import { coreStateOf, type CoreState } from "@/lib/coreState";
+import { coreStateOf, COMPLETED_MS, type CoreState } from "@/lib/coreState";
 import AgentTrace, { type AgentStep as TraceStep } from "@/components/AgentTrace";
 import Markdown from "@/components/Markdown";
 import {
@@ -186,6 +186,12 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
      （画像の生成は10秒かかることがある）。同じ顔にしておくと、
      長いほうがただ固まって見える。 */
   const [acting, setActing] = useState(false);
+  /* 返事が始まる前の準備（記憶やルールの読み込み）。ここが重いとそのまま
+     待ち時間になるので、考えているのとは分けて出す。 */
+  const [planning, setPlanning] = useState(false);
+  /* 終わった、をひと呼吸だけ出す。出しっぱなしにすると待機と区別が
+     付かなくなり、消すのが早すぎると見逃す。 */
+  const [done, setDone] = useState(false);
   // # の候補と、直行したときの一言
   const [commands, setCommands] = useState<CommandItem[]>([]);
   const [note, setNote] = useState("");
@@ -391,8 +397,35 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
     if (listening && transcript) setInput(transcript);
   }, [listening, transcript]);
 
+  /* 終わったことを、ひと呼吸だけ出す。
+     やり取りが終わった瞬間に立てて、少ししたら降ろす。降ろさないと
+     待機と区別が付かなくなり、降ろすのが早すぎると見逃す。
+     やり取りが始まったら即座に消す（前の「終わった」が残っていると、
+     新しいやり取りの頭に一瞬だけ出てしまう）。 */
+  const wasStreaming = useRef(false);
+  useEffect(() => {
+    if (streaming) { wasStreaming.current = true; setDone(false); return; }
+    if (!wasStreaming.current) return;
+    wasStreaming.current = false;
+    setDone(true);
+    const t = setTimeout(() => setDone(false), COMPLETED_MS);
+    return () => clearTimeout(t);
+  }, [streaming]);
+
   // Derive + broadcast the orb state（決め方は lib/coreState.ts）。
-  const coreState: CoreState = coreStateOf({ listening, speaking, acting, streaming });
+  /* 止まっているのに、止まっていると分からない状態が2つあった。
+     承認待ちと、連携が足りなくて進めないとき。どちらも「こちらが答える
+     まで一歩も進まない」のに、コアは待機の顔をしていた。画面から目を
+     離していた人には、終わったように見える。
+     最後の吹き出しから引く（状態を別に持つと、必ずずれる）。 */
+  const last = messages[messages.length - 1];
+  const coreState: CoreState = coreStateOf({
+    listening, speaking, acting, streaming, planning,
+    awaiting: Boolean(last?.await),
+    setup: Boolean(last?.need),
+    failed: Boolean(last?.error),
+    done,
+  });
 
   useEffect(() => {
     onStateChange?.(coreState);
@@ -538,6 +571,7 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
         } finally {
           setStreaming(false);
           setActing(false);
+          setPlanning(false);
         }
         return;
       }
@@ -555,10 +589,14 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
             switch (ev.phase) {
               case "prepare":
                 // 返事が始まる前の工程。ここが重いとそのまま待ち時間になるので出す。
+                setPlanning(true);
                 setSteps((s) => [...s.filter((x) => x.kind !== "thinking"),
                   { kind: "prepare", what: ev.what || "準備", detail: ev.detail, ms: ev.ms }]);
                 break;
               case "thinking":
+                // 段取りは終わった。ここを降ろし忘れると、以降ずっと
+                // 「PLANNING」のままになる（実際そうなっていた）。
+                setPlanning(false);
                 setSteps((s) => [...s.filter((x) => x.kind !== "thinking"), { kind: "thinking" }]);
                 break;
               case "tool":
@@ -569,6 +607,7 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
                 break;
               case "observation":
                 setActing(false);
+                setPlanning(false);
                 setSteps((s) => [...s, { kind: "observation", result: ev.result || "", ms: ev.ms }]);
                 break;
               case "show":
@@ -619,6 +658,7 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
           (error) => {
             setStreaming(false);
             setActing(false);
+            setPlanning(false);
             cancelRef.current = null;
             if (error) {
               setMessages((prev) => prev.map((m) => (m.id === assistantId
@@ -691,6 +731,7 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
         (error) => {
           setStreaming(false);
           setActing(false);
+          setPlanning(false);
           cancelRef.current = null;
           if (error && !acc) {
             setMessages((prev) =>
@@ -904,6 +945,7 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
     setSpeaking(false);
     setStreaming(false);
     setActing(false);
+    setPlanning(false);
     setTimeout(() => { if (voiceModeRef.current) { resetMic(); startMic(); } }, 150);
   }, [resetMic, startMic, stopReply]);
 
@@ -968,6 +1010,7 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
     cancelRef.current = null;
     setStreaming(false);
     setActing(false);
+    setPlanning(false);
     stopReply();
     setSpeaking(false);
   }, [stopReply]);
@@ -1112,6 +1155,22 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
               className="flex min-[860px]:hidden items-center gap-1.5 rounded-forge border border-panel px-2.5 py-1 text-[10px] tracking-[0.12em] text-muted label-mono"
             >
               <HistoryIcon /> 履歴
+            </button>
+          )}
+          {/* 出した物へ戻る口。**浮かせない**。
+              前は画面に貼り付けて「下から74px」に置いていたが、そこは
+              ちょうどこの切り替えの高さで、「実行（司令塔）」の右半分が
+              押せなくなっていた。入力欄の高さを測って避ける手も入れたが、
+              測り終わる前の一瞬は同じ場所に出る（実測でテストが落ちた）。
+              この列に並べれば、重なりようがない。 */}
+          {!canvasOpen && madeItems.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setCanvasOpen(true)}
+              className="flex items-center gap-1.5 rounded-forge border border-[var(--line)] px-2.5 py-1 text-[10px] tracking-[0.12em] text-fg-strong label-mono"
+              style={{ background: "var(--btn-bg)" }}
+            >
+              🗂 作った物 {madeItems.length}
             </button>
           )}
           <div className="flex overflow-hidden rounded-forge border border-panel">
@@ -1351,23 +1410,6 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
         onOpenFiles={onOpenView ? () => onOpenView("archive") : undefined}
       />
 
-      {/* 閉じたあとに、出した物へ戻る口。無いと「消えた」ように見える。
-
-          高さは決め打ちにしない。74px に固定していたとき、スマホでは
-          会話／実行の切り替えの上にちょうど重なって、「実行（司令塔）」が
-          半分隠れていた。入力欄の高さは中身（画像を添付した・用事を
-          預かった）で変わるので、測った値のすぐ上に置く。 */}
-      {!canvasOpen && madeItems.length > 0 && (
-        <button
-          type="button"
-          onClick={() => setCanvasOpen(true)}
-          className="fixed right-3 z-20 flex min-h-[44px] items-center gap-1.5 rounded-forge border border-[var(--line)] px-3 text-[11px] text-fg-strong shadow-glow transition"
-          style={{ background: "var(--chrome)", bottom: Math.max(composerH + 8, 74) }}
-        >
-          <span>🗂</span>
-          <span>作った物 {madeItems.length}</span>
-        </button>
-      )}
 
       {/* ── リアルタイム会話モードの全画面オーバーレイ ── */}
       <AnimatePresence>

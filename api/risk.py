@@ -37,6 +37,7 @@ from typing import Dict
 LEVELS: Dict[str, int] = {
     # ── 0 取得のみ ────────────────────────────────────────────────
     "list_state": 0,
+    "self_check": 0,
     "watch_report": 0,
     "schedule_list": 0,
     "recall": 0,

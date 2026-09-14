@@ -62,6 +62,10 @@ TOOL_DOCS: Dict[str, str] = {
         '予定（カレンダー）を1件追加する。日付は YYYY-MM-DD、時刻は HH:MM。相対表現（明日・金曜など）は system に記載の今日の日付を基準に自分で計算して埋める / params: { "title": "予定名", "date": "2026-07-17", "time": "15:00" }',
     "list_state":
         '今のタスク・予定・副業ジョブ・未読通知の件数と概要を取得する（状況把握に使う） / params: { }',
+    "self_check":
+        '自分がいま何をできて、何をできないか（そして、なぜ・どうすれば使えるようになるか）を調べる。'
+        '「何ができる？」「〜は使える？」「繋がってる？」と聞かれたとき、推測で答えずこれを使うこと。'
+        '道具を使おうとして「未接続」で失敗したときも、これで正しい案内が作れる / params: { }',
     "watch_report":
         '見張りの報告。期限の来たタスク・今日の予定・業務・新着メール・Slack・LINEを まとめて確認する。「何かあった？」「状況は？」「新着ある？」に使う。読めなかった対象はその理由も返るので、そのまま伝えること / params: { "new_only": false }',
     "create_document":
@@ -370,6 +374,20 @@ def _do_watch_report(params: dict) -> str:
         return f"見張りの報告を作れませんでした：{str(e)[:150]}"
     text = (res.get("text") or "").strip()
     return text or "いま気にすべきものはありません。"
+
+
+def _do_self_check(_params: dict) -> str:
+    """いま何ができて、何ができないか（仕様§40）。
+
+    これが無いと、モデルは「できます／できません」を**推測で**答える。
+    実際に繋がっているかは、モデルには見えていない。聞かれるたびに
+    当てずっぽうを言うより、事実を1回引くほうが速くて正しい。
+    """
+    try:
+        import capability_status
+        return capability_status.summary()
+    except Exception as e:
+        return f"自己診断に失敗しました: {e}"
 
 
 def _do_list_state(_params: dict) -> str:
@@ -1035,6 +1053,7 @@ _DISPATCH = {
     "add_agenda": _do_add_agenda,
     "board_add_note": _do_board_add_note,
     "list_state": _do_list_state,
+    "self_check": _do_self_check,
     "watch_report": _do_watch_report,
     "create_document": _do_create_document,
     "create_spreadsheet": _do_create_spreadsheet,

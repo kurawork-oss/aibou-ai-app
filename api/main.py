@@ -39,6 +39,7 @@ import conversations
 import compliance
 import config
 import capabilities
+import capability_status
 import code_agent
 import evolve
 import fileread
@@ -3772,6 +3773,22 @@ async def capabilities_status(claims: dict = Depends(current_claims),
     owner = is_owner_claims(claims)
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(None, lambda: capabilities.status(owner))
+
+
+@app.get("/capabilities/status")
+async def capabilities_self_check(claims: dict = Depends(current_claims),
+                                  _auth: None = Depends(require_auth)):
+    """自己診断（仕様§40）。
+
+    「いま何ができて、何ができないか、なぜか、何をすればできるか」を返す。
+    これまでその答えは1か所に無く、利用者は**押して失敗してから**理由を
+    知っていた。先に分かっていれば、失敗する必要はない。
+    """
+    owner = is_owner_claims(claims)
+    loop = asyncio.get_event_loop()
+    items = await loop.run_in_executor(None, lambda: capability_status.snapshot(owner))
+    return {"ok": True, "items": items,
+            "usable": [c["id"] for c in items if c["status"] in capability_status.USABLE]}
 
 
 @app.post("/capabilities/packs")

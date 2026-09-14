@@ -51,6 +51,7 @@ SCHEMAS: Dict[str, Dict[str, Any]] = {
         "time": ("str", False, "時刻 HH:MM"),
     }},
     "list_state": {"fields": {}},
+    "self_check": {"fields": {}},
     "watch_report": {"fields": {
         "new_only": ("bool", False, "新着だけに絞るか"),
     }},

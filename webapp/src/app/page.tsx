@@ -30,6 +30,7 @@ import { CORE_TYPES, readCoreType, setCoreType, type CoreType } from "@/lib/core
 import FeaturePacks from "@/components/FeaturePacks";
 import IntegrationsSettings from "@/components/IntegrationsSettings";
 import NeedsBackend from "@/components/NeedsBackend";
+import CapabilityPanel from "@/components/CapabilityPanel";
 import AppArchive from "@/components/AppArchive";
 import Autopilot from "@/components/Autopilot";
 import Backdrop3D from "@/components/Backdrop3D";
@@ -947,6 +948,10 @@ function SettingsPanel({
           {tab === "connect" && (
             API_URL ? (
               <>
+                {/* 何が使えて何が使えないかを、いちばん上に出す。
+                    設定の中で迷う原因は「どこを触れば直るのか分からない」
+                    ことなので、答えを先に置く（仕様§40 自己診断）。 */}
+                <CapabilityPanel />
                 <FeaturePacks />
                 <IntegrationsSettings />
               </>

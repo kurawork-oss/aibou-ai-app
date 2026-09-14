@@ -40,9 +40,29 @@ export default function MemorySettings() {
   const [syncing, setSyncing] = useState(false);
   const blocked = syncBlockedReason();
 
+  /**
+   * 一覧を読み直す。
+   *
+   * **古い読み込みの結果を捨てる**のが肝心。ここを素直に書くと、こうなる:
+   *
+   *   画面を開く          → 読み込み①が始まる（IndexedDBの初回は遅い）
+   *   すぐ「覚える」を押す → 保存 → 読み込み②が始まる → 速く返る → 1件表示
+   *   読み込み①が返る     → **押す前の中身（0件）で上書き** → 「0件」
+   *
+   * 保存はできているので、開き直せば出てくる。つまり画面だけが
+   * 「保存されていない」と嘘をつく。実測で3回に1回ほど出ていた
+   * （初回の IndexedDB の開きが遅いときだけ起きるので、気づきにくい）。
+   *
+   * 番号を振って、いちばん新しい読み込み以外は書かない。
+   */
+  const loadSeq = useRef(0);
   const load = useCallback(async () => {
-    setItems((await memory.all()).sort((a, b) => b.updatedAt - a.updatedAt));
-    setWhere(memory.storage());
+    const seq = ++loadSeq.current;
+    const rows = (await memory.all()).sort((a, b) => b.updatedAt - a.updatedAt);
+    const place = memory.storage();
+    if (seq !== loadSeq.current) return;      // 追い越された＝もう古い
+    setItems(rows);
+    setWhere(place);
   }, []);
 
   useEffect(() => { void load(); }, [load]);

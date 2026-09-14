@@ -238,3 +238,52 @@ test("会話で話した内容も、端末に残る", async ({ page }) => {
     .getByText("来月の沖縄旅行が楽しみだ", { exact: true }))
     .toBeVisible({ timeout: 5_000 });
 });
+
+/* ── 読み込みの追い越し ────────────────────────────────────────────
+ *
+ * 画面を開いた直後に「覚える」を押すと、こうなっていた:
+ *
+ *   画面を開く           → 読み込み①（IndexedDBの初回は遅い）
+ *   すぐ「覚える」を押す → 保存 → 読み込み② → 速く返る → 1件
+ *   読み込み①が返る     → **押す前の中身（0件）で上書き** → 「0件」
+ *
+ * 保存はできているので開き直せば出てくる。**画面だけが「保存されて
+ * いない」と嘘をつく。** 実測で3回に1回ほど落ちていた。
+ *
+ * ここでは最初の読み出しをわざと遅らせて、毎回その順番になるようにする
+ * （そうしないと「たまに落ちるテスト」が増えるだけで、直ったか分からない）。 */
+test("開いた直後に覚えても、「0件」に戻らない", async ({ page }) => {
+  await page.addInitScript(() => {
+    /* 最初の1回だけ、読み出しの「成功」を遅らせる。
+       画面を開いたときの読み込みが遅く、そのあとの読み込みが速い——
+       という順番を、毎回作るため。 */
+    const proto = IDBObjectStore.prototype as unknown as Record<string, unknown>;
+    const real = proto.getAll as (...a: unknown[]) => IDBRequest;
+    let first = true;
+    proto.getAll = function (this: IDBObjectStore, ...args: unknown[]) {
+      const req = real.apply(this, args);
+      if (!first) return req;
+      first = false;
+      /* onsuccess の代入を横取りして、本物の success から 700ms 遅らせて呼ぶ。 */
+      let handler: ((e: Event) => unknown) | null = null;
+      Object.defineProperty(req, "onsuccess", {
+        configurable: true,
+        get: () => handler,
+        set: (fn: ((e: Event) => unknown) | null) => { handler = fn; },
+      });
+      req.addEventListener("success", (e) => {
+        setTimeout(() => { if (handler) handler.call(req, e); }, 700);
+      });
+      return req;
+    };
+  });
+
+  await page.goto("/");
+  await enterApp(page);
+  await openMemory(page);
+  await remember(page, "コーヒーはブラック");
+
+  // 遅い読み込みが返ってきたあとも、消えていないこと
+  await page.waitForTimeout(1200);
+  await expect(page.getByText("コーヒーはブラック", { exact: true })).toBeVisible();
+});

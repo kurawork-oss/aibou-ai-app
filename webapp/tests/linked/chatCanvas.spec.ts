@@ -111,6 +111,9 @@ test("戻る口が、会話／実行の切り替えを隠さない", async ({ pa
   await say(page, "猫の絵を作って");
   await expect(page.getByLabel("作った物")).toBeVisible({ timeout: 10_000 });
   await page.getByLabel("キャンバスを閉じる").click();
+  /* 引っこむ動きが終わるまで待つ。動いている最中に測ると、退場中の面が
+     まだ上に乗っていて「覆われている」と出る（測る側の間違い）。 */
+  await expect(page.getByLabel("作った物")).toHaveCount(0);
 
   // 戻る口は出ている（この確認が空振りしていないこと）
   await expect(page.getByRole("button", { name: /作った物 1/ })).toBeVisible();
