@@ -34,7 +34,10 @@ const LOOK: Record<CapabilityState["status"], { mark: string; word: string; tone
   authentication_required: { mark: "!", word: "つなぎ直しが要る", tone: "#ffd07f" },
   permission_required: { mark: "!", word: "権限が足りない", tone: "#ffd07f" },
   configuration_required: { mark: "…", word: "設定が要る", tone: "#ffd07f" },
-  unavailable: { mark: "·", word: "使わない設定", tone: "var(--muted)" },
+  /* 「使わない設定」は、利用者が自分でパックを切ったときの言葉。
+     まだ作っていない物（ローカル相棒など）に同じ言葉を使うと、
+     「設定を戻せば使える」と読めてしまう。下の word() で分ける。 */
+  unavailable: { mark: "·", word: "まだありません", tone: "var(--muted)" },
   error: { mark: "⚠", word: "調べられなかった", tone: "#ff9b9b" },
 };
 
@@ -119,6 +122,14 @@ export default function CapabilityPanel() {
   );
 }
 
+/** 状態の呼び名。同じ「使えない」でも、戻せる物と戻せない物を分ける。 */
+function word(cap: CapabilityState): string {
+  const base = (LOOK[cap.status] ?? LOOK.error).word;
+  if (cap.status !== "unavailable") return base;
+  // 機能のかたまりを切っているだけなら、設定で戻せる
+  return cap.action?.kind === "pack" ? "使わない設定" : base;
+}
+
 function Row({ cap }: { cap: CapabilityState }) {
   const look = LOOK[cap.status] ?? LOOK.error;
   const act = cap.action;
@@ -132,7 +143,7 @@ function Row({ cap }: { cap: CapabilityState }) {
         <span className="shrink-0 text-[12px]" style={{ color: look.tone }}>{look.mark}</span>
         <span className="min-w-0 flex-1 text-[12px] text-fg-strong">{cap.name}</span>
         <span className="shrink-0 text-[10px] label-mono" style={{ color: look.tone }}>
-          {look.word}
+          {word(cap)}
         </span>
       </div>
       {cap.account && (

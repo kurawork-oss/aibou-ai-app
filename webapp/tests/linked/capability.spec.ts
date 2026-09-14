@@ -91,6 +91,25 @@ test("切ってある機能は、壊れているようには見せない", async
   await expect(gh).toContainText("入れ直せます");
 });
 
+test("まだ作っていない物を、「使わない設定」とは言わない", async ({ page }) => {
+  /* 同じ「使えません」でも、設定で戻せる物と、そもそも無い物は違う。
+     一緒の言葉にすると「設定をいじれば使える」と読めてしまう。 */
+  const be = await mockBackend(page);
+  withStatus(be, [...ITEMS, {
+    id: "local_agent", name: "パソコンの中を触る（ローカル相棒）",
+    status: "unavailable", connected: false, kind: "off", pack: "dev", tools: [],
+    why: "まだ用意していません（別プロセスとして作る予定）",
+    next: "いまは Web からできる範囲で代用してください",
+    action: { kind: "none" },
+  }]);
+  await enterApp(page);
+  await openConnect(page);
+
+  const row = page.locator("li").filter({ hasText: "ローカル相棒" });
+  await expect(row).toContainText("まだありません");
+  await expect(row).not.toContainText("使わない設定");
+});
+
 test("使えるものは畳んであり、開くと出る", async ({ page }) => {
   // 全部広げると長いだけで読まれない。知りたいのは使えないほう。
   const be = await mockBackend(page);
