@@ -195,12 +195,28 @@ export interface StreamHandlers {
 }
 
 /**
+ * 会話の途中で届く、文字以外の合図。
+ *
+ * 会話でも道具は動く（「タスクに追加して」など）。これまで受け口が
+ * token / error / done しか無かったので、**道具が何をしたか**も
+ * **何を作ったか**も、画面には届いていなかった。届かないので、
+ * 画像を作っても「HOMEの『生成物』から見てください」で終わっていた。
+ */
+export interface ChatSideChannel {
+  /** 道具を使い始めた。名前は実行モードと同じ（TOOL_LABELS で訳す）。 */
+  onTool?: (tool: string) => void;
+  /** その道具が作った物。キャンバスに出す。 */
+  onShow?: (item: MadeItem) => void;
+}
+
+/**
  * POST /chat — read the SSE stream and surface tokens as they arrive.
  *
  * @param onToken called for each `{"token":"..."}` chunk.
  * @param onDone  called once when the stream ends (gracefully or via `{"done":true}`).
  *                Receives an error string if the backend emitted `{"error":"..."}`
  *                or the request failed.
+ * @param side   optional hooks for the non-text events (tool / show).
  * @returns handlers with a `cancel()` to abort streaming.
  */
 export function streamChat(
@@ -208,6 +224,7 @@ export function streamChat(
   onToken: (token: string) => void,
   onDone: (error?: string) => void,
   path = "/chat",
+  side: ChatSideChannel = {},
 ): StreamHandlers {
   const controller = new AbortController();
 
@@ -268,6 +285,15 @@ export function streamChat(
           if (typeof payload.token === "string") {
             onToken(payload.token);
           }
+          // 道具を使い始めた／その道具が作った物。
+          // 画像生成は10秒かかることがあり、その間ずっと無言だと
+          // 止まって見える。何をしているかを出し、出来た物はそのまま渡す。
+          if (typeof payload.tool === "string" && payload.tool) {
+            side.onTool?.(payload.tool);
+          }
+          if (payload.show && typeof payload.show === "object") {
+            side.onShow?.(payload.show as MadeItem);
+          }
           if (typeof payload.error === "string") {
             serverError = payload.error;
           }
@@ -311,6 +337,10 @@ interface SSEPayload {
   token?: string;
   done?: boolean;
   error?: string;
+  /** 道具を使い始めた（会話でも道具は動く）。 */
+  tool?: string;
+  /** その道具が作った物。 */
+  show?: MadeItem;
 }
 
 /** Parse one SSE event's `data:` line(s) into an arbitrary JSON object. */

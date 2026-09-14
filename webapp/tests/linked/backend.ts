@@ -34,7 +34,9 @@ export interface Backend {
 
 export type Reply =
   | { status?: number; json: unknown }
-  | ((call: Call) => { status?: number; json: unknown });
+  /** 流れてくる応答（会話・エージェント）。1件が1イベントになる。 */
+  | { status?: number; sse: unknown[] }
+  | ((call: Call) => { status?: number; json: unknown } | { status?: number; sse: unknown[] });
 
 export interface State {
   packs: { key: string; label: string; hint: string; enabled: boolean; always: boolean }[];
@@ -149,6 +151,14 @@ export async function mockBackend(page: Page, over: Record<string, Reply> = {}):
     const out = typeof hit === "function" ? hit(call) : hit;
     // 書いていないパスは当たり障りのない形で返す（画面を落とさない）
     const payload = out ?? { json: { ok: true, items: [], keys: [], events: [] } };
+    if ("sse" in payload) {
+      await route.fulfill({
+        status: payload.status ?? 200,
+        contentType: "text/event-stream",
+        body: payload.sse.map((e) => `data: ${JSON.stringify(e)}\n\n`).join(""),
+      });
+      return;
+    }
     await route.fulfill({
       status: payload.status ?? 200,
       contentType: "application/json",

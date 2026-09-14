@@ -29,6 +29,27 @@
 Bさんの画面に出る。ContextVar なら混ざらない（保存先の切り替えと
 同じ作り）。
 
+……というのが元の言い分だったが、**実際には混ざっていた。**
+
+ContextVar はスレッドごとに中身を持つ。一方このAPIは、実行を1手ずつ
+`loop.run_in_executor(None, next, gen)` で回している。手ごとに別の
+ワーカースレッドへ移りうるので、`begin()` したスレッドと `show()` する
+スレッドが違えば箱は見つからない。しかもワーカーは使い回されるので、
+**前に同じスレッドを使った人の箱**が見つかることがある。
+
+実測（api/test_thread_context.py）: 6人を同時に走らせると、1人ぶんの実行が
+3〜5本のスレッドをまたぎ、回収36回のうち25回が空、**15回は他人の物が出た**。
+
+そこで、箱は「スレッドの文脈」ではなく **1つの Context オブジェクト**に
+持たせる。`carrier()` がそれを作り、呼ぶ側は毎手それを通す:
+
+    ctx = present.carrier()
+    ctx.run(next, gen)        # どのスレッドで動いても、同じ箱を見る
+
+`begin()` / `end()` は、1回の呼び出しで始まって終わる所（承認実行・
+`#` の近道・/chat の道具1回）にはそのまま使える——その場合スレッドを
+またがないため。またぐ所では `carrier()` を使う。
+
 出さない物
 ----------
 「見せる価値のある物」だけを置く。タスクを1件足した、覚えた、という
@@ -63,7 +84,39 @@ def begin() -> object:
 
 
 def end(token) -> None:
-    _items.reset(token)
+    """閉じる。
+
+    別の文脈で作られたトークンを渡されても、例外にはしない。ここは
+    `finally` から呼ばれるので、投げると**見せ方の都合で実行そのものが
+    落ちる**。実際、スレッドをまたいだときに
+    `ValueError: Token ... was created in a different Context` が出て、
+    SSE が途中で切れていた。
+    """
+    try:
+        _items.reset(token)
+    except ValueError:
+        pass
+
+
+def carrier():
+    """1リクエストぶんの置き場を持った Context を作って返す。
+
+    呼ぶ側は、実行の1手ごとにこれを通す:
+
+        ctx = present.carrier()
+        ctx.run(next, gen)
+
+    そうすると、どのワーカースレッドで動いても同じ箱を見る。
+    箱は Context の中だけにあるので、呼び出し元の文脈は汚れない
+    （作っただけで、その後の素の `show()` が溜まり始めたりしない）。
+    """
+    ctx = contextvars.copy_context()
+    ctx.run(_open)
+    return ctx
+
+
+def _open() -> None:
+    _items.set([])
 
 
 def show(item: dict) -> None:

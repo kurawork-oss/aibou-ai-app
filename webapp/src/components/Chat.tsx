@@ -697,6 +697,18 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
           setMessages((prev) => prev.map((m) => (m.id === assistantId ? { ...m, pending: false } : m)));
           if (acc.trim()) flushSpeech(acc);
         },
+        "/chat",
+        {
+          /* 会話でも道具は動く（「タスクに追加して」など）。実行モードと
+             同じ見せ方にする——同じ言葉で経過を出し、出来た物は同じ
+             キャンバスに出す。見せ方が2つあると、どちらで頼んだかで
+             結果の受け取り方が変わってしまう。 */
+          onTool: (tool) =>
+            setMessages((prev) => prev.map((m) => (m.id === assistantId
+              ? { ...m, pending: false, steps: [...(m.steps ?? []), { kind: "tool" as const, tool }] }
+              : m))),
+          onShow: (item) => made(item),
+        },
       );
       cancelRef.current = handlers.cancel;
     },
@@ -1328,13 +1340,18 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
         onOpenFiles={onOpenView ? () => onOpenView("archive") : undefined}
       />
 
-      {/* 閉じたあとに、出した物へ戻る口。無いと「消えた」ように見える。 */}
+      {/* 閉じたあとに、出した物へ戻る口。無いと「消えた」ように見える。
+
+          高さは決め打ちにしない。74px に固定していたとき、スマホでは
+          会話／実行の切り替えの上にちょうど重なって、「実行（司令塔）」が
+          半分隠れていた。入力欄の高さは中身（画像を添付した・用事を
+          預かった）で変わるので、測った値のすぐ上に置く。 */}
       {!canvasOpen && madeItems.length > 0 && (
         <button
           type="button"
           onClick={() => setCanvasOpen(true)}
-          className="fixed bottom-[74px] right-3 z-20 flex min-h-[44px] items-center gap-1.5 rounded-forge border border-[var(--line)] px-3 text-[11px] text-fg-strong shadow-glow transition sm:bottom-4"
-          style={{ background: "var(--chrome)" }}
+          className="fixed right-3 z-20 flex min-h-[44px] items-center gap-1.5 rounded-forge border border-[var(--line)] px-3 text-[11px] text-fg-strong shadow-glow transition"
+          style={{ background: "var(--chrome)", bottom: Math.max(composerH + 8, 74) }}
         >
           <span>🗂</span>
           <span>作った物 {madeItems.length}</span>

@@ -171,6 +171,103 @@ test("管理タブの「もっと」を開いても、押せるものが44px以�
     "「もっと」の中が横に切れている").toEqual([]);
 });
 
+/* ── 重なり ────────────────────────────────────────────────────────
+ *
+ * 「スマホのUIが被りすぎている」と報告があった。上の2つ（大きさ・横の
+ * 切れ）はどちらも通っていて、それでも被っていた——**別の物が上に乗って
+ * いる**のは、どちらの測り方でも見えないため。
+ *
+ * ここでは押せる物の真ん中を突いて、返ってくるのが自分（か自分の中身）か
+ * を見る。別人が返ってきたら、その分だけ覆われている。
+ *
+ * 実際に見つかった例: 出した物へ戻る「作った物」の浮きボタンが、下から
+ * 74px の決め打ちで置かれていて、会話／実行の切り替えにちょうど重なり、
+ * 「実行（司令塔）」が半分隠れていた。 */
+async function covered(page: Page) {
+  return page.evaluate(() => {
+    const out: string[] = [];
+    for (const el of Array.from(document.querySelectorAll(
+      'button, a, [role="button"], select, textarea, input'))) {
+      const r = el.getBoundingClientRect();
+      if (r.width < 8 || r.height < 8) continue;
+      if (r.bottom < 0 || r.top > window.innerHeight) continue;
+      const st = getComputedStyle(el);
+      if (st.visibility === "hidden" || st.display === "none") continue;
+      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      /* 巻き上がって見えていない物は数えない。
+         スクロールの箱からはみ出した所を突くと、当然その下の物が返る。
+         最初これを入れ忘れて、**画面外まで送られたボタン**を「下のナビに
+         覆われている」と報告しかけた（HOMEの「+ 追加」は箱の底が764pxで、
+         実際にはy=789——つまり見えていなかった）。 */
+      let clipped = false;
+      let box: Element | null = el.parentElement;
+      while (box && box !== document.body) {
+        const s = getComputedStyle(box);
+        if (/auto|scroll|hidden/.test(s.overflowY + s.overflowX)) {
+          const b = box.getBoundingClientRect();
+          if (cx < b.left || cx > b.right || cy < b.top || cy > b.bottom) { clipped = true; break; }
+        }
+        box = box.parentElement;
+      }
+      if (clipped) continue;
+      const top = document.elementFromPoint(cx, cy);
+      if (!top) continue;
+      if (top === el || el.contains(top) || top.contains(el)) continue;
+      /* 数えるのは「**画面に貼り付いた小さい物**が乗っている」場合だけ。
+         浮かせた取っ手・通知・丸ボタンの類で、置く高さを決め打ちにすると
+         その下にある物を静かに押せなくする。実際そうなっていた。
+
+         数えない物が2つある。
+          ・画面いっぱいに被せる面（CODE・ボード・キャンバス・設定）
+            ——後ろを触らせないために出しているので、隠れて正しい
+          ・流れの中で前に出ている物
+            ——画面そのものが切り替わっているだけで、後ろの面が残って
+              見えるのは描き順の話。押せなくなっているわけではない
+
+         最初この線を引かずに測って、**60か所が重なっている**と出た。
+         中身を見たら、開いたままの一覧と、切り替わった先の画面だった。 */
+      let floating: Element | null = null;
+      const screen = window.innerWidth * window.innerHeight;
+      let n: Element | null = top;
+      while (n && n !== document.body) {
+        if (getComputedStyle(n).position === "fixed") {
+          const b = n.getBoundingClientRect();
+          if ((b.width * b.height) / screen > 0.6) break;   // 被せ面 → 見ない
+          floating = n;
+          break;
+        }
+        n = n.parentElement;
+      }
+      if (!floating) continue;
+      const t = top.getBoundingClientRect();
+      const name = (el.getAttribute("aria-label") || el.textContent || "").trim().slice(0, 24);
+      const by = (top.getAttribute("aria-label") || top.textContent || "").trim().slice(0, 24);
+      out.push(`「${name}」(${Math.round(r.width)}x${Math.round(r.height)}) が`
+        + `「${by}」(${Math.round(t.width)}x${Math.round(t.height)}) に覆われている`);
+    }
+    return out;
+  });
+}
+
+test("スマホで、押せるものが他の物に覆われていない", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await enterApp(page);
+
+  const bad: string[] = [];
+  for (const mode of MODES) {
+    await goMode(page, mode);
+    /* 行き先を選ぶ一覧が消えきるまで待つ。これを待たずに測ると、
+       開いたままの一覧が画面の全部を覆っていて、**60か所が重なって
+       いる**ように見える。最初それを本物の不具合として数えかけた。 */
+    await page.locator("nav").filter({ hasText: "MODES" })
+      .waitFor({ state: "detached", timeout: 5_000 });
+    await page.waitForTimeout(300);
+    for (const line of await covered(page)) bad.push(`${mode}: ${line}`);
+  }
+  expect(bad, `重なっている所:\n${bad.join("\n")}`).toEqual([]);
+});
+
 test("設定を開いても、押せるものが44px以上ある", async ({ page }) => {
   await page.setViewportSize({ width: 393, height: 852 });
   await page.goto("/");

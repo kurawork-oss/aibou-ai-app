@@ -338,15 +338,22 @@ test("設定は、用で分かれた7つのタブに畳んである", async ({ p
   }
 });
 
-test("Settings HF tab explains it needs the backend when offline", async ({ page }) => {
+test("つなぐタブは、繋いでいない理由を1回だけ言う（オフライン）", async ({ page }) => {
+  /* 以前はこのタブに、同じ意味の断り書きが3つ並んでいた（機能の切り替え／
+     Google連携／HuggingFace）。理由は1つ——繋いでいない——なので1回にした。
+     ただし**黙って空にはしない**。何が使えないのかと、どこへ行けばいいかは
+     残す。数の見張りは tests/oneReason.spec.ts にある。 */
   await page.goto("/");
   await enterApp(page);
   await page.getByLabel("Settings").click();
   await page.getByRole("button", { name: "つなぐ" }).click();
-  // 会話・コード・画像・文字起こしに割り当てる、という説明が出る
-  await expect(page.getByText(/会話・コード・画像生成・文字起こし/)).toBeVisible({ timeout: 5_000 });
-  // バックエンド未接続なら、その理由をはっきり出す（黙って空にしない）
-  await expect(page.getByText(/バックエンド接続後に使えます/).first()).toBeVisible();
+  const note = page.getByText(/バックエンドに繋いでから使えます/);
+  await expect(note).toBeVisible({ timeout: 5_000 });
+  // 何が使えないのか（黙って「使えません」で終わらせない）
+  await expect(note).toContainText("連携");
+  await expect(note).toContainText("モデル");
+  // どこへ行けばいいか
+  await expect(note).toContainText("DIAGNOSTICS");
 });
 
 test("Settings tab bar does not overflow at phone width", async ({ page }) => {
@@ -377,7 +384,7 @@ test("Settings tab bar does not overflow at phone width", async ({ page }) => {
 
   // いちばん端のタブも実際に押せる
   await page.getByRole("button", { name: "つなぐ", exact: true }).click();
-  await expect(page.getByText(/バックエンド接続後に使えます/).first()).toBeVisible({ timeout: 5_000 });
+  await expect(page.getByText(/バックエンドに繋いでから使えます/).first()).toBeVisible({ timeout: 5_000 });
 });
 
 test("声のタブに、声と速さがそろっている", async ({ page }) => {
@@ -1204,12 +1211,13 @@ test("Settings CORE shows AI provider section (offline note)", async ({ page }) 
 });
 
 /* ── Google + DB integrations (ui-r24) ── */
-test("つなぐタブに、Google連携・DBの案内が出る（オフライン）", async ({ page }) => {
+test("つなぐタブは、繋げば何が使えるようになるかを示す（オフライン）", async ({ page }) => {
+  // 繋いだ先に何があるのか分からないと、繋ぐ理由が無い。
   await page.goto("/");
   await enterApp(page);
   await page.getByLabel("Settings").click();
   await page.getByRole("button", { name: "つなぐ", exact: true }).click();
-  await expect(page.getByText(/Google連携・DB永続化は、バックエンド接続後/)).toBeVisible({ timeout: 5_000 });
+  await expect(page.getByText(/外部サービスの連携/)).toBeVisible({ timeout: 5_000 });
 });
 
 test("KEYCHAIN includes a Google key with its issuance guide", async ({ page }) => {

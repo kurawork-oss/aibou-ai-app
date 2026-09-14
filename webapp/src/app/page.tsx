@@ -29,6 +29,7 @@ import { syncOnBoot } from "@/lib/memorySync";
 import { CORE_TYPES, readCoreType, setCoreType, type CoreType } from "@/lib/coreType";
 import FeaturePacks from "@/components/FeaturePacks";
 import IntegrationsSettings from "@/components/IntegrationsSettings";
+import NeedsBackend from "@/components/NeedsBackend";
 import AppArchive from "@/components/AppArchive";
 import Autopilot from "@/components/Autopilot";
 import Backdrop3D from "@/components/Backdrop3D";
@@ -940,12 +941,20 @@ function SettingsPanel({
           {tab === "memory" && <MemorySettings />}
 
           {/* 外と繋ぐ物をひとまとめ。機能の入り切り → 連携 → 鍵 → モデルの順。
-              「何をする人か」を決めてから、繋ぐ物を選ぶほうが迷わない。 */}
+              「何をする人か」を決めてから、繋ぐ物を選ぶほうが迷わない。
+
+              繋いでいない人には、ここの中身は3つとも使えない。部品ごとに
+              断らせると「バックエンド接続後に使えます」が3行並び、別々の
+              問題が3つあるように読める。理由は1つなので、1回だけ言う。 */}
           {tab === "connect" && (
-            <>
-              <FeaturePacks />
-              <IntegrationsSettings />
-            </>
+            API_URL ? (
+              <>
+                <FeaturePacks />
+                <IntegrationsSettings />
+              </>
+            ) : (
+              <NeedsBackend what="使う機能の切り替え・外部サービスの連携・モデルの割り当て" />
+            )
           )}
 
           {tab === "core" && (
@@ -1165,7 +1174,9 @@ function SettingsPanel({
             </>
           )}
 
-          {tab === "connect" && (
+          {/* 繋いでいないときは上の1行で足りている。使えない物の説明書を
+              先に読ませない。 */}
+          {tab === "connect" && API_URL && (
             <>
               <div className="mb-3 text-[10px] leading-relaxed text-muted">
                 HuggingFace のモデルを登録して、<b className="text-fg">会話・コード・画像生成・文字起こし</b>に

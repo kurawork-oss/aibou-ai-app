@@ -113,6 +113,10 @@ async def _scheduler_loop():
 async def _lifespan(_app: "FastAPI"):
     """起動時：SUPABASE_DB_URL があればテーブルを自動作成（冪等・best-effort）。
     定期実行の常駐ループも起動する。未設定でも何もせず、絶対に起動を止めない。"""
+    # いちばん先。重い処理はぜんぶ run_in_executor でワーカースレッドへ
+    # 逃がしているが、そこには「その人の保存先」が届いていなかった
+    # （config.install_context_executor のコメント参照）。
+    config.install_context_executor()
     try:
         if migrate.db_url():
             res = await asyncio.get_event_loop().run_in_executor(None, migrate.run_migrations)
@@ -1233,9 +1237,33 @@ async def chat(req: ChatRequest, _auth: None = Depends(require_auth)):
             if decided == "tool":
                 call, preface = tools.extract_tool_call(buf)
                 if call:
-                    result = await loop.run_in_executor(
-                        None, lambda: tools.execute_tool(call.get("tool", ""), call.get("params", {}) or {})
-                    )
+                    name = call.get("tool", "")
+                    # 何をしているのかを、先に出す。画像生成は10秒かかる
+                    # ことがあり、その間ずっと無言だと止まって見える。
+                    # 実行モードと同じ言葉で出す（画面側が同じ表を使う）。
+                    yield _sse({"tool": name})
+
+                    def _work():
+                        """道具を動かし、作った物も一緒に受け取る。
+
+                        置き場を**この呼び出しの中で**開けて閉じる。
+                        またぐと箱が見つからない（present.py 参照）。
+                        """
+                        token = present.begin()
+                        try:
+                            out = tools.execute_tool(name, call.get("params", {}) or {})
+                            return out, present.take()
+                        finally:
+                            present.end(token)
+
+                    result, made = await loop.run_in_executor(None, _work)
+
+                    # 作った物を、報告の文章より先に出す。これが無いと
+                    # 「画像を生成しました：https://…（HOMEの生成物からも
+                    # 見られます）」とだけ言って、見に行かせることになる。
+                    for item in made:
+                        yield _sse({"show": item})
+
                     followup = (
                         prompt
                         + "\nアシスタント:（ツールを実行しました）"
@@ -1293,9 +1321,15 @@ async def agent_act(req: AgentActRequest, _auth: None = Depends(require_auth)):
         loop = asyncio.get_event_loop()
         gen = agent.run_stream(req.instruction, history, req.name or "AIbou", req.approval)
 
+        # 1手ごとに別のワーカースレッドへ移る。作った物の置き場（present）は
+        # スレッドではなく**この文脈**に持たせて、手をまたいでも同じ箱を
+        # 見るようにする。実測で、同時に6人使うと36回中15回、他人の作った
+        # 物が出ていた（api/test_thread_context.py）。
+        ctx = present.carrier()
+
         def _next(g):
             try:
-                return next(g)
+                return ctx.run(next, g)
             except StopIteration:
                 return None
 

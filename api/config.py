@@ -8,6 +8,7 @@
 # 空を返して優雅に縮退する（graceful degradation）。
 # =====================================================================
 
+import concurrent.futures as _futures
 import contextvars
 import os
 
@@ -333,6 +334,60 @@ def storage_state() -> str:
     if bound is not None:
         return "personal" if bound[1] is not None else "memory"
     return "server" if get_supabase() is not None else "memory"
+
+
+# ── 差し替えを、道具の動くスレッドまで運ぶ ──────────────────────────
+#
+# 上の差し替えは ContextVar で持っている。ContextVar は**スレッドごと**に
+# 中身を持つ。ところがこのAPIは、重い処理をぜんぶ
+#
+#     await loop.run_in_executor(None, ...)      # main.py に180か所
+#
+# でワーカースレッドへ逃がしている。そして `loop.run_in_executor` は、
+# 呼び出し元の文脈を**運ばない**（`asyncio.to_thread` と Starlette の
+# `run_in_threadpool` は運ぶ。これだけが運ばない）。
+#
+# 実測（api/test_thread_context.py）:
+#
+#     イベントループの中: get_supabase() → その人のDB  / storage_state "personal"
+#     道具の動くスレッド: get_supabase() → **既定のDB** / storage_state "memory"
+#
+# つまり `use_own_database` が「未接続の人の書き込みを管理者の共有DBへ
+# 入れない」ために差し込んでいる None が、道具まで届いていなかった。
+# 届かなければ既定DB——持ち主のDB——に落ちる。いちばん静かな事故。
+#
+# 直し方は、180か所を書き換えるのではなく、**既定の実行先そのもの**を
+# 文脈を運ぶ物に取り替える。`run_in_executor(None, ...)` は既定の実行先を
+# 使うので、これで全部まとめて直る。あとから足す所で書き忘れも起きない。
+#
+# 運ぶのは写し（copy_context）にする。ワーカースレッドは使い回されるので、
+# そこへ差し替えを書き残すと、次にそのスレッドを使った人が拾ってしまう。
+class _ContextExecutor(_futures.ThreadPoolExecutor):
+    """渡された関数を、申し込んだ側の文脈の**写し**の中で動かす。"""
+
+    def submit(self, fn, /, *args, **kwargs):
+        ctx = contextvars.copy_context()
+        return super().submit(ctx.run, fn, *args, **kwargs)
+
+
+_context_executor = None
+
+
+def install_context_executor(loop=None) -> None:
+    """いま動いているイベントループの既定の実行先を取り替える。
+
+    起動時に1度だけ呼ぶ（main.py の lifespan）。テストからも呼べるように
+    してあるのは、ここを通らない経路ができたときに気づけるようにするため。
+    """
+    global _context_executor
+    import asyncio
+
+    loop = loop or asyncio.get_event_loop()
+    if _context_executor is None:
+        # スレッド数は既定（min(32, cpu+4)）のまま。ここを絞ると、道具の
+        # 重い人が数人いるだけで全員が詰まる。
+        _context_executor = _ContextExecutor(thread_name_prefix="forge")
+    loop.set_default_executor(_context_executor)
 
 
 def get_supabase():
