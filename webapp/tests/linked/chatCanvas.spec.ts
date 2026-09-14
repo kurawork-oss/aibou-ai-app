@@ -20,7 +20,7 @@
  */
 
 import { test, expect, type Page } from "@playwright/test";
-import { mockBackend, enterApp } from "./backend";
+import { mockBackend, enterApp, sseServer } from "./backend";
 
 const IMAGE = { kind: "image", url: "https://example.com/cat.png", title: "猫の絵" };
 
@@ -163,4 +163,37 @@ test("2つ作ったら、2つとも残る", async ({ page }) => {
   // 2つ以上あるときだけ出る切り替えが、ちゃんと2つぶん出ている
   await expect(canvas.getByRole("button", { name: /検索結果|猫/ }).first()).toBeVisible();
   await expect(canvas.getByRole("img", { name: "猫の絵" })).toBeVisible();
+});
+
+/* ── 待っているあいだ ───────────────────────────────────────────────
+ *
+ * 道具は速くない。画像の生成は10秒かかることがある。その間ずっと
+ * 「……」のままだと、動いているのか止まっているのか区別が付かない。
+ *
+ * ここだけは本物のSSEサーバーを立てて、**間を空けて**流す。
+ * page.route はまとめて返すので、間そのものを試せない。 */
+test("道具を動かしているあいだ、コアが待機のままにならない", async ({ page }) => {
+  const be = await mockBackend(page);
+  be.set("/chat", () => ({ passthrough: true }));
+  const server = await sseServer([
+    { after: 150, data: { tool: "generate_image" } },
+    { after: 1200, data: { show: IMAGE } },          // ここまでが「作っている」
+    { after: 50, data: { token: "できました。" } },
+    { after: 50, data: { done: true } },
+  ]);
+  try {
+    await enterApp(page);
+    await say(page, "猫の絵を作って");
+
+    // 作っているあいだ、HUDは「動いている」と出る（待機でも考え中でもない）
+    await expect(page.getByText(/EXECUTING/)).toBeVisible({ timeout: 5_000 });
+    // 何をしているのかも、同時に出ている
+    await expect(page.getByText("画像を生成")).toBeVisible();
+
+    // 終わったら戻る（出しっぱなしにしない）
+    await expect(page.getByText("できました。")).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/EXECUTING/)).toHaveCount(0);
+  } finally {
+    await server.close();
+  }
 });

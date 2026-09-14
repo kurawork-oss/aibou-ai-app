@@ -37,7 +37,8 @@ import BootScreen from "@/components/BootScreen";
 import Briefing from "@/components/Briefing";
 import Chat, { type ChatSettings } from "@/components/Chat";
 import CodeMode from "@/components/CodeMode";
-import CoreOrb, { type CoreState } from "@/components/CoreOrb";
+import CoreOrb from "@/components/CoreOrb";
+import { coreStateLabel, type CoreState } from "@/lib/coreState";
 import Dashboard from "@/components/Dashboard";
 import EntryGate from "@/components/EntryGate";
 import Workshop from "@/components/Workshop";
@@ -427,14 +428,11 @@ function Hud() {
   );
 }
 
-function stateLabel(state: CoreState): string {
-  switch (state) {
-    case "listening": return "LISTENING";
-    case "speaking": return "SPEAKING";
-    case "thinking": return "THINKING";
-    default: return "ONLINE";
-  }
-}
+/* 呼び名は lib/coreState.ts に置いた。ここと Chat.tsx と CoreOrb.tsx の
+   3か所で別々に持っていたので、状態を足すと足し忘れた所だけ静かに
+   ずれていた（実際「動いている」を足したとき、ここだけ ONLINE のまま
+   だった）。 */
+const stateLabel = coreStateLabel;
 
 // 持ち主だけのモード。サーバーの /account/profile が正で、ここは
 // 応答が返る前の初期表示に使う控えの一覧（多めに隠す側に倒す）。

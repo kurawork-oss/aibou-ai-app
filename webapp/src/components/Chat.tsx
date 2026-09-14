@@ -23,7 +23,7 @@ import {
   type ClipboardEvent,
   type KeyboardEvent,
 } from "react";
-import type { CoreState } from "./CoreOrb";
+import { coreStateOf, type CoreState } from "@/lib/coreState";
 import AgentTrace, { type AgentStep as TraceStep } from "@/components/AgentTrace";
 import Markdown from "@/components/Markdown";
 import {
@@ -181,6 +181,11 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
+  /* いま道具を動かしているか。コアの顔がこれで変わる。
+     「考えている」と「作っている」は、待たされる長さがまるで違う
+     （画像の生成は10秒かかることがある）。同じ顔にしておくと、
+     長いほうがただ固まって見える。 */
+  const [acting, setActing] = useState(false);
   // # の候補と、直行したときの一言
   const [commands, setCommands] = useState<CommandItem[]>([]);
   const [note, setNote] = useState("");
@@ -386,14 +391,8 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
     if (listening && transcript) setInput(transcript);
   }, [listening, transcript]);
 
-  // Derive + broadcast the orb state.
-  const coreState: CoreState = listening
-    ? "listening"
-    : speaking
-      ? "speaking"
-      : streaming
-        ? "thinking"
-        : "idle";
+  // Derive + broadcast the orb state（決め方は lib/coreState.ts）。
+  const coreState: CoreState = coreStateOf({ listening, speaking, acting, streaming });
 
   useEffect(() => {
     onStateChange?.(coreState);
@@ -538,6 +537,7 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
           );
         } finally {
           setStreaming(false);
+          setActing(false);
         }
         return;
       }
@@ -563,10 +563,12 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
                 break;
               case "tool":
                 actedRef.current = true;
+                setActing(true);         // コアが「動いている」顔になる
                 setSteps((s) => [...s.filter((x) => x.kind !== "thinking"),
                   { kind: "tool", tool: ev.tool || "", note: ev.note, ms: ev.ms }]);
                 break;
               case "observation":
+                setActing(false);
                 setSteps((s) => [...s, { kind: "observation", result: ev.result || "", ms: ev.ms }]);
                 break;
               case "show":
@@ -616,6 +618,7 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
           },
           (error) => {
             setStreaming(false);
+            setActing(false);
             cancelRef.current = null;
             if (error) {
               setMessages((prev) => prev.map((m) => (m.id === assistantId
@@ -676,6 +679,9 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
           name: settings.name || undefined, memory: localMemory },
         (token) => {
           acc += token;
+          /* 返事が始まった＝道具は終わっている。同じ値なら React が
+             描き直さないので、毎文字呼んでも増えない。 */
+          setActing((v) => (v ? false : v));
           setMessages((prev) =>
             prev.map((m) => (m.id === assistantId ? { ...m, content: acc, pending: false } : m)),
           );
@@ -684,6 +690,7 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
         },
         (error) => {
           setStreaming(false);
+          setActing(false);
           cancelRef.current = null;
           if (error && !acc) {
             setMessages((prev) =>
@@ -703,10 +710,12 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
              同じ見せ方にする——同じ言葉で経過を出し、出来た物は同じ
              キャンバスに出す。見せ方が2つあると、どちらで頼んだかで
              結果の受け取り方が変わってしまう。 */
-          onTool: (tool) =>
+          onTool: (tool) => {
+            setActing(true);          // コアが「動いている」顔になる
             setMessages((prev) => prev.map((m) => (m.id === assistantId
               ? { ...m, pending: false, steps: [...(m.steps ?? []), { kind: "tool" as const, tool }] }
-              : m))),
+              : m)));
+          },
           onShow: (item) => made(item),
         },
       );
@@ -894,6 +903,7 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
     stopReply();
     setSpeaking(false);
     setStreaming(false);
+    setActing(false);
     setTimeout(() => { if (voiceModeRef.current) { resetMic(); startMic(); } }, 150);
   }, [resetMic, startMic, stopReply]);
 
@@ -957,6 +967,7 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
     cancelRef.current?.();
     cancelRef.current = null;
     setStreaming(false);
+    setActing(false);
     stopReply();
     setSpeaking(false);
   }, [stopReply]);

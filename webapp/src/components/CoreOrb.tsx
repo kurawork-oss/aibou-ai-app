@@ -47,7 +47,10 @@ export function loadShapes(): Promise<Drawers> {
   return shapeLoading;
 }
 
-export type CoreState = "idle" | "listening" | "speaking" | "thinking";
+/* 状態の定義は lib/coreState.ts。ここは**その見た目**だけを持つ。
+   これまで通り CoreOrb から取れるようにしておく（呼び出し側が多いので）。 */
+export type { CoreState } from "@/lib/coreState";
+import type { CoreState } from "@/lib/coreState";
 
 export interface CoreOrbProps {
   /** Diameter in px (layout size — the canvas paints slightly beyond it). */
@@ -91,6 +94,12 @@ const TUNES: Record<CoreState, Tune> = {
   listening: { spin: 0.34, glow: 0.42, cyan: 0.38, pulseHz: 0.60, pulseAmp: 0.030, orbit: 2.0, ping: 1.8 },
   speaking: { spin: 0.52, glow: 0.50, cyan: 0.30, pulseHz: 1.10, pulseAmp: 0.045, orbit: 2.6, ping: 1.2 },
   thinking: { spin: 0.28, glow: 0.45, cyan: 0.20, pulseHz: 0.42, pulseAmp: 0.024, orbit: 1.4, ping: 2.6 },
+  /* 手を動かしている間。いちばん速く、いちばん明るい。
+     10秒かかる仕事でも「何かが起きている」と分かるように、
+     考えている（thinking）とははっきり違う顔にする——リングを倍以上
+     速く回し、輪の点滅を詰める。ここを thinking の近くにすると、
+     見ている側には同じに見えて、足した意味が無くなる。 */
+  working: { spin: 0.62, glow: 0.55, cyan: 0.46, pulseHz: 0.90, pulseAmp: 0.038, orbit: 3.2, ping: 0.9 },
 };
 
 /** The three tilted orbit planes (matches the original CSS rings). */

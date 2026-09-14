@@ -36,7 +36,10 @@ export type Reply =
   | { status?: number; json: unknown }
   /** 流れてくる応答（会話・エージェント）。1件が1イベントになる。 */
   | { status?: number; sse: unknown[] }
-  | ((call: Call) => { status?: number; json: unknown } | { status?: number; sse: unknown[] });
+  /** 差し替えず、本物へ通す。時間のかかり方まで見たいときだけ（sseServer）。 */
+  | { passthrough: true }
+  | ((call: Call) => { status?: number; json: unknown } | { status?: number; sse: unknown[] }
+      | { passthrough: true });
 
 export interface State {
   packs: { key: string; label: string; hint: string; enabled: boolean; always: boolean }[];
@@ -151,6 +154,7 @@ export async function mockBackend(page: Page, over: Record<string, Reply> = {}):
     const out = typeof hit === "function" ? hit(call) : hit;
     // 書いていないパスは当たり障りのない形で返す（画面を落とさない）
     const payload = out ?? { json: { ok: true, items: [], keys: [], events: [] } };
+    if ("passthrough" in payload) { await route.continue(); return; }
     if ("sse" in payload) {
       await route.fulfill({
         status: payload.status ?? 200,
@@ -167,6 +171,46 @@ export async function mockBackend(page: Page, over: Record<string, Reply> = {}):
   });
 
   return be;
+}
+
+/**
+ * 本物のSSEサーバーを 127.0.0.1:8099 に立てる。
+ *
+ * なぜ page.route では足りないか
+ * ------------------------------
+ * `route.fulfill` は本文を**まとめて**返す。だから「道具を動かしている
+ * 10秒のあいだ、画面は何を出しているか」のような、**時間のかかり方その物**
+ * は試せない。まとめて届けば、その10秒は存在しないことになる。
+ *
+ * ここだけは本物を立てて、間を空けて流す。ビルドが向いている先
+ * （NEXT_PUBLIC_API_URL=http://127.0.0.1:8099）に立てるので、
+ * `{ passthrough: true }` と組み合わせて使う。
+ */
+export async function sseServer(
+  events: { after?: number; data: unknown }[],
+): Promise<{ close: () => Promise<void> }> {
+  const http = await import("node:http");
+  const server = http.createServer((req, res) => {
+    const cors = {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Headers": "*",
+      "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+    };
+    if (req.method === "OPTIONS") { res.writeHead(204, cors); res.end(); return; }
+    res.writeHead(200, { ...cors, "Content-Type": "text/event-stream", "Cache-Control": "no-cache" });
+    let at = 0;
+    const send = () => {
+      if (at >= events.length) { res.end(); return; }
+      const ev = events[at++];
+      setTimeout(() => {
+        res.write(`data: ${JSON.stringify(ev.data)}\n\n`);
+        send();
+      }, ev.after ?? 0);
+    };
+    send();
+  });
+  await new Promise<void>((ok) => server.listen(8099, "127.0.0.1", ok));
+  return { close: () => new Promise<void>((ok) => { server.close(() => ok()); }) };
 }
 
 /** 起動して、使える状態まで待つ。 */
