@@ -21,6 +21,7 @@ import {
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AiProviderSettings from "@/components/AiProviderSettings";
+import ModelRouter from "@/components/ModelRouter";
 import HfModels from "@/components/HfModels";
 import AppearanceSettings from "@/components/AppearanceSettings";
 import PushSettings from "@/components/PushSettings";
@@ -1005,6 +1006,7 @@ function SettingsPanel({
               >
                 SAVE & SYNC
               </button>
+              <ModelRouter />
               <AiProviderSettings />
               <PushSettings />
             </>

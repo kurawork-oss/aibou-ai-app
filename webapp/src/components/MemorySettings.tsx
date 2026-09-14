@@ -19,6 +19,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as memory from "@/lib/memory";
 import { recall } from "@/lib/recall";
+import { secretReason } from "@/lib/secretsGuard";
 import {
   forgetSyncMark, lastSyncedAt, syncBlockedReason, syncMemory, type SyncOutcome,
 } from "@/lib/memorySync";
@@ -93,7 +94,16 @@ export default function MemorySettings() {
   const addOne = async () => {
     const text = draft.trim();
     if (!text) return;
+    /* 鍵やパスワードは記憶に入れない（仕様§12・§22）。
+       memory.add() でも止まるが、**そこは黙って落とす**ので、ここで
+       理由を言う。理由なく消えると「保存できないアプリ」に見える。 */
+    const secret = secretReason(text);
+    if (secret) {
+      setNote(`⚠ ${secret}。記憶ではなく、設定 → KEYCHAIN に入れてください。`);
+      return;
+    }
     setBusy(true);
+    setNote("");
     await memory.add(text, { source: "me", kind: "fact", importance: 1 });
     setDraft("");
     await load();

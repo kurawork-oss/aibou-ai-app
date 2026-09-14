@@ -40,6 +40,7 @@ import compliance
 import config
 import capabilities
 import capability_status
+import router
 import code_agent
 import evolve
 import fileread
@@ -1197,7 +1198,7 @@ async def chat(req: ChatRequest, _auth: None = Depends(require_auth)):
                 return None
 
         try:
-            it = llm.stream_text(prompt)
+            it = llm.stream_text(prompt, task="chat")
             buf = ""
             decided = None  # None=判定中 / "tool" / "normal"
 
@@ -1271,7 +1272,7 @@ async def chat(req: ChatRequest, _auth: None = Depends(require_auth)):
                         + "\n<<<TOOL_RESULT>>> " + result
                         + "\nアシスタント（上の結果を踏まえ、ツール記法は使わず日本語で簡潔に報告）:"
                     )
-                    it2 = llm.stream_text(followup)
+                    it2 = llm.stream_text(followup, task="chat")
                     while True:
                         t2 = await loop.run_in_executor(None, _next, it2)
                         if t2 is None:
@@ -1726,6 +1727,54 @@ async def ai_config_get(_auth: None = Depends(require_auth)):
             ]),
         },
     }
+
+
+class RouteRequest(BaseModel):
+    """どの仕事を、どのAIへ回すか。"""
+    task: str
+    provider: str = ""      # 空にすると指名を外す（自動に戻る）
+
+
+@app.get("/ai/routes")
+async def ai_routes(_auth: None = Depends(require_auth)):
+    """使えるAIの一覧と、いまどの仕事をどこへ回しているか（仕様§15・§16）。
+
+    **鍵そのものは返さない。** 返すのは鍵の「名前」と、入っているかどうか。
+    """
+    loop = asyncio.get_event_loop()
+
+    def _read():
+        return {"ok": True,
+                "providers": router.status(),
+                "tasks": list(router.TASKS.keys()),
+                "routes": router.routes(),
+                "named": {t: (keychain.get_key(f"ROUTE_{t.upper()}") or "")
+                          for t in router.TASKS}}
+
+    return await loop.run_in_executor(None, _read)
+
+
+@app.post("/ai/routes")
+async def ai_routes_set(req: RouteRequest, _auth: None = Depends(require_auth)):
+    """その仕事を、指名した提供元へ回す。
+
+    課金される提供元は、**ここで名指ししたときだけ**使う。鍵を入れただけで
+    勝手に使い始めると、利用者の知らないところで請求が立つ。
+    """
+    task = (req.task or "").strip().lower()
+    if task not in router.TASKS:
+        return JSONResponse(status_code=400,
+                            content={"error": f"知らない仕事です（{req.task}）"})
+    name = (req.provider or "").strip().lower()
+    if name and name not in router.PROVIDERS:
+        return JSONResponse(status_code=400,
+                            content={"error": f"知らない提供元です（{req.provider}）"})
+    loop = asyncio.get_event_loop()
+    res = await loop.run_in_executor(
+        None, lambda: keychain.set_key(f"ROUTE_{task.upper()}", name))
+    if isinstance(res, dict) and res.get("error"):
+        return JSONResponse(status_code=409, content=res)
+    return await ai_routes()
 
 
 @app.post("/ai/config")

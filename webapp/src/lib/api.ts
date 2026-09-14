@@ -1342,6 +1342,66 @@ export async function aiConfigSet(patch: { provider?: string; hf_model?: string;
   return normalizeAiConfig(await res.json().catch(() => ({})));
 }
 
+/**
+ * どの仕事を、どのAIへ回すか（仕様§15・§16）。
+ *
+ * paid が true の提供元は、**その仕事に名指ししたときだけ**使われる。
+ * 鍵を入れただけで勝手に使い始めると、利用者の知らないところで請求が立つ。
+ */
+export interface AiProviderRow {
+  id: string;
+  label: string;
+  /** 使うとお金がかかるか */
+  paid: boolean;
+  /** 鍵が入っていて、使える状態か */
+  ready: boolean;
+  /** 鍵の**名前**（値ではない） */
+  key: string;
+  note: string;
+}
+
+export interface AiRoutes {
+  providers: AiProviderRow[];
+  tasks: string[];
+  /** 仕事 → いま実際に使う提供元 */
+  routes: Record<string, string>;
+  /** 仕事 → 名指ししてある提供元（空なら自動） */
+  named: Record<string, string>;
+}
+
+function normalizeRoutes(raw: unknown): AiRoutes {
+  const d = (raw ?? {}) as Partial<AiRoutes>;
+  return {
+    providers: asArray<AiProviderRow>(d.providers),
+    tasks: asArray<string>(d.tasks),
+    routes: (d.routes ?? {}) as Record<string, string>,
+    named: (d.named ?? {}) as Record<string, string>,
+  };
+}
+
+/** GET /ai/routes */
+export async function aiRoutesGet(): Promise<AiRoutes> {
+  const res = await fetch(`${requireApiUrl()}/ai/routes`, {
+    headers: authHeaders(), cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`AIの割り当てを取得できませんでした (${res.status})`);
+  return normalizeRoutes(await res.json().catch(() => ({})));
+}
+
+/** POST /ai/routes — その仕事を、指名した提供元へ回す（空で自動に戻す）。 */
+export async function aiRoutesSet(task: string, provider: string): Promise<AiRoutes> {
+  const res = await fetch(`${requireApiUrl()}/ai/routes`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ task, provider }),
+  });
+  if (!res.ok) {
+    const d = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(d.error || `保存できませんでした (${res.status})`);
+  }
+  return normalizeRoutes(await res.json().catch(() => ({})));
+}
+
 /* ---------------- Life (ME mode — personal partner) ---------------- */
 export interface LifeEntry {
   id: string;

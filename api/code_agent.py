@@ -348,12 +348,12 @@ def run_stream(instruction: str, files: list, history: list = None, depth: str =
     try:
         if depth == "deep":
             yield {"phase": "planning", "detail": "実装計画を立案中…"}
-            plan_out = llm.generate_text(_deep_plan_prompt(instruction, files or [], history),
+            plan_out = llm.generate_text(_deep_plan_prompt(instruction, files or [], history), task="code",
                                          hf_model_override=llm.code_model(), max_tokens=1600) or ""
             yield {"phase": "plan", "plan": plan_out[:2500]}
 
             yield {"phase": "implementing", "detail": "計画に沿って実装中…"}
-            impl = llm.generate_text(_deep_impl_prompt(instruction, files or [], history, plan_out),
+            impl = llm.generate_text(_deep_impl_prompt(instruction, files or [], history, plan_out), task="code",
                                      hf_model_override=llm.code_model(), max_tokens=CODE_MAX_TOKENS) or ""
             _, edits = parse_edits(impl)
             if not edits:
@@ -366,7 +366,7 @@ def run_stream(instruction: str, files: list, history: list = None, depth: str =
             yield from _apply_and_repair(instruction, file_map, edits, results)
 
             yield {"phase": "reviewing", "detail": "自己レビュー中…（バグ・抜けを点検）"}
-            review = llm.generate_text(_review_prompt(instruction, file_map),
+            review = llm.generate_text(_review_prompt(instruction, file_map), task="code",
                                        hf_model_override=llm.code_model(), max_tokens=CODE_MAX_TOKENS) or ""
             _, redits = parse_edits(review)
             if redits:
@@ -374,7 +374,7 @@ def run_stream(instruction: str, files: list, history: list = None, depth: str =
                 yield from _apply_and_repair(instruction, file_map, redits, results)
         else:
             yield {"phase": "editing", "detail": "変更を作成中…"}
-            text = llm.generate_text(_build_prompt(instruction, files or [], history),
+            text = llm.generate_text(_build_prompt(instruction, files or [], history), task="code",
                                      hf_model_override=llm.code_model(), max_tokens=CODE_MAX_TOKENS) or ""
             plan_out, edits = parse_edits(text)
             if not edits:

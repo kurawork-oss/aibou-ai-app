@@ -29,6 +29,8 @@
  * 本当に覚えるべきことは、AI側の道具（mem_add）でも入れられる。
  */
 
+import { secretReason } from "@/lib/secretsGuard";
+
 /** 覚えてほしい、と明示する言い方。これが入っていれば無条件で覚える。 */
 const ASK_TO_REMEMBER = /(覚え(て|とい|ておい)|記憶し(て|とい)|忘れないで)/;
 
@@ -93,6 +95,16 @@ function stripRequest(text: string): string {
 export function worthRemembering(raw: string): Verdict {
   const text = (raw || "").trim();
   if (!text) return { keep: false, importance: 0, text, why: "空" };
+
+  /* ⓪ 鍵やパスワードは、**何より先に**弾く（仕様§12・§22）。
+        「このキー覚えといて」と頼まれても入れない。記憶はあとで会話に
+        混ぜてAIへ渡るので、一度入ると以後ずっと毎回送られる。
+        鍵は暗号化して持つ物（KEYCHAIN）で、記憶が持つ物ではない。
+        ここを「覚えて」の判定より後ろに置くと、頼まれた鍵が素通りする。 */
+  const secret = secretReason(text);
+  if (secret) {
+    return { keep: false, importance: 0, text, why: secret };
+  }
 
   /* ① 本人が「覚えて」と言ったら、ほかの条件は全部飛ばす。
         ここを後ろに置くと、「この番号覚えて」が疑問形や命令形の判定に

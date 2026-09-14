@@ -26,6 +26,7 @@
  */
 
 import { recall as rank, toBlock, type Hit, type Recallable } from "@/lib/recall";
+import { hasSecret } from "@/lib/secretsGuard";
 
 const DB_NAME = "forge-memory";
 const DB_VERSION = 1;
@@ -164,6 +165,13 @@ export interface AddOptions {
 export async function add(text: string, opts: AddOptions = {}): Promise<MemoryItem | null> {
   const body = (text || "").trim();
   if (!body) return null;
+
+  /* 鍵やパスワードは入れない（仕様§12・§22）。
+     ここは端末の記憶に書く**唯一の口**なので、自動で拾った発言も、
+     設定画面で手で打ち込んだ物も、必ずここを通る。会話の選り分け
+     （worthRemembering）にも同じ関門があるが、あちらを通らない経路が
+     あるので二重にしてある。 */
+  if (hasSecret(body)) return null;
 
   const now = Date.now();
   const rows = await allRaw();

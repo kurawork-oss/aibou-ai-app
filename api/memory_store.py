@@ -100,6 +100,19 @@ def mem_add(role: str, content: str, importance: int = 0) -> bool:
     c = get_supabase()
     if not c or not content:
         return False
+
+    # 鍵やパスワードは記憶に入れない（仕様§12・§22）。
+    #
+    # 記憶はあとで会話に混ぜてAIへ渡る。一度でも鍵を口にすると、以後ずっと
+    # 毎回それが送られる。鍵は暗号化して持つ物（keychain）で、記憶が持つ
+    # 物ではない。**迷ったら入れない**側に倒してある。
+    try:
+        import secrets_guard
+        if secrets_guard.has_secret(str(content)):
+            return False
+    except Exception:
+        pass
+
     try:
         # 保存する行データ。embedding はベクトル化に成功した時だけ含める。
         row = {
