@@ -404,7 +404,7 @@ export default function Capture() {
                 {caps && !caps.transcribe && (
                   <span className="text-[11px] text-muted">
                     {caps.ffmpeg
-                      ? "Geminiのキー、または 設定 → HF で文字起こしモデルの割り当てが必要です"
+                      ? "Geminiのキー、または 設定 →「つなぐ」で文字起こしモデルの割り当てが必要です"
                       : "サーバーに ffmpeg がありません"}
                   </span>
                 )}

@@ -76,7 +76,7 @@ def test_missing_keys_are_named(keys, sent):
     keys["X_API_KEY"] = "ck"                 # 1つだけ入れた状態
     r = x_client.post("こんにちは")
     assert "X_API_SECRET" in r["error"]
-    assert "拡張機能" in r["error"]
+    assert "連携" in r["error"]
     assert sent == []
 
 

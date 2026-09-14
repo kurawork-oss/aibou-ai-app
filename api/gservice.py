@@ -111,7 +111,7 @@ def _err_not_connected() -> dict:
     if not configured():
         return {"ok": False, "error": "Google未設定です（KEYCHAINでGOOGLE_CLIENT_ID/SECRETを設定）"}
     return {"ok": False,
-            "error": "Google未接続です。拡張機能から「Googleと連携する」を押すと繋がります。"}
+            "error": "Google未接続です。「連携」から「Googleと連携する」を押すと繋がります。"}
 
 
 # ── 作ったと言う前に、本当にあるか確かめる ───────────────────────────

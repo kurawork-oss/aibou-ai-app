@@ -118,7 +118,7 @@ def post(text: str, by_agent: bool = False) -> dict:
     if not configured():
         miss = "・".join(missing_keys())
         return {"error": f"Xの連携が終わっていません（未設定: {miss}）。"
-                         "拡張機能（EXTEND）→ X から設定してください"}
+                         "管理 → もっと →「連携」→ X から設定してください"}
     if not fits(text):
         return {"error": f"{LIMIT}字を超えています"
                          f"（いまは{weighted_len(text)}字ぶん。日本語は1文字が2つ分に数えられます）"}

@@ -342,7 +342,7 @@ async def require_storage(_db: str = Depends(use_own_database)) -> None:
     raise HTTPException(
         status_code=409,
         detail="保存先がつながっていないため、保存できませんでした。"
-               "拡張機能（EXTEND）→ Supabase から自分のデータベースを接続してください。"
+               "管理 → もっと →「連携」→ Supabase から自分のデータベースを接続してください。"
                "接続するまで、作ったものは残りません。",
     )
 
@@ -1044,7 +1044,7 @@ def _storage_report(bearer: str, x_supabase: str) -> dict:
                 "保存される": True}
     return {"状態": "保存先が未接続です。作ったものは保存されません",
             "保存される": False,
-            "対処": "拡張機能（EXTEND）→ Supabase から自分のデータベースを接続してください"}
+            "対処": "管理 → もっと →「連携」→ Supabase から自分のデータベースを接続してください"}
 
 
 @app.get("/diagnose")

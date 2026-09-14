@@ -192,7 +192,7 @@ export default function ImageStudio() {
             {engine === "hf"
               ? `${engs.hf?.model ?? ""}（1枚ずつ数秒〜数十秒。枚数は2までに絞られます）`
               : engs.hf?.ready === false
-                ? "HFを使うには 設定 → HF で「画像生成」にモデルを割り当ててください"
+                ? "HFを使うには 設定 →「つなぐ」で「画像生成」にモデルを割り当ててください"
                 : "キー不要・すぐ出る"}
           </p>
 

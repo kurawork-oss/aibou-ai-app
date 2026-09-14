@@ -105,7 +105,7 @@ export const EXTENSIONS: Extension[] = [
     group: "ai",
     kind: "keys",
     unlocks: [
-      "GPT系で会話・生成する（設定 › CORE で優先エンジンに選べます）",
+      "GPT系で会話・生成する（設定 →「基本」→ どのAIに任せるか、で選べます）",
       "Gemini も HuggingFace も落ちているときの最後の受け皿になる",
     ],
     fields: [

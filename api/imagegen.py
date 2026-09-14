@@ -40,7 +40,7 @@ def engines() -> dict:
     return {
         "pollinations": {"label": "無料（キー不要）", "ready": True, "model": ""},
         "hf": {"label": "HuggingFace のモデル", "ready": ready, "model": model,
-               "hint": "" if ready else "設定 → HF MODELS で「画像生成」に割り当ててください"},
+               "hint": "" if ready else "設定 →「つなぐ」で「画像生成」に割り当ててください"},
     }
 
 
@@ -112,7 +112,7 @@ def _generate_hf(prompt: str, width: int, height: int, variant: int = 0) -> dict
     model = hfhub.assigned("image")
     if not model:
         return {"error": "画像生成に使うHuggingFaceモデルが未割り当てです"
-                         "（設定 → HF MODELS で「画像生成」に割り当ててください）"}
+                         "（設定 →「つなぐ」で「画像生成」に割り当ててください）"}
     res = hfhub.run_image(model, prompt, width, height)
     if res.get("error"):
         return res

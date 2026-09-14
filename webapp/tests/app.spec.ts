@@ -311,10 +311,14 @@ test("KEYCHAIN sends you to the one place where connections live", async ({ page
   await page.goto("/");
   await enterApp(page);
   await openRawKeyEditor(page);
-  // 同じ設定が2か所にあると、どちらが本物か分からなくなる。
-  // ふだんの連携は拡張機能に一本化し、ここからはそこへ送る。
-  await expect(page.getByText("「拡張機能」")).toBeVisible({ timeout: 5_000 });
-  await expect(page.getByRole("button", { name: "拡張機能をひらく" })).toBeVisible();
+  /* 同じ設定が2か所にあると、どちらが本物か分からなくなる。
+     ふだんの連携は1画面に寄せ、ここからはそこへ送る。
+
+     **呼び名は、ナビに出ている言葉と揃える。** 以前ここは「拡張機能」と
+     案内していたが、ナビには「連携」としか出ておらず、言われた通りに
+     探しても見つからなかった。 */
+  await expect(page.getByText(/「連携」にまとめました/)).toBeVisible({ timeout: 5_000 });
+  await expect(page.getByRole("button", { name: "「連携」をひらく" })).toBeVisible();
 });
 
 /* ── Settings ───────────────────────────────────────────────────── */

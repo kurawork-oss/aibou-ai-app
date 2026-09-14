@@ -319,7 +319,7 @@ def finish(provider: str, code: str, redirect: str) -> dict:
     out = {"ok": True, "account": rec["account"], "persisted": saved.get("persisted", False)}
     if not out["persisted"]:
         out["warning"] = ("いまは使えますが、保存先が無いのでサーバーの更新で消えます。"
-                          "拡張機能→Supabase から自分のデータベースを接続してください。")
+                          "管理 → もっと →「連携」→ Supabase から自分のデータベースを接続してください。")
     return out
 
 

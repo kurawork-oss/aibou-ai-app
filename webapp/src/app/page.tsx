@@ -1150,7 +1150,7 @@ function SettingsPanel({
               <div className="mb-3 rounded-forge border border-panel p-3">
                 <p className="text-[11px] leading-relaxed text-fg">
                   連携（Supabase・LINE・Google など）は
-                  <b className="text-fg-strong">「拡張機能」</b>にまとめました。
+                  <b className="text-fg-strong">「連携」</b>にまとめました。
                   そちらなら、何ができるようになるか・値のとり方まで一緒に出ます。
                 </p>
                 <button
@@ -1159,7 +1159,7 @@ function SettingsPanel({
                   className="mt-2 rounded-forge border px-3 py-2 text-[11px] label-mono"
                   style={{ borderColor: "var(--accent)", color: "var(--fg-strong)", background: "var(--btn-bg)" }}
                 >
-                  拡張機能をひらく
+                  「連携」をひらく
                 </button>
               </div>
 
@@ -1171,7 +1171,7 @@ function SettingsPanel({
                   <div className="mb-3 text-[10px] leading-relaxed text-muted">
                     APIキーを暗号化して保管します。<b className="text-fg">バックエンド接続時は Supabase にサーバー側で暗号化保存</b>（Fernet・DBは暗号文のみ）。
                     未接続時は端末内に暗号化下書き（AES-256）として保存し、接続後に取り込めます。
-                    拡張機能に無い独自のキーは、ここから追加できます。
+                    「連携」に無い独自のキーは、ここから追加できます。
                   </div>
                   <Keychain />
                 </div>

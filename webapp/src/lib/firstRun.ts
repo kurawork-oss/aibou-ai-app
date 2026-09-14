@@ -37,7 +37,7 @@ export function firstRunSteps(input: FirstRunInput): FirstRunStep[] {
       done: !!input.db?.connected,
       title: "保存先をつなぐ",
       hint: "自分のSupabaseにつなぐまで、タスク・予定・ノートは保存できません"
-        + "（作ろうとすると理由が出ます）。拡張機能 › Supabase から。",
+        + "（作ろうとすると理由が出ます）。管理 → もっと →「連携」→ Supabase から。",
     },
     {
       key: "guide",
@@ -49,7 +49,7 @@ export function firstRunSteps(input: FirstRunInput): FirstRunStep[] {
       key: "ai-key",
       done: hasAiKey,
       title: "AIの鍵を入れる",
-      hint: "拡張機能 › Gemini に鍵を入れると、会話や生成が動きます。無料でとれます。",
+      hint: "「連携」→ Gemini に鍵を入れると、会話や生成が動きます。無料でとれます。",
     },
   ];
 }

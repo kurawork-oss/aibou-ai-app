@@ -127,7 +127,11 @@ test("取れなかったときに、「何も使えない」と読める空に�
   be.set("/capabilities/status", () => ({ status: 503, json: { error: "down" } }));
   await enterApp(page);
   await openConnect(page);
-  await expect(page.getByText(/状態を取得できませんでした|取得できませんでした/)).toBeVisible();
+  /* 待ち時間を明示する。ここだけ既定の5秒のままで、全体を通したときに
+     1度落ちた（単独では3回とも通る）。取りに行って失敗するまでの時間が
+     混んでいるぶん伸びる所なので、他の確認と同じ余裕を持たせる。 */
+  await expect(page.getByText(/状態を取得できませんでした|取得できませんでした/))
+    .toBeVisible({ timeout: 10_000 });
 });
 
 test("いくつ使えるかが、最初の1行で分かる", async ({ page }) => {

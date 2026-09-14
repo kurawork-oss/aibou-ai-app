@@ -90,7 +90,7 @@ export default function Extensions({ onNavigate }: { onNavigate?: (v: "guide") =
   if (!API_URL) {
     return (
       <div className="panel p-6 text-center text-[11px] leading-relaxed text-muted">
-        拡張機能は、バックエンドに繋がってから使えます。
+        連携は、バックエンドに繋がってから使えます。
       </div>
     );
   }
@@ -99,7 +99,7 @@ export default function Extensions({ onNavigate }: { onNavigate?: (v: "guide") =
     <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto pb-2">
       <div className="panel p-3">
         <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
-          <span className="text-[10px] tracking-[0.2em] text-muted label-mono">拡張機能</span>
+          <span className="text-[10px] tracking-[0.2em] text-muted label-mono">連携</span>
           <span className="text-[10px] text-muted label-mono">{doneCount} / {exts.length} 連携済み</span>
         </div>
         <p className="text-[11px] leading-relaxed text-fg">
@@ -122,7 +122,7 @@ export default function Extensions({ onNavigate }: { onNavigate?: (v: "guide") =
           <span className="text-fg-strong"> {volatile.map((k) => k.label || k.name).join("、")}</span>
           <br />
           <span className="text-muted">
-            拡張機能の「Supabase」で保存先をつなぐと、更新しても残るようになります。
+            「連携」の Supabase で保存先をつなぐと、更新しても残るようになります。
           </span>
         </div>
       )}

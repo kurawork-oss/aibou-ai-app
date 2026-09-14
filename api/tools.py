@@ -953,7 +953,7 @@ def _do_notion_add(params: dict) -> str:
     token = (token or keychain.get_key("NOTION_TOKEN") or "").strip()
     parent = (params.get("parent") or keychain.get_key("NOTION_PARENT_ID") or "").strip()
     if not token:
-        return ("Notion未設定です。拡張機能から「Notionと連携する」を押すと繋がります"
+        return ("Notion未設定です。「連携」から「Notionと連携する」を押すと繋がります"
                 "（手で入れる場合は NOTION_TOKEN に保存）。")
     if not parent:
         return "NOTION_PARENT_ID（追記先のページ or データベースID）が未設定です。KEYCHAIN で設定してください。"
@@ -1100,7 +1100,7 @@ _TOOLS_THAT_PERSIST = {
 
 _NO_STORAGE_MSG = (
     "保存先がつながっていないため、保存できませんでした。"
-    "拡張機能（EXTEND）→ Supabase から自分のデータベースを接続してください。"
+    "管理 → もっと →「連携」→ Supabase から自分のデータベースを接続してください。"
     "接続するまで、作ったものは残りません。"
 )
 

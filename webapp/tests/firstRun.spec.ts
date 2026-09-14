@@ -70,8 +70,9 @@ test("案内文に、押す場所が書いてある", () => {
     expect(s.title).not.toMatch(/[A-Za-z]{4,}/);   // 見出しは日本語だけ
   }
   const key = firstRunSteps(NOTHING).find((s) => s.key === "ai-key")!;
-  // 連携は拡張機能に一本化したので、案内もそこを指す
-  expect(key.hint).toContain("拡張機能");
+  // 連携は1画面に寄せたので、案内もそこを指す。
+  // 呼び名はナビに出ている言葉（「連携」）と揃える。
+  expect(key.hint).toContain("連携");
   const db = firstRunSteps(NOTHING).find((s) => s.key === "db")!;
   // 放置したときに何が起きるかを言う。以前は「消えます」だったが、
   // 黙って消すのをやめて、その場で断るようにしたので文言も変えた

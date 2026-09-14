@@ -200,7 +200,7 @@ export default function WatchPanel({ offline }: { offline: boolean }) {
           <p className="text-[10px] text-muted label-mono">LINEから受け取るには</p>
           <p className="mt-1 text-[11px] leading-relaxed text-fg">
             LINE Developers の Webhook URL にこれを貼り、チャネルシークレットを
-            拡張機能の <span className="label-mono">LINE_CHANNEL_SECRET</span> に入れてください。
+            「連携」の <span className="label-mono">LINE_CHANNEL_SECRET</span> に入れてください。
           </p>
           <code className="mt-1 block break-all rounded border border-panel p-1.5 text-[10px] text-muted">
             {API_URL}{hook.path}

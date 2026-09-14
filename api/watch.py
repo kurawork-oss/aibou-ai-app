@@ -237,7 +237,7 @@ def _src_mail() -> dict:
         if not email_svc.configured():
             return {"ok": False, "skipped": True,
                     "error": "メールが未設定です",
-                    "hint": "拡張機能で EMAIL_ADDRESS と EMAIL_PASSWORD"
+                    "hint": "「連携」で EMAIL_ADDRESS と EMAIL_PASSWORD"
                             "（Gmailはアプリパスワード）を入れてください"}
         res = email_svc.inbox(limit=10)
     except Exception as e:

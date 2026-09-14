@@ -260,7 +260,7 @@ def _explain_write(msg: str) -> str:
     """書き込みが断られた理由を、次の一手が分かる日本語にする。"""
     if "does not exist" in msg or "PGRST205" in msg or "42P01" in msg:
         return ("保存先のデータベースに api_keys の表がありません。"
-                "拡張機能（EXTEND）→ Supabase で表を作ってください。")
+                "管理 → もっと →「連携」→ Supabase で表を作ってください。")
     if "Invalid API key" in msg or "JWT" in msg or "401" in msg:
         return ("保存先の鍵が受け付けられませんでした。"
                 "service_role キーで繋いでいるか確認してください。")
@@ -316,7 +316,7 @@ def set_key(name: str, value: str) -> dict:
         # ここでプロセスへ書くと、その鍵がサーバー全体の既定になり、
         # 保存先を持たない他の利用者のリクエストでも使われてしまう。
         return {"error": "保存先がつながっていないため、鍵を保存できませんでした。"
-                         "拡張機能（EXTEND）→ Supabase から自分のデータベースを"
+                         "管理 → もっと →「連携」→ Supabase から自分のデータベースを"
                          "接続してから、もう一度入れてください。",
                 "needs_storage": True}
 

@@ -107,7 +107,7 @@ def _gmail_inbox(limit: int) -> dict:
         msg = (d["error"] or {}).get("message", "")
         if "insufficient" in msg.lower() or "scope" in msg.lower():
             return {"ok": False, "error": "メールを読む権限がありません。"
-                                          "拡張機能からGoogleを繋ぎ直してください"}
+                                          "「連携」からGoogleを繋ぎ直してください"}
         return {"ok": False, "error": f"Gmailが受け付けませんでした（{msg[:120]}）"}
 
     items = []
@@ -187,7 +187,7 @@ def inbox(limit: int = 5) -> dict:
         return _gmail_inbox(limit)
     if not (_addr() and _password()):
         return {"ok": False,
-                "error": "メールが未設定です。拡張機能からGoogleを繋ぐと、"
+                "error": "メールが未設定です。「連携」からGoogleを繋ぐと、"
                          "パスワードを入れずに読めるようになります"
                          "（Google以外のメールは EMAIL_ADDRESS と EMAIL_PASSWORD を設定）"}
     try:

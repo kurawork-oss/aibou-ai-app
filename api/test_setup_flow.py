@@ -70,9 +70,9 @@ def notion_missing(monkeypatch):
 
 # ── 1. 未接続を見分ける ──────────────────────────────────────────────
 @pytest.mark.parametrize("text,want", [
-    ("Notion未設定です。拡張機能から…", "notion"),
-    ("GitHub未設定です。拡張機能から…", "github"),
-    ("Google未接続です。拡張機能から…", "google"),
+    ("Notion未設定です。「連携」から…", "notion"),
+    ("GitHub未設定です。「連携」から…", "github"),
+    ("Google未接続です。「連携」から…", "google"),
     ("Slackのトークン（SLACK_BOT_TOKEN）が未設定です", "slack"),
     ("タスクを追加しました：牛乳", ""),
     ("ツール実行エラー（add_task）：想定外", ""),
