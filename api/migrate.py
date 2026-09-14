@@ -160,10 +160,23 @@ def table_status() -> dict:
             with conn.cursor() as cur:
                 cur.execute("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
                 have = {r[0] for r in cur.fetchall()}
+                # 守りが入っているか（仕様§14）。
+                #
+                # 表が揃っていても、RLSが入っていなければ anon キー
+                # ——ブラウザに配られる鍵——で誰でも読める。
+                # 「テーブルは揃っています」とだけ出すと、守られている
+                # ように読めてしまうので、別に数える。
+                cur.execute("SELECT relname FROM pg_class c "
+                            "JOIN pg_namespace n ON n.oid = c.relnamespace "
+                            "WHERE n.nspname='public' AND c.relkind='r' "
+                            "AND c.relrowsecurity")
+                guarded = {r[0] for r in cur.fetchall()}
             conn.close()
             present = [t for t in EXPECTED_TABLES if t in have]
             missing = [t for t in EXPECTED_TABLES if t not in have]
-            return {"connected": True, "db_url_set": True, "present": present, "missing": missing}
+            return {"connected": True, "db_url_set": True, "present": present,
+                    "missing": missing,
+                    "unguarded": [t for t in present if t not in guarded]}
         except Exception as e:
             return {"connected": False, "db_url_set": True, "error": str(e)[:200],
                     "present": [], "missing": list(EXPECTED_TABLES)}

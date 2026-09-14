@@ -352,7 +352,7 @@ function DbPanel() {
     setNote(null);
     try {
       const res = await dbMigrate();
-      if (res.ok) setNote("✓ テーブルを作成しました（永続化が有効になりました）");
+      if (res.ok) setNote("✓ 流しました（足りない表と、守りの設定が入りました）");
       else setNote(`⚠ ${res.reason || res.error || "作成できませんでした"}`);
       await load();
     } catch {
@@ -364,6 +364,9 @@ function DbPanel() {
 
   const total = st ? st.present.length + st.missing.length : 0;
   const allPresent = st ? st.missing.length === 0 && st.present.length > 0 : false;
+  /* 守りの入っていない表の数。接続文字列が無いと数えられないので、
+     そのときは 0（分からないことを「危ない」とも「安全」とも言わない）。 */
+  const unguarded = st?.unguarded?.length ?? 0;
 
   return (
     <div className="mb-4 rounded-forge border border-panel p-3">
@@ -379,9 +382,26 @@ function DbPanel() {
       {!st ? (
         <p className="text-[10px] text-muted">状態を取得できませんでした。</p>
       ) : allPresent ? (
-        <p className="text-[11px] leading-relaxed text-fg">
-          必要なテーブルが揃っています。タスク・予定・生成物などが Supabase に保存されます。
-        </p>
+        <>
+          <p className="text-[11px] leading-relaxed text-fg">
+            必要なテーブルが揃っています。タスク・予定・生成物などが Supabase に保存されます。
+          </p>
+          {unguarded > 0 && (
+            <p className="mt-2 rounded-forge border p-2 text-[11px] leading-relaxed"
+               style={{ borderColor: "#ffd06055", color: "#ffd060" }}>
+              ただし <b>{unguarded}件</b>の表に、<b>守り（RLS）が入っていません</b>。
+              ログイン用の鍵はブラウザに配られるので、このままだとURLを知っている人が
+              中身を直接読めます。下の「もう一度流す」で入ります。
+            </p>
+          )}
+          {/* 揃ったあとも、必ず流し直せるようにしておく。
+              ここを隠していたせいで、**あとから足した安全設定が、
+              先に設定を済ませた人には一生届かない**状態だった。 */}
+          <button type="button" onClick={() => void migrate()} disabled={busy || !st.db_url_set}
+            className="mt-2 w-full rounded-forge border border-panel py-2 text-[11px] tracking-[0.16em] text-muted transition hover:text-fg-strong disabled:opacity-40 label-mono">
+            {busy ? "実行中…" : "もう一度流す（あとから足した分を入れる）"}
+          </button>
+        </>
       ) : st.db_url_set ? (
         <>
           <p className="mb-2 text-[10px] leading-relaxed text-muted">

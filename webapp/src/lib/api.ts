@@ -1041,6 +1041,15 @@ export interface DbStatus {
   db_url_set: boolean;
   present: string[];
   missing: string[];
+  /**
+   * 守り（RLS）が入っていない表（仕様§14）。
+   *
+   * 表が揃っていても、ここが空でなければ **anon キーで誰でも読める**。
+   * anon キーはブラウザに配られる鍵なので、URLを知っていれば誰でも。
+   * 「テーブルは揃っています」とだけ出すと守られているように読めるので、
+   * 別に持つ。接続文字列が無いと数えられないので、そのときは空。
+   */
+  unguarded?: string[];
   error?: string;
 }
 
@@ -1055,6 +1064,7 @@ export async function dbStatus(): Promise<DbStatus> {
     db_url_set: Boolean(d.db_url_set),
     present: Array.isArray(d.present) ? d.present : [],
     missing: Array.isArray(d.missing) ? d.missing : [],
+    unguarded: Array.isArray(d.unguarded) ? d.unguarded : undefined,
     error: d.error,
   };
 }
