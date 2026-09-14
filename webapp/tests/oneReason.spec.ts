@@ -86,3 +86,51 @@ test("断り書きを1つに畳んでも、行き先は消えていない", asyn
     .toBe(1);
   expect(found[0]).toMatch(/DIAGNOSTICS/);
 });
+
+/* ── 画面のほうも見る ───────────────────────────────────────────────
+ *
+ * 設定だけでなく、ふだんの画面にも同じ断り書きが出る。ただし
+ * **数だけを見てはいけない**。HOMEには
+ *
+ *     見張りはバックエンド接続後に表示されます。
+ *     生成物はバックエンド接続後に表示されます。
+ *
+ * の2つが出るが、これは別々のウィジェットが自分のことを言っている。
+ * 1つにまとめると、どちらが空なのか分からなくなる——直すと悪くなる。
+ *
+ * 本当の不具合は「**同じ文が2回出る**」ほう。理由は1つなのに何度も
+ * 言われると、別の問題がいくつもあるように読める。そこを見る。 */
+const MODES = ["HOME", "CHAT", "ME", "CODE", "STUDIO", "SNS", "CAPTURE",
+  "VAULT", "TASKS", "AUTO", "BOARD", "ARCHIVE", "EXTEND"] as const;
+
+test("どの画面でも、同じ断り書きが2回は出ない", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await page.waitForSelector("text=ENTER", { timeout: 10_000 });
+  await page.click("text=ENTER");
+  const offlineBtn = page.getByText("ENTER OFFLINE");
+  const hud = page.getByText("THE FORGE OS").first();
+  await Promise.race([
+    offlineBtn.waitFor({ timeout: 8_000 }).then(() => offlineBtn.click()).catch(() => {}),
+    hud.waitFor({ timeout: 10_000 }).catch(() => {}),
+  ]);
+  await page.getByLabel("Modes", { exact: true }).waitFor({ timeout: 10_000 });
+
+  const bad: string[] = [];
+  for (const mode of MODES) {
+    await page.getByLabel("Modes", { exact: true }).click();
+    await page.locator("nav").filter({ hasText: "MODES" })
+      .getByText(mode, { exact: true }).click();
+    await page.locator("nav").filter({ hasText: "MODES" })
+      .waitFor({ state: "detached", timeout: 5_000 }).catch(() => {});
+    await page.waitForTimeout(350);
+
+    const found = await excuses(page);
+    const seen = new Map<string, number>();
+    for (const f of found) seen.set(f, (seen.get(f) ?? 0) + 1);
+    for (const [text, n] of seen) {
+      if (n > 1) bad.push(`${mode}: 「${text.slice(0, 40)}」が${n}回`);
+    }
+  }
+  expect(bad, `同じ文を何度も出している:\n${bad.join("\n")}`).toEqual([]);
+});
