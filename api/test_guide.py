@@ -57,19 +57,38 @@ def test_guide_tells_people_to_connect_their_own_database_first():
     assert "設定" in joined and "KEYCHAIN" in joined
 
 
-def test_chat_prompt_carries_the_same_facts():
-    """画面のガイドとCHATの説明が食い違わないこと。"""
+def test_chat_prompt_says_do_not_make_things_up():
+    """でっち上げ禁止は、いつでも付いている。"""
     block = guide.prompt_block()
-    assert "ベータ" in block
-    assert "自分の Supabase" in block or "自分のデータベース" in block
-    assert "保存されない" in block          # 繋ぐまでは保存されない、を必ず言う
     assert "でっち上げ" in block or "あるかのように答えない" in block
+    # できることは静的な文章ではなく、調べてから答える
+    assert "self_check" in block
+
+
+def test_unsaved_users_are_warned(monkeypatch):
+    """繋ぐまでは保存されない、は**繋いでいない人にだけ**言う。
+
+    ここを全員に毎回送っていた。繋いでいる人にとっては毎回出てくる
+    間違った注意書きで、そのぶん毎メッセージ長くなる。
+    逆に繋いでいない人へ言わないのは危ない——残っていると思ったまま
+    使い続け、再読み込みで消えて初めて気づく。
+    """
+    monkeypatch.setattr(main.config, "storage_state", lambda: "memory")
+    p = main.build_system_prompt("AIbou", "", "")
+    assert "残らない" in p or "保存されない" in p
+    assert "つなぐ" in p or "繋ぐ" in p
+
+
+def test_connected_users_are_not_warned(monkeypatch):
+    monkeypatch.setattr(main.config, "storage_state", lambda: "personal")
+    p = main.build_system_prompt("AIbou", "", "")
+    assert "どこにも残らない" not in p
 
 
 def test_chat_system_prompt_includes_the_guide():
     p = main.build_system_prompt("AIbou", "", "")
-    assert "このアプリについて" in p
-    assert "ベータ" in p
+    assert "AIbouについて" in p
+    assert "self_check" in p
 
 
 def test_guide_endpoint():

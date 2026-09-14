@@ -45,6 +45,21 @@ _BELONGINGS = re.compile(
     r"今日|明日|今週|来週|今月|来月|何時|いつ)"
 )
 
+# 「何ができる？」「Notionは使える？」の類。
+#
+# ここを積まないと、モデルは self_check を呼べないまま**推測で**答える。
+# 「できます」と言われて押したらできない、が起きる。
+#
+# 毎回の指示から画面の一覧を外したぶん（guide.prompt_block 参照）、
+# ここは外せない——静的な説明を消して調べる道も渡さないと、
+# 前より悪くなる。
+_CAPABILITY = re.compile(
+    r"(何ができ|なにができ|使い方|つかいかた|できること|"
+    r"使える|つかえる|対応してる|対応している|"
+    r"繋がって|つながって|接続して|連携して|"
+    r"設定でき|機能ある|機能は)"
+)
+
 # 長い発言は、たいてい込み入った依頼。短い相づちと分ける。
 _LONG = 36
 
@@ -59,6 +74,8 @@ def needs_tools(message: str) -> Tuple[bool, str]:
     if not text:
         return (False, "空")
 
+    if _CAPABILITY.search(text):
+        return (True, "できることを聞かれた（self_check で調べる）")
     if _IMPERATIVE.search(text):
         return (True, "やってほしい形")
     if _BELONGINGS.search(text):

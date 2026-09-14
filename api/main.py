@@ -898,6 +898,25 @@ def build_system_prompt(name: Optional[str], persona: Optional[str], memory_bloc
     # アプリ自身の説明は guide.py が唯一の出どころ。ここに直接書くと、
     # 画面のガイドと食い違って古くなる。
     parts.append(f"\n{guide_mod.prompt_block()}")
+
+    # 保存先が無い人にだけ、そのことを言う。
+    #
+    # 以前はこれを**全員に毎回**送っていた（「繋ぐまでどこにも保存されない」）。
+    # 繋いでいる人にとっては毎回出てくる嘘に近い注意書きで、しかも
+    # そのぶん毎メッセージ長くなる。
+    #
+    # 逆に、繋いでいない人にこれを言わないのは危ない。会話もタスクも
+    # 残っていると思ったまま使い続け、再読み込みで消えて初めて気づく。
+    # **言う相手を選ぶ**のが正しい形。
+    try:
+        if config.storage_state() == "memory":
+            parts.append(
+                "\n【いまの保存先】この人はまだ保存先を繋いでいないので、"
+                "作った物も会話も**どこにも残らない**（再読み込みで消える）。"
+                "何かを作る・覚える話になったら、先に「設定 → つなぐ」で"
+                "自分のデータベース（Supabase）を繋ぐよう案内すること。")
+    except Exception:
+        pass
     if memory_block:
         parts.append(f"\n{memory_block}")
     return "\n".join(parts)

@@ -26,6 +26,14 @@ export interface Backend {
   duplicates(): string[];
   /** 1往復あたりの遅さ（ミリ秒）。0 なら即返す。 */
   latency: number;
+  /**
+   * その道の**最初の1回だけ**を遅らせる。
+   *
+   * 「画面を開いたときの読み込みが遅く、そのあとの読み込みが速い」順番を
+   * 毎回作るために要る。全体を遅くすると両方とも遅くなって、追い越しが
+   * 起きない。
+   */
+  slowFirst(path: string, ms: number): void;
   /** 特定のパスの応答を差し替える。 */
   set(path: string, reply: Reply): void;
   /** いま覚えている中身（テストから書き換えてよい）。 */
@@ -128,9 +136,11 @@ export async function mockBackend(page: Page, over: Record<string, Reply> = {}):
     pending: { waiting: false },
   };
   const table: Record<string, Reply> = { ...defaults(state), ...over };
+  const firstDelay = new Map<string, number>();
   const be: Backend = {
     calls: [],
     latency: 0,
+    slowFirst(p, ms) { firstDelay.set(p, ms); },
     state,
     reset() { be.calls = []; },
     count: (p) => be.calls.filter((c) => c.path === p).length,
@@ -149,6 +159,8 @@ export async function mockBackend(page: Page, over: Record<string, Reply> = {}):
     be.calls.push(call);
 
     if (be.latency) await new Promise((r) => setTimeout(r, be.latency));
+    const once = firstDelay.get(path);
+    if (once) { firstDelay.delete(path); await new Promise((r) => setTimeout(r, once)); }
 
     const hit = table[path];
     const out = typeof hit === "function" ? hit(call) : hit;
