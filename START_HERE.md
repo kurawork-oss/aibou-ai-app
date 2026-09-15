@@ -48,7 +48,7 @@ Supabase保存や本格運用は後回しでOKです。
 ### ④ アプリで確認
 1. 強制リロード（PCは `Ctrl/Cmd + Shift + R`）
 2. 画面上部が **● LINK ACTIVE**（緑）になる
-3. Settings(⚙) → **KEYCHAIN** で Geminiキーを貼り付けて **SAVE**
+3. Settings(⚙) → **つなぐ** で Geminiキーを貼り付けて **SAVE**
 4. チャットで話しかけて返事が来たら **完成 🎉**
 
 **✅ 完了の合図:** チャットがAIの返事を返す／上部が LINK ACTIVE。
@@ -58,7 +58,7 @@ Supabase保存や本格運用は後回しでOKです。
 ## Phase 2 ── Supabaseに暗号化して保存（推奨）
 
 キーやデータを **Supabaseに暗号化保存**し、再起動しても消えないようにします。
-（KEYCHAINの見出しが「🔐 SUPABASE VAULT」に変わります）
+（鍵の見出しが「🔐 SUPABASE VAULT」に変わります）
 
 ### ① 自分のSupabaseプロジェクトを使う
 新規に作ったプロジェクトでOKです。**プロジェクトURL**（Settings → API の Project URL）を控えて、
@@ -80,7 +80,7 @@ Render → 該当サービス → **Environment** に:
 
 保存すると自動で再デプロイされます。
 
-**✅ 完了の合図:** KEYCHAINが「🔐 SUPABASE VAULT」になり、DIAGNOSTICS の Supabase / DATABASE が緑。
+**✅ 完了の合図:** 鍵の見出しが「🔐 SUPABASE VAULT」になり、「しらべる」の Supabase / DATABASE が緑。
 
 ---
 
@@ -106,7 +106,7 @@ Render → 該当サービス → **Environment** に:
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Vercel（画面） | 任意（ログイン用） |
 | `SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_URL` | 既定 `hwjmojipsablfevtjzln`（変える時だけ） | 任意 |
 
-アプリの **Settings → DIAGNOSTICS → CONNECTIONS** で、GitHub / Vercel / Supabase / Backend の接続状況を確認できます（緑=接続）。
+アプリの **Settings →「しらべる」→ CONNECTIONS** で、GitHub / Vercel / Supabase / Backend の接続状況を確認できます（緑=接続）。
 
 ---
 
@@ -116,6 +116,6 @@ Render → 該当サービス → **Environment** に:
 - **Renderが遅い** … 無料はスリープあり。初回だけ数十秒待てば復帰。
 - **401 Unauthorized** … `APP_TOKEN` と `NEXT_PUBLIC_API_TOKEN` を同じ値にして Redeploy。
 - **Supabaseが開けない** … 別アカウント所有かも。新規プロジェクトを作って使う（Phase 2 ①）。
-- **最新か確認** … DIAGNOSTICS の `BUILD` が最新（例 `2026.06.27 · ui-r10`）ならOK。
+- **最新か確認** … 「しらべる」の `BUILD` が最新（例 `2026.06.27 · ui-r10`）ならOK。
 
 詳細版: `BACKEND_CONNECT.md` / `SETUP.md`
