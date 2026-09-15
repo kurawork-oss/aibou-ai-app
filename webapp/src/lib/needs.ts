@@ -91,13 +91,13 @@ export function explain(err: unknown, what = "この操作"): string {
       + "接続するまで、作ったものは残りません。";
   }
   if (/\(404\)/.test(msg)) {
-    return `${what}の宛先が見つかりませんでした。設定 → DIAGNOSTICS で接続先を確認してください。`;
+    return `${what}の宛先が見つかりませんでした。設定 →「しらべる」 で接続先を確認してください。`;
   }
   if (/\(429\)/.test(msg)) {
     return "短い時間に使いすぎました。少し待ってからもう一度お試しください。";
   }
   if (/\(50\d\)|\(503\)/.test(msg)) {
-    return "サーバー側で用意ができていません。設定 → KEYCHAIN に必要な鍵が入っているか確認してください。";
+    return "サーバー側で用意ができていません。設定 →「つなぐ」 に必要な鍵が入っているか確認してください。";
   }
   if (/Failed to fetch|NetworkError|Load failed|ネットワーク/i.test(msg)) {
     return "サーバーに繋がりませんでした。通信状況を確認して、もう一度お試しください。";
@@ -112,6 +112,6 @@ export function explain(err: unknown, what = "この操作"): string {
 /** 足りない鍵の案内文。 */
 export function needMessage(need: Need): string {
   const base = `この画面を使うには「${need.label}」が必要です。`
-    + "設定（右上の歯車）→ KEYCHAIN から入れてください。";
+    + "設定（右上の歯車）→「つなぐ」から入れてください。";
   return need.where ? `${base}（${need.where}）` : base;
 }

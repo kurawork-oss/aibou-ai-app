@@ -121,6 +121,6 @@ test("使えるAIが1つも無ければ、何をすればいいか言う", async
   } }));
   await enterApp(page);
   await openBasic(page);
-  await expect(page.getByText(/KEYCHAIN に鍵を入れて/)).toBeVisible();
+  await expect(page.getByText(/「つなぐ」 に鍵を入れて/)).toBeVisible();
   await expect(page.getByText(/無料枠があります/)).toBeVisible();
 });

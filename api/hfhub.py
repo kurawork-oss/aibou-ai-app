@@ -228,7 +228,7 @@ def _call_pipeline(model: str, *, json_body=None, data=None,
     次を試し、権限や上限の失敗はそこで確定させる（無駄打ちしない）。
     """
     if not token():
-        return None, {"error": "HuggingFaceのトークンが未設定です（設定 → KEYCHAIN の HUGGINGFACE_TOKEN）"}, ""
+        return None, {"error": "HuggingFaceのトークンが未設定です（設定 →「つなぐ」 の HUGGINGFACE_TOKEN）"}, ""
     last: Optional[dict] = None
     for base in (ROUTER_BASE, LEGACY_BASE):
         url = f"{base}/models/{model}"
@@ -469,7 +469,7 @@ def test_model(model: str, task: str) -> dict:
     if task not in TASKS:
         return {"error": f"未知のタスクです: {task}"}
     if not token():
-        return {"error": "HuggingFaceのトークンが未設定です（設定 → KEYCHAIN の HUGGINGFACE_TOKEN）"}
+        return {"error": "HuggingFaceのトークンが未設定です（設定 →「つなぐ」 の HUGGINGFACE_TOKEN）"}
 
     if task == "asr":
         audio = _probe_audio()

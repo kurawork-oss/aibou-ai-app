@@ -101,7 +101,7 @@ test("保存先はこの画面の中で設定できる（別の画面に送ら�
   // 拡張機能として置いている意味がない
   const supabase = EXTENSIONS.find((e) => e.id === "supabase")!;
   expect(supabase.kind).toBe("database");
-  expect(supabase.howto.join("")).not.toContain("KEYCHAIN");
+  expect(supabase.howto.join("")).not.toContain("つなぐ");
 });
 
 test("LINE は終了した方式を案内していない", () => {

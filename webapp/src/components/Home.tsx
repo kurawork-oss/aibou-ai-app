@@ -645,7 +645,7 @@ function AgentConsole({
         </div>
         {offline && (
           <button type="button" onClick={() => onNavigate("chat")} className="mt-1 self-start text-[10px] text-[var(--accent)] hover:underline label-mono">
-            → 接続方法（DIAGNOSTICS）
+            → 接続方法（設定 →「しらべる」）
           </button>
         )}
       </div>
@@ -970,7 +970,7 @@ function ConnectCard({ onNavigate }: { onNavigate: (v: View) => void }) {
         onClick={() => onNavigate("chat")}
         className="mt-2 text-[10px] tracking-[0.14em] text-[var(--accent)] hover:underline label-mono"
       >
-        → Settings → KEYCHAIN でキーを設定
+        → 設定 →「つなぐ」 でキーを設定
       </button>
     </div>
   );

@@ -37,8 +37,19 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      testIgnore: "**/linked/**",
+      testIgnore: ["**/linked/**", "**/audit/**"],
       use: { ...CHROME, baseURL: "http://localhost:3000" },
+    },
+    {
+      /* 俯瞰の調査。合格・不合格を決めず、**数えて書き出すだけ**。
+         ふだんの実行には入れない（走らせたい時だけ --project=audit）。
+
+         接続先ありのビルド（3100）を見る。オフラインのビルドでは、
+         設定の中身の多くが「繋いでから使えます」の1行に畳まれてしまい、
+         **誰も使っていない姿**を測ることになる。 */
+      name: "audit",
+      testMatch: "**/audit/**/*.spec.ts",
+      use: { ...CHROME, baseURL: "http://localhost:3100" },
     },
     {
       name: "chromium-linked",

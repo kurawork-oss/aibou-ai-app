@@ -242,7 +242,7 @@ function OfflineVault() {
         <span className="text-[10px] tracking-[0.16em] text-muted label-mono">BACKEND: ○ OFFLINE</span>
         <p className="mt-1 text-[10px] leading-relaxed text-muted">
           いまはバックエンド未接続のため、ここで入れたキーは<b className="text-fg">この端末に暗号化して下書き保存</b>されます。
-          バックエンドを接続（DIAGNOSTICS参照）すると、KEYCHAINは<b className="text-fg">Supabaseに暗号化保存</b>する画面に切り替わり、
+          バックエンドを接続（設定 →「しらべる」）すると、KEYCHAINは<b className="text-fg">Supabaseに暗号化保存</b>する画面に切り替わり、
           下書きの取り込みができます。
         </p>
         {note && <p className="mt-1 text-[10px] text-[#60d394]">{note}</p>}
@@ -272,7 +272,7 @@ function OfflineVault() {
                   onChange={(e) => setEdits((p) => ({ ...p, [k.name]: e.target.value }))}
                   onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && void saveKey(k.name, edits[k.name] ?? "")}
                   placeholder={set ? "新しい値で上書き…" : "キーを貼り付け…"}
-                  className="min-w-0 flex-1 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-1.5 text-sm text-fg-strong focus:border-[var(--line)] focus:outline-none"
+                  className="min-w-0 flex-1 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2.5 text-sm text-fg-strong focus:border-[var(--line)] focus:outline-none"
                 />
                 <button type="button" onClick={() => void saveKey(k.name, edits[k.name] ?? "")}
                   disabled={!(edits[k.name] ?? "").trim()}
@@ -301,10 +301,10 @@ function OfflineVault() {
         <div className="flex flex-col gap-2 sm:flex-row">
           <input value={customName} onChange={(e) => setCustomName(e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, "_"))}
             placeholder="キー名（例：STRIPE_API_KEY）"
-            className="min-w-0 flex-1 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-1.5 text-sm text-fg-strong focus:border-[var(--line)] focus:outline-none label-mono" />
+            className="min-w-0 flex-1 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2.5 text-sm text-fg-strong focus:border-[var(--line)] focus:outline-none label-mono" />
           <input type="password" value={customValue} onChange={(e) => setCustomValue(e.target.value)}
             placeholder="値"
-            className="min-w-0 flex-1 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-1.5 text-sm text-fg-strong focus:border-[var(--line)] focus:outline-none" />
+            className="min-w-0 flex-1 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2.5 text-sm text-fg-strong focus:border-[var(--line)] focus:outline-none" />
           <button type="button"
             onClick={() => { if (customName && customValue.trim()) { void saveKey(customName, customValue); setCustomName(""); setCustomValue(""); } }}
             disabled={!customName || !customValue.trim()}
@@ -443,7 +443,7 @@ function SupabaseVault() {
                   onChange={(e) => setEdits((p) => ({ ...p, [k.name]: e.target.value }))}
                   onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && void save(k.name, edits[k.name] ?? "")}
                   placeholder={k.set ? "新しい値で上書き…" : "キーを貼り付け…"}
-                  className="min-w-0 flex-1 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-1.5 text-sm text-fg-strong focus:border-[var(--line)] focus:outline-none"
+                  className="min-w-0 flex-1 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2.5 text-sm text-fg-strong focus:border-[var(--line)] focus:outline-none"
                 />
                 <button type="button" onClick={() => void save(k.name, edits[k.name] ?? "")}
                   disabled={saving === k.name || !(edits[k.name] ?? "").trim()}
@@ -467,10 +467,10 @@ function SupabaseVault() {
         <div className="flex flex-col gap-2 sm:flex-row">
           <input value={customName} onChange={(e) => setCustomName(e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, "_"))}
             placeholder="キー名（例：STRIPE_API_KEY）"
-            className="min-w-0 flex-1 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-1.5 text-sm text-fg-strong focus:border-[var(--line)] focus:outline-none label-mono" />
+            className="min-w-0 flex-1 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2.5 text-sm text-fg-strong focus:border-[var(--line)] focus:outline-none label-mono" />
           <input type="password" value={customValue} onChange={(e) => setCustomValue(e.target.value)}
             placeholder="値"
-            className="min-w-0 flex-1 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-1.5 text-sm text-fg-strong focus:border-[var(--line)] focus:outline-none" />
+            className="min-w-0 flex-1 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2.5 text-sm text-fg-strong focus:border-[var(--line)] focus:outline-none" />
           <button type="button"
             onClick={() => { if (customName && customValue.trim()) { void save(customName, customValue); setCustomName(""); setCustomValue(""); } }}
             disabled={!customName || !customValue.trim()}

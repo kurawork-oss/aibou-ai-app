@@ -186,7 +186,7 @@ def transcribe(data: bytes, name: str = "rec.webm", mime: str = "",
         order = [e for e in order if (e == "hf" and hf_model) or (e == "gemini" and gem)]
     if not order:
         return {"error": "文字起こしには Gemini のキー、または HuggingFace の"
-                         "文字起こしモデルの割り当てが必要です（設定 → KEYCHAIN / HF MODELS）"}
+                         "文字起こしモデルの割り当てが必要です（設定 →「つなぐ」）"}
 
     audio, total, truncated, err = extract_audio(data, name)
     if err:

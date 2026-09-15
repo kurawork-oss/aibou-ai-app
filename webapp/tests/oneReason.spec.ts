@@ -57,7 +57,7 @@ async function openSettings(page: Page) {
   await page.getByText("CORE SETTINGS").waitFor({ timeout: 10_000 });
 }
 
-const TABS = ["基本", "声", "記憶", "見た目", "つなぐ", "KEYCHAIN", "DIAGNOSTICS"];
+const TABS = ["基本", "見た目と声", "記憶", "つなぐ", "しらべる"];
 
 test("設定のどのタブでも、同じ断り書きは1つまで", async ({ page }) => {
   await openSettings(page);
@@ -84,7 +84,7 @@ test("断り書きを1つに畳んでも、行き先は消えていない", asyn
   const found = await excuses(page);
   expect(found.length, "つなぐタブに断り書きが出ていない（この確認が空振りしている）")
     .toBe(1);
-  expect(found[0]).toMatch(/DIAGNOSTICS/);
+  expect(found[0]).toMatch(/しらべる/);
 });
 
 /* ── 画面のほうも見る ───────────────────────────────────────────────
@@ -184,7 +184,7 @@ test("使っていない呼び名で、案内していない", async ({ page }) 
   }
 
   await page.getByLabel("Settings").click();
-  for (const tab of ["基本", "つなぐ", "KEYCHAIN"]) {
+  for (const tab of ["基本", "つなぐ", "しらべる"]) {
     await page.getByRole("button", { name: tab, exact: true }).click();
     await page.waitForTimeout(300);
     await look(`設定/${tab}`);
@@ -216,11 +216,11 @@ test("案内が名指しする設定タブは、実在する", async ({ page }) 
 
   // いま本当にあるタブ
   const tabs = await page.evaluate(() => {
-    const names = ["基本", "声", "記憶", "見た目", "つなぐ", "KEYCHAIN", "DIAGNOSTICS"];
+    const names = ["基本", "見た目と声", "記憶", "つなぐ", "しらべる"];
     return names.filter((n) => [...document.querySelectorAll("button")]
       .some((b) => (b.textContent || "").trim() === n));
   });
-  expect(tabs.length, "タブが読めていない（この確認が空振りしている）").toBe(7);
+  expect(tabs.length, "タブが読めていない（この確認が空振りしている）").toBe(5);
 
   /* 全タブを回って「設定 → ○○」を拾い、○○が実在するタブか見る。 */
   const bad: string[] = [];

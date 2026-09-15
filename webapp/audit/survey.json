@@ -1,0 +1,279 @@
+{
+  "at": "2026-09-15T14:40:29.245Z",
+  "viewport": "390×844",
+  "boot_ms": 869,
+  "round_trips": 49,
+  "duplicates": [
+    "/health×4",
+    "/account/profile×3",
+    "/capabilities×2",
+    "/keys×2",
+    "/conversations×2",
+    "/setup/pending×2",
+    "/admin/db/status×2",
+    "/artifacts×2",
+    "/memory/sync×2",
+    "/account/database×2",
+    "/google/status×2"
+  ],
+  "shots": [
+    {
+      "where": "設定/つなぐ",
+      "height": 1697,
+      "window": 696,
+      "tappable": 27,
+      "chars": 1262,
+      "tiny": 2,
+      "tinyList": [
+        "322×42 input \"キー名（例：STRIPE_API_KEY）\"",
+        "322×42 input \"値\""
+      ],
+      "empty": false,
+      "screens": 2.44,
+      "complaints": [],
+      "ms": 128
+    },
+    {
+      "where": "画面/GUIDE",
+      "height": 1664,
+      "window": 844,
+      "tappable": 32,
+      "chars": 983,
+      "tiny": 0,
+      "tinyList": [],
+      "empty": false,
+      "screens": 1.97,
+      "complaints": [],
+      "ms": 1381
+    },
+    {
+      "where": "設定/基本",
+      "height": 1152,
+      "window": 696,
+      "tappable": 13,
+      "chars": 544,
+      "tiny": 1,
+      "tinyList": [
+        "324×42 input \"JARVIS\""
+      ],
+      "empty": false,
+      "screens": 1.66,
+      "complaints": [],
+      "ms": 362
+    },
+    {
+      "where": "設定/しらべる",
+      "height": 1063,
+      "window": 696,
+      "tappable": 3,
+      "chars": 640,
+      "tiny": 0,
+      "tinyList": [],
+      "empty": false,
+      "screens": 1.53,
+      "complaints": [],
+      "ms": 64
+    },
+    {
+      "where": "設定/見た目と声",
+      "height": 742,
+      "window": 696,
+      "tappable": 11,
+      "chars": 220,
+      "tiny": 0,
+      "tinyList": [],
+      "empty": false,
+      "screens": 1.07,
+      "complaints": [],
+      "ms": 99
+    },
+    {
+      "where": "画面/HOME",
+      "height": 844,
+      "window": 844,
+      "tappable": 27,
+      "chars": 797,
+      "tiny": 0,
+      "tinyList": [],
+      "empty": false,
+      "screens": 1,
+      "complaints": [],
+      "ms": 2623
+    },
+    {
+      "where": "画面/CHAT",
+      "height": 844,
+      "window": 844,
+      "tappable": 15,
+      "chars": 186,
+      "tiny": 1,
+      "tinyList": [
+        "140×40 textarea \"AIbou にメッセージ…\""
+      ],
+      "empty": false,
+      "screens": 1,
+      "complaints": [],
+      "ms": 1383
+    },
+    {
+      "where": "画面/ME",
+      "height": 844,
+      "window": 844,
+      "tappable": 19,
+      "chars": 340,
+      "tiny": 1,
+      "tinyList": [
+        "290×40 textarea \"人生でも、お金でも、なんでも相談… (スクショはCtrl+V\""
+      ],
+      "empty": false,
+      "screens": 1,
+      "complaints": [],
+      "ms": 1334
+    },
+    {
+      "where": "画面/CODE",
+      "height": 844,
+      "window": 844,
+      "tappable": 16,
+      "chars": 570,
+      "tiny": 0,
+      "tinyList": [],
+      "empty": false,
+      "screens": 1,
+      "complaints": [],
+      "ms": 1329
+    },
+    {
+      "where": "画面/STUDIO",
+      "height": 844,
+      "window": 844,
+      "tappable": 31,
+      "chars": 400,
+      "tiny": 0,
+      "tinyList": [],
+      "empty": false,
+      "screens": 1,
+      "complaints": [],
+      "ms": 1332
+    },
+    {
+      "where": "画面/SNS",
+      "height": 844,
+      "window": 844,
+      "tappable": 24,
+      "chars": 286,
+      "tiny": 0,
+      "tinyList": [],
+      "empty": false,
+      "screens": 1,
+      "complaints": [],
+      "ms": 1340
+    },
+    {
+      "where": "画面/CAPTURE",
+      "height": 844,
+      "window": 844,
+      "tappable": 16,
+      "chars": 217,
+      "tiny": 0,
+      "tinyList": [],
+      "empty": false,
+      "screens": 1,
+      "complaints": [],
+      "ms": 1335
+    },
+    {
+      "where": "画面/VAULT",
+      "height": 844,
+      "window": 844,
+      "tappable": 14,
+      "chars": 397,
+      "tiny": 0,
+      "tinyList": [],
+      "empty": false,
+      "screens": 1,
+      "complaints": [],
+      "ms": 1326
+    },
+    {
+      "where": "画面/TASKS",
+      "height": 844,
+      "window": 844,
+      "tappable": 26,
+      "chars": 301,
+      "tiny": 1,
+      "tinyList": [
+        "332×38 input \"タスクのタイトル…\""
+      ],
+      "empty": false,
+      "screens": 1,
+      "complaints": [],
+      "ms": 1328
+    },
+    {
+      "where": "画面/AUTO",
+      "height": 844,
+      "window": 844,
+      "tappable": 15,
+      "chars": 487,
+      "tiny": 0,
+      "tinyList": [],
+      "empty": false,
+      "screens": 1,
+      "complaints": [],
+      "ms": 1335
+    },
+    {
+      "where": "画面/BOARD",
+      "height": 844,
+      "window": 844,
+      "tappable": 28,
+      "chars": 256,
+      "tiny": 0,
+      "tinyList": [],
+      "empty": false,
+      "screens": 1,
+      "complaints": [],
+      "ms": 1818
+    },
+    {
+      "where": "画面/ARCHIVE",
+      "height": 844,
+      "window": 844,
+      "tappable": 12,
+      "chars": 241,
+      "tiny": 0,
+      "tinyList": [],
+      "empty": false,
+      "screens": 1,
+      "complaints": [],
+      "ms": 1828
+    },
+    {
+      "where": "画面/EXTEND",
+      "height": 844,
+      "window": 844,
+      "tappable": 27,
+      "chars": 677,
+      "tiny": 0,
+      "tinyList": [],
+      "empty": false,
+      "screens": 1,
+      "complaints": [],
+      "ms": 1394
+    },
+    {
+      "where": "設定/記憶",
+      "height": 499,
+      "window": 499,
+      "tappable": 4,
+      "chars": 305,
+      "tiny": 0,
+      "tinyList": [],
+      "empty": false,
+      "screens": 1,
+      "complaints": [],
+      "ms": 104
+    }
+  ]
+}

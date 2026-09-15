@@ -1195,7 +1195,7 @@ async def chat(req: ChatRequest, _auth: None = Depends(require_auth)):
     # AIプロバイダ（Gemini か HuggingFace）が1つも無ければ crash させず案内。
     if llm.active_provider() == "none":
         async def err_stream():
-            yield _sse({"error": "AI未設定です。Settings → KEYCHAIN に GEMINI_API_KEY か HUGGINGFACE_TOKEN を保存してください。"})
+            yield _sse({"error": "AI未設定です。設定 →「つなぐ」 に GEMINI_API_KEY か HUGGINGFACE_TOKEN を保存してください。"})
             yield _sse({"done": True})
         return _sse_response(err_stream())
 
@@ -1355,7 +1355,7 @@ async def agent_act(req: AgentActRequest, _auth: None = Depends(require_auth)):
     繰り返し、進捗を data:{"phase":...} で実況、最後に final→done を送る。"""
     if llm.active_provider() == "none":
         async def err_stream():
-            yield _sse({"phase": "error", "detail": "AI未設定です。Settings → KEYCHAIN に GEMINI_API_KEY か HUGGINGFACE_TOKEN を保存してください。"})
+            yield _sse({"phase": "error", "detail": "AI未設定です。設定 →「つなぐ」 に GEMINI_API_KEY か HUGGINGFACE_TOKEN を保存してください。"})
             yield _sse({"phase": "done", "steps": 0})
         return _sse_response(err_stream())
 
@@ -2280,7 +2280,7 @@ async def life_chat(req: ChatRequest, _auth: None = Depends(require_auth)):
     通常 /chat と違いツール実行は無し — 純粋な相談相手として振る舞う。"""
     if llm.active_provider() == "none":
         async def err_stream():
-            yield _sse({"error": "AI未設定です。Settings → KEYCHAIN に GEMINI_API_KEY か HUGGINGFACE_TOKEN を保存してください。"})
+            yield _sse({"error": "AI未設定です。設定 →「つなぐ」 に GEMINI_API_KEY か HUGGINGFACE_TOKEN を保存してください。"})
             yield _sse({"done": True})
         return _sse_response(err_stream())
 

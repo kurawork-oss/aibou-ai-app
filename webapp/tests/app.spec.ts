@@ -39,11 +39,11 @@ async function goWorkshop(page: Page, tab: "素材" | "AI STUDIO") {
 }
 
 /* ── EntryGate ──────────────────────────────────────────────────── */
-/** 設定のKEYCHAINタブで、畳んである「上級者向け：キーを名前で直接編集する」を開く。
- *  ふだんの連携は拡張機能に移したので、生のキー一覧はここに畳まれている。 */
+/** 設定の「つなぐ」で、畳んである「上級者向け：キーを名前で直接編集する」を開く。
+ *  ふだんの連携は連携画面に移したので、生のキー一覧はここに畳まれている。 */
 async function openRawKeyEditor(page: Page) {
   await page.getByLabel("Settings").click();
-  await page.getByText("KEYCHAIN", { exact: true }).click();
+  await page.getByRole("button", { name: "つなぐ", exact: true }).click();
   await page.getByText("上級者向け：キーを名前で直接編集する").click();
 }
 
@@ -144,7 +144,7 @@ test("Settings 見た目 has the theme picker with every skin", async ({ page })
   await page.goto("/");
   await enterApp(page);
   await page.getByLabel("Settings").click();
-  await page.getByRole("button", { name: "見た目" }).click();
+  await page.getByRole("button", { name: "見た目と声" }).click();
   await openFold(page, "画面のテーマ");
   /* 畳んだ見出しにも「いま選んでいる物」の名前が出るので、同じ名前の
      押し物が2つになる（見出しと一覧）。一覧のほう＝後ろを見る。 */
@@ -171,7 +171,7 @@ test("テーマを切り替えると、地の色も文字色も変わる", async
   await page.goto("/");
   await enterApp(page);
   await page.getByLabel("Settings").click();
-  await page.getByRole("button", { name: "見た目" }).click();
+  await page.getByRole("button", { name: "見た目と声" }).click();
   await openFold(page, "画面のテーマ");
 
   const look = () => page.evaluate(() => {
@@ -204,7 +204,7 @@ test("暗い3つは、文字が白（頼まれた通り）", async ({ page }) =>
   await page.goto("/");
   await enterApp(page);
   await page.getByLabel("Settings").click();
-  await page.getByRole("button", { name: "見た目" }).click();
+  await page.getByRole("button", { name: "見た目と声" }).click();
   for (const name of [/CYBER（紺）/, /EMERALD（緑金）/]) {
     await page.getByRole("button", { name }).click();
     const fg = await page.evaluate(() =>
@@ -241,7 +241,7 @@ test("Settings CORE has the core-shape picker and it persists", async ({ page })
   await page.goto("/");
   await enterApp(page);
   await page.getByLabel("Settings").click();
-  await page.getByRole("button", { name: "見た目" }).click();
+  await page.getByRole("button", { name: "見た目と声" }).click();
   await openFold(page, "コアの形");
   // 見本は実物のコアを小さく描いている（静止画ではない）
   await expect(page.getByRole("button", { name: "ピラミッド" }).last()).toBeVisible();
@@ -251,7 +251,7 @@ test("Settings CORE has the core-shape picker and it persists", async ({ page })
   await page.reload({ waitUntil: "domcontentloaded" });
   await enterApp(page);
   await page.getByLabel("Settings").click();
-  await page.getByRole("button", { name: "見た目" }).click();
+  await page.getByRole("button", { name: "見た目と声" }).click();
   await openFold(page, "コアの形");
   await expect(page.getByRole("button", { name: "クリスタル" }).last())
     .toHaveAttribute("aria-pressed", "true");
@@ -263,7 +263,7 @@ test("A broken saved core shape falls back to the default", async ({ page }) => 
   await page.reload({ waitUntil: "domcontentloaded" });
   await enterApp(page);
   await page.getByLabel("Settings").click();
-  await page.getByRole("button", { name: "見た目" }).click();
+  await page.getByRole("button", { name: "見た目と声" }).click();
   await openFold(page, "コアの形");
   // 見出しにも「コア」と出るので、一覧のほう＝後ろを見る
   await expect(page.getByRole("button", { name: "コア", exact: true }).last())
@@ -307,7 +307,7 @@ test("GUIDE is reachable from the mode launcher and survives a reload", async ({
 });
 
 
-test("KEYCHAIN sends you to the one place where connections live", async ({ page }) => {
+test("鍵の直接編集から、連携の1か所へ送る", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
   await openRawKeyEditor(page);
@@ -336,7 +336,7 @@ test("設定は、用で分かれた7つのタブに畳んである", async ({ p
   await page.goto("/");
   await enterApp(page);
   await page.getByLabel("Settings").click();
-  for (const t of ["基本", "声", "記憶", "見た目", "つなぐ", "KEYCHAIN", "DIAGNOSTICS"]) {
+  for (const t of ["基本", "見た目と声", "記憶", "つなぐ", "しらべる"]) {
     await expect(page.getByRole("button", { name: t, exact: true }),
       `タブ「${t}」が無い`).toBeVisible();
   }
@@ -357,7 +357,7 @@ test("つなぐタブは、繋いでいない理由を1回だけ言う（オフ�
   await expect(note).toContainText("連携");
   await expect(note).toContainText("モデル");
   // どこへ行けばいいか
-  await expect(note).toContainText("DIAGNOSTICS");
+  await expect(note).toContainText("しらべる");
 });
 
 test("Settings tab bar does not overflow at phone width", async ({ page }) => {
@@ -374,7 +374,7 @@ test("Settings tab bar does not overflow at phone width", async ({ page }) => {
      右端のタブが枠の外に出ていて、しかも横スクロールもできなかった
      ——その画面へ行く道が無かった。いまは折り返している。 */
   const out = await page.evaluate(() => {
-    const names = ["基本", "声", "記憶", "見た目", "つなぐ", "KEYCHAIN", "DIAGNOSTICS"];
+    const names = ["基本", "見た目と声", "記憶", "つなぐ", "しらべる"];
     const tabs = [...document.querySelectorAll("button")]
       .filter((b) => names.includes((b.textContent || "").trim()));
     if (!tabs.length) return ["タブが見つからない"];
@@ -395,20 +395,20 @@ test("声のタブに、声と速さがそろっている", async ({ page }) => 
   await page.goto("/");
   await enterApp(page);
   await page.getByLabel("Settings").click();
-  await page.getByRole("button", { name: "声", exact: true }).click();
+  await page.getByRole("button", { name: "見た目と声", exact: true }).click();
   await expect(page.getByText("CORE VOICE")).toBeVisible();
   await expect(page.getByText("TALK SPEED")).toBeVisible();
   await expect(page.getByLabel("Talk speed")).toBeVisible();
 });
 
-test("Settings KEYCHAIN tab shows API key vault", async ({ page }) => {
+test("「つなぐ」に、鍵の金庫がある", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
   await openRawKeyEditor(page);
   await expect(page.getByText("ACCESS CODE")).toBeVisible({ timeout: 5_000 });
 });
 
-test("KEYCHAIN: encrypted vault stores a key offline (ciphertext at rest)", async ({ page }) => {
+test("鍵の金庫は、繋いでいなくても暗号文で預かる", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
   await openRawKeyEditor(page);
@@ -451,13 +451,13 @@ test("基本のタブに、性格のプリセットがある", async ({ page }) 
   await expect(page.getByText("TACTICAL")).toBeVisible();
 });
 
-test("Settings DIAGNOSTICS tab shows connection status", async ({ page }) => {
+test("Settings しらべる tab shows connection status", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
   await page.getByLabel("Settings").click();
-  // Scope to the tab button — the CORE tab's AI-provider note also mentions
-  // "DIAGNOSTICS", so a plain getByText would match two elements.
-  await page.getByRole("button", { name: "DIAGNOSTICS", exact: true }).click();
+  // Scope to the tab button — other tabs' notes also say 「しらべる」,
+  // so a plain getByText would match two elements.
+  await page.getByRole("button", { name: "しらべる", exact: true }).click();
   await expect(page.getByText("LINK STATUS")).toBeVisible();
   await expect(page.getByText("FRONTEND")).toBeVisible();
 });
@@ -1224,7 +1224,7 @@ test("つなぐタブは、繋げば何が使えるようになるかを示す�
   await expect(page.getByText(/外部サービスの連携/)).toBeVisible({ timeout: 5_000 });
 });
 
-test("KEYCHAIN includes a Google key with its issuance guide", async ({ page }) => {
+test("金庫のGoogleの鍵に、取り方が付いている", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
   await openRawKeyEditor(page);
@@ -1238,7 +1238,7 @@ test("KEYCHAIN includes a Google key with its issuance guide", async ({ page }) 
   await expect(page.getByRole("link", { name: /Google Cloud/ })).toBeVisible({ timeout: 5_000 });
 });
 
-test("KEYCHAIN includes an email key with its issuance guide", async ({ page }) => {
+test("金庫のメールの鍵に、取り方が付いている", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
   await openRawKeyEditor(page);
@@ -1317,7 +1317,7 @@ test("Fullscreen toggle hides the CORE header and restores it", async ({ page })
 });
 
 /* ── KEYCHAIN per-key issuance guide ── */
-test("KEYCHAIN: a key's ? button reveals its issuance guide", async ({ page }) => {
+test("鍵の「?」を押すと、取り方が出る", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
   await openRawKeyEditor(page);
@@ -1335,7 +1335,7 @@ test("KEYCHAIN: a key's ? button reveals its issuance guide", async ({ page }) =
 });
 
 /* ── Notion key + guide (ui-r23 agent tools) ── */
-test("KEYCHAIN includes a Notion key with its issuance guide", async ({ page }) => {
+test("金庫のNotionの鍵に、取り方が付いている", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
   await openRawKeyEditor(page);

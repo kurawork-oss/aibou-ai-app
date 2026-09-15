@@ -250,6 +250,6 @@ def generate_batch(axes: List[List[str]], template: str = "", limit: int = 5) ->
     if not created:
         reason = failed[0]["error"] if failed else "生成に失敗しました"
         if "provider" in reason.lower() or "api" in reason.lower() or "key" in reason.lower():
-            reason += "（Settings → KEYCHAIN に GEMINI_API_KEY か HUGGINGFACE_TOKEN を設定してください）"
+            reason += "（設定 →「つなぐ」 に GEMINI_API_KEY か HUGGINGFACE_TOKEN を設定してください）"
         return {"error": reason, "created": [], "failed": failed, "count": 0}
     return {"ok": True, "created": created, "failed": failed, "count": len(created)}

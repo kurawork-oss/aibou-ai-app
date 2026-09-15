@@ -90,7 +90,7 @@ export default function SnsMode() {
     return (
       <div className="mx-auto max-w-xl">
         <div className="panel p-3 text-[11px] leading-relaxed text-muted">
-          SNSサポートはバックエンド接続後に使えます（Settings → DIAGNOSTICS）。
+          SNSサポートはバックエンド接続後に使えます（設定 →「しらべる」）。
         </div>
       </div>
     );

@@ -125,7 +125,7 @@ export default function ImageStudio() {
   };
 
   if (!API_URL) {
-    return <div className="panel p-3 text-[11px] leading-relaxed text-muted">画像作成はバックエンド接続後に使えます（DIAGNOSTICS参照）。</div>;
+    return <div className="panel p-3 text-[11px] leading-relaxed text-muted">画像作成はバックエンド接続後に使えます（設定 →「しらべる」）。</div>;
   }
 
   return (

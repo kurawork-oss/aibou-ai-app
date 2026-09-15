@@ -67,7 +67,7 @@ export default function HfModels() {
   if (!API_URL) {
     return (
       <div className="rounded-forge border border-panel p-3 text-[11px] leading-relaxed text-muted">
-        HuggingFaceのモデル登録は、バックエンド接続後に使えます（DIAGNOSTICS参照）。
+        HuggingFaceのモデル登録は、バックエンド接続後に使えます（設定 →「しらべる」）。
       </div>
     );
   }

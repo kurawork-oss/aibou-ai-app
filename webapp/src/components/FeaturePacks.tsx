@@ -50,7 +50,7 @@ export default function FeaturePacks() {
   if (!API_URL) {
     return (
       <div className="mb-4 rounded-forge border border-panel p-3 text-[11px] leading-relaxed text-muted">
-        使う機能の切り替えは、バックエンド接続後に使えます（DIAGNOSTICS参照）。
+        使う機能の切り替えは、バックエンド接続後に使えます（設定 →「しらべる」）。
       </div>
     );
   }

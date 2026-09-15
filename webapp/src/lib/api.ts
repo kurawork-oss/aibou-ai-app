@@ -2400,8 +2400,29 @@ export interface OrphanKey {
 let keysInFlight: Promise<ApiKeyInfo[]> | null = null;
 let keysSeq = 0;
 
+/* ── 少しのあいだ覚えておく ──────────────────────────────────────
+ *
+ * 同時に飛んでいる物を束ねるだけでは足りなかった。全画面を1周した実測で
+ * `/keys` は **11回**飛んでいる（画面を移るたび、部品が自分のために聞く）。
+ * 寝ている無料バックエンドでは、その1往復がそのまま待ち時間になる。
+ *
+ * 鍵はめったに変わらないので、**数秒だけ**覚えておけば往復は1回に減る。
+ * 長くは持たない——長く持つと「入れたのに未設定に戻る」に逆戻りする。
+ * 入れ替えたとき（setKey / deleteKey / 救出）は、その場で捨てる。
+ */
+export const KEYS_TTL = 15_000;
+let keysCache: { at: number; items: ApiKeyInfo[] } | null = null;
+
+/** 覚えている鍵の一覧を捨てる（入れ替えたとき）。 */
+export function forgetKeys(): void {
+  keysCache = null;
+}
+
 /** GET /keys — masked list of known + stored API keys (full values never returned). */
 export function listKeys(): Promise<ApiKeyInfo[]> {
+  if (keysCache && Date.now() - keysCache.at < KEYS_TTL) {
+    return Promise.resolve(keysCache.items);
+  }
   if (keysInFlight) return keysInFlight;
   const mine = ++keysSeq;
   const run = (async () => {
@@ -2409,7 +2430,9 @@ export function listKeys(): Promise<ApiKeyInfo[]> {
       const res = await fetch(`${requireApiUrl()}/keys`, { headers: authHeaders(), cache: "no-store" });
       if (!res.ok) throw new Error(`Keys failed (${res.status})`);
       const data = (await res.json().catch(() => ({ items: [] }))) as { items?: ApiKeyInfo[] };
-      return data.items ?? [];
+      const items = data.items ?? [];
+      keysCache = { at: Date.now(), items };
+      return items;
     } finally {
       // 決着と同時に手放す。ここを外の .finally() に置くと、片付けが
       // 1〜2手おくれて、返事が来た直後に聞いた人へ古い約束を渡してしまう。
@@ -2441,6 +2464,7 @@ export async function setKey(
     ok?: boolean; masked?: string; error?: string; persisted?: boolean; warning?: string;
   };
   if (!res.ok) throw new Error(reason(data) ?? `Set key failed (${res.status})`);
+  forgetKeys();          // 入れ替えたので、覚えている一覧は捨てる
   return {
     ok: Boolean(data.ok),
     masked: data.masked,
@@ -2469,6 +2493,7 @@ export async function keyRescue(names: string[] = []): Promise<{ moved: string[]
   const data = (await res.json().catch(() => ({}))) as
     { moved?: string[]; count?: number; error?: string };
   if (!res.ok) throw new Error(reason(data) ?? `Rescue failed (${res.status})`);
+  forgetKeys();
   return { moved: asArray<string>(data.moved), count: asNumber(data.count) };
 }
 
@@ -2476,6 +2501,7 @@ export async function keyRescue(names: string[] = []): Promise<{ moved: string[]
 export async function deleteKey(name: string): Promise<boolean> {
   const res = await fetch(`${requireApiUrl()}/keys/${encodeURIComponent(name)}`, { method: "DELETE", headers: authHeaders() });
   const data = (await res.json().catch(() => ({ ok: false }))) as { ok?: boolean };
+  forgetKeys();
   return Boolean(data.ok);
 }
 
@@ -2800,6 +2826,9 @@ export async function setupResume(): Promise<{
   const res = await fetch(`${requireApiUrl()}/setup/resume`, {
     method: "POST", headers: authHeaders(),
   });
+  /* 会話の中で鍵を入れた直後にここへ戻ってくる。覚えている一覧を
+     持ったままだと、入れたばかりの鍵が「未設定」に見える。 */
+  forgetKeys();
   if (!res.ok) return { ok: false };
   return (await res.json().catch(() => ({ ok: false }))) as
     { ok: boolean; instruction?: string; auto?: boolean };

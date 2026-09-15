@@ -448,7 +448,7 @@ function Detail({ ext, connected, google, provider, info, onClose, onChanged }: 
         )}
 
         {/* ② 保存先はここで直接つなぐ。
-            以前は「設定→KEYCHAINへ」と案内していたが、拡張機能を開いた人が
+            以前は「設定 →「つなぐ」へ」と案内していたが、拡張機能を開いた人が
             そこから設定できないなら、拡張機能である意味がない。 */}
         {ext.kind === "database" && (
           <div className="mb-3">

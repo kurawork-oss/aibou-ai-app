@@ -55,11 +55,11 @@ test("各手順に、実際の操作が書いてある", () => {
 });
 
 test("自分のDBの繋ぎ方が、押す場所まで書いてある", () => {
-  // 「KEYCHAINで繋いでください」だけだと、どこにあるか分からない
+  // 「つなぐで繋いでください」だけだと、どこにあるか分からない
   const connect = SETUP_STEPS.find((s) => s.id === "connect")!;
   const text = connect.steps.join(" ");
   expect(text).toContain("設定");
-  expect(text).toContain("KEYCHAIN");
+  expect(text).toContain("つなぐ");
   expect(text).toContain("自分のデータベース");
   expect(text).toContain("接続");
 });

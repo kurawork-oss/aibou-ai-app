@@ -138,7 +138,7 @@ export default function VideoPanel() {
     });
 
   if (!API_URL) {
-    return <div className="panel p-3 text-[11px] leading-relaxed text-muted">動画作成はバックエンド接続後に使えます（DIAGNOSTICS参照）。</div>;
+    return <div className="panel p-3 text-[11px] leading-relaxed text-muted">動画作成はバックエンド接続後に使えます（設定 →「しらべる」）。</div>;
   }
 
   return (

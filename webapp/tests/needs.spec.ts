@@ -25,7 +25,7 @@ test("403 は管理者専用だと伝える", () => {
 });
 
 test("503 は鍵の確認へ誘導する", () => {
-  expect(explain(new Error("Forge failed (503)"))).toContain("KEYCHAIN");
+  expect(explain(new Error("Forge failed (503)"))).toContain("つなぐ");
 });
 
 test("429 は待つように伝える", () => {
@@ -54,7 +54,7 @@ test("空でも何か返す", () => {
 test("案内には、何が要るかと、どこで入れるかが入る", () => {
   const m = needMessage(NEED.GEMINI_API_KEY);
   expect(m).toContain("AIを動かすための利用券");   // やさしい言い方
-  expect(m).toContain("KEYCHAIN");                 // 入れる場所
+  expect(m).toContain("つなぐ");                 // 入れる場所
   expect(m).toContain("歯車");                     // 探し方
   expect(m).toContain("aistudio.google.com");      // 取りに行く場所
 });

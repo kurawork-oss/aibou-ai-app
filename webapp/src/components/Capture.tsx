@@ -388,7 +388,7 @@ export default function Capture() {
 
           {!API_URL ? (
             <p className="text-[11px] leading-relaxed text-muted">
-              文字起こしとナレーションはバックエンド接続後に使えます（DIAGNOSTICS参照）。
+              文字起こしとナレーションはバックエンド接続後に使えます（設定 →「しらべる」）。
             </p>
           ) : (
             <>

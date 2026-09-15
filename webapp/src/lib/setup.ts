@@ -152,7 +152,7 @@ export const SETUP_STEPS: SetupStep[] = [
     detail: "ここまで来れば、あとは貼るだけです。",
     steps: [
       "画面右上の歯車（設定）を押す",
-      "上のタブから「KEYCHAIN」を選ぶ",
+      "上のタブから「つなぐ」を選ぶ",
       "「自分のデータベース」の欄に、4で取った URL と service_role キーを貼る",
       "「接続」を押す",
       "「接続できました」と出れば完了。以後、あなたのデータはここに入ります",
@@ -170,7 +170,7 @@ export const SETUP_STEPS: SetupStep[] = [
     minutes: "3分",
     detail:
       "管理者が共通の鍵を用意している場合は不要です"
-      + "（設定 → KEYCHAIN で GEMINI_API_KEY が「設定済み」なら飛ばしてください）。",
+      + "（設定 →「つなぐ」 で GEMINI_API_KEY が「設定済み」なら飛ばしてください）。",
     steps: [
       "aistudio.google.com/app/apikey を開く",
       "Googleアカウントでログインし、「Create API key」を押す",

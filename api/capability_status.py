@@ -73,7 +73,7 @@ GROUPS: List[dict] = [
      "pack": "core",
      "tools": [],
      "why_missing": "AIの鍵が1つも入っていません",
-     "next": "設定 → KEYCHAIN に GEMINI_API_KEY を入れてください（無料枠があります）",
+     "next": "設定 →「つなぐ」 に GEMINI_API_KEY を入れてください（無料枠があります）",
      "action": {"kind": "key", "name": "GEMINI_API_KEY"}},
 
     {"id": "memory", "name": "記憶", "kind": "local", "pack": "core",
@@ -119,7 +119,7 @@ GROUPS: List[dict] = [
     {"id": "vision", "name": "画像を見て答える", "kind": "key",
      "keys": ["GEMINI_API_KEY"], "pack": "core", "tools": [],
      "why_missing": "画像を読むにはGeminiの鍵が要ります",
-     "next": "設定 → KEYCHAIN に GEMINI_API_KEY を入れてください",
+     "next": "設定 →「つなぐ」 に GEMINI_API_KEY を入れてください",
      "action": {"kind": "key", "name": "GEMINI_API_KEY"}},
 
     {"id": "notify", "name": "通知（端末・LINE・Discord・Slack）", "kind": "local",
@@ -312,7 +312,7 @@ def snapshot(is_owner: bool = True) -> List[dict]:
                 "pack": g.get("pack", "core"), "tools": list(g.get("tools") or []),
                 "status": "error", "connected": False,
                 "why": f"状態を調べられませんでした（{str(e)[:120]}）",
-                "next": "設定 → DIAGNOSTICS で接続を確かめてください",
+                "next": "設定 →「しらべる」 で接続を確かめてください",
                 "action": {"kind": "none"},
             })
     return out

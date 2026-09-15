@@ -30,7 +30,7 @@ export default function IntegrationsSettings() {
   if (!API_URL) {
     return (
       <div className="mb-4 rounded-forge border border-panel p-3 text-[11px] leading-relaxed text-muted">
-        Google連携・DB永続化は、バックエンド接続後に使えます（DIAGNOSTICS参照）。
+        Google連携・DB永続化は、バックエンド接続後に使えます（設定 →「しらべる」）。
       </div>
     );
   }

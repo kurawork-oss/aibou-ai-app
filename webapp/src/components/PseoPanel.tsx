@@ -78,7 +78,7 @@ export default function PseoPanel() {
   if (!API_URL) {
     return (
       <div className="panel p-3 text-[11px] leading-relaxed text-muted">
-        Programmatic SEO はバックエンド接続後に使えます（DIAGNOSTICS参照）。
+        Programmatic SEO はバックエンド接続後に使えます（設定 →「しらべる」）。
       </div>
     );
   }

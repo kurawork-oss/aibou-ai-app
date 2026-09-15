@@ -334,7 +334,7 @@ def run_stream(instruction: str, files: list, history: list = None, depth: str =
         yield {"phase": "error", "error": "instruction is required"}
         return
     if llm.active_provider() == "none":
-        yield {"phase": "error", "error": "AI未設定です。Settings → KEYCHAIN で GEMINI_API_KEY か HUGGINGFACE_TOKEN を設定してください。"}
+        yield {"phase": "error", "error": "AI未設定です。設定 →「つなぐ」 で GEMINI_API_KEY か HUGGINGFACE_TOKEN を設定してください。"}
         return
 
     before = {f["path"]: str(f.get("content") or "") for f in (files or []) if f.get("path")}

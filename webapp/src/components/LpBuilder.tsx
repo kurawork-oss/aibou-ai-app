@@ -127,7 +127,7 @@ export default function LpBuilder({ kind = "lp" }: { kind?: "lp" | "app" }) {
   };
 
   if (!API_URL) {
-    return <div className="panel p-3 text-[11px] leading-relaxed text-muted">{t.heading}作成はバックエンド接続後に使えます（DIAGNOSTICS参照）。</div>;
+    return <div className="panel p-3 text-[11px] leading-relaxed text-muted">{t.heading}作成はバックエンド接続後に使えます（設定 →「しらべる」）。</div>;
   }
 
   return (

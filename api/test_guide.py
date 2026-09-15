@@ -54,7 +54,7 @@ def test_guide_tells_people_to_connect_their_own_database_first():
     joined = db["summary"] + " ".join(db["steps"]) + " ".join(db["notes"])
     assert "保存されません" in joined or "保存されない" in joined
     assert "service_role" in joined
-    assert "設定" in joined and "KEYCHAIN" in joined
+    assert "設定" in joined and "つなぐ" in joined
 
 
 def test_chat_prompt_says_do_not_make_things_up():

@@ -377,7 +377,7 @@ export default function LifeMode({ settings }: { settings: ChatSettings }) {
 
           {boxOffline ? (
             <p className="mt-2 rounded-forge border border-panel p-2 text-[10px] leading-relaxed text-muted">
-              ⚠ バックエンド未接続のため箱は使えません。接続後（DIAGNOSTICS参照）に保存・閲覧できます。
+              ⚠ バックエンド未接続のため箱は使えません。接続後（設定 →「しらべる」）に保存・閲覧できます。
             </p>
           ) : (
             <>

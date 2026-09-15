@@ -89,7 +89,7 @@ test("見た目の一覧を開いても、本体は落ちない（見本だけ�
 
   const hits = countRequests(page, FLOOR);
   await page.getByLabel("Settings").click();
-  await page.getByRole("button", { name: "見た目" }).click();
+  await page.getByRole("button", { name: "見た目と声" }).click();
   await expect(page.getByText("画面のテーマ")).toBeVisible({ timeout: 5_000 });
   await openFold(page, "背景");
   await expect(page.getByRole("button", { name: /水たまり・銀/ })).toBeVisible();
@@ -110,7 +110,7 @@ test("選んだときに落として、次からは端末の物を使う", async
   await page.reload({ waitUntil: "domcontentloaded" });
   await enterApp(page);
   await page.getByLabel("Settings").click();
-  await page.getByRole("button", { name: "見た目" }).click();
+  await page.getByRole("button", { name: "見た目と声" }).click();
   await expect(page.getByText("画面のテーマ")).toBeVisible({ timeout: 5_000 });
   await openFold(page, "背景");
 
@@ -157,7 +157,7 @@ test("見た目の一覧を開いても、毎コマの仕事はほとんど増�
 
   const closed = await sample();
   await page.getByLabel("Settings").click();
-  await page.getByRole("button", { name: "見た目" }).click();
+  await page.getByRole("button", { name: "見た目と声" }).click();
   await expect(page.getByText("コアの形")).toBeVisible({ timeout: 5_000 });
   await page.waitForTimeout(900);            // 開くときの動きが落ち着くのを待つ
   const open = await sample();
@@ -173,7 +173,7 @@ test("レトロは角を落とさず、影をぼかさない", async ({ page }) 
   await page.goto("/");
   await enterApp(page);
   await page.getByLabel("Settings").click();
-  await page.getByRole("button", { name: "見た目" }).click();
+  await page.getByRole("button", { name: "見た目と声" }).click();
   await openFold(page, "画面のテーマ");
   await page.getByRole("button", { name: /RETRO（ドット）/ }).click();
 
@@ -201,7 +201,7 @@ test("レトロでも、丸いままにする物は丸い（コアの枠など�
   await page.goto("/");
   await enterApp(page);
   await page.getByLabel("Settings").click();
-  await page.getByRole("button", { name: "見た目" }).click();
+  await page.getByRole("button", { name: "見た目と声" }).click();
   await openFold(page, "画面のテーマ");
   await page.getByRole("button", { name: /RETRO（ドット）/ }).click();
   await page.getByRole("button", { name: "✕" }).click();
@@ -256,7 +256,7 @@ test("読めない配色は、選んだその場で分かって直せる", async
   await page.reload({ waitUntil: "domcontentloaded" });
   await enterApp(page);
   await page.getByLabel("Settings").click();
-  await page.getByRole("button", { name: "見た目" }).click();
+  await page.getByRole("button", { name: "見た目と声" }).click();
 
   await expect(page.getByText(/明暗の差が .* しかありません/)).toBeVisible({ timeout: 5_000 });
   await page.getByRole("button", { name: "直す" }).click();
@@ -278,7 +278,7 @@ test("色をはじめに戻せる（どんな配色からでも押せる）", as
   await page.reload({ waitUntil: "domcontentloaded" });
   await enterApp(page);
   await page.getByLabel("Settings").click();
-  await page.getByRole("button", { name: "見た目" }).click();
+  await page.getByRole("button", { name: "見た目と声" }).click();
 
   const reset = page.getByRole("button", { name: "色をはじめに戻す" });
   await expect(reset).toBeVisible({ timeout: 5_000 });
@@ -297,7 +297,7 @@ test("背景はテーマと別に選べて、再読込しても残る", async ({
   await page.goto("/");
   await enterApp(page);
   await page.getByLabel("Settings").click();
-  await page.getByRole("button", { name: "見た目" }).click();
+  await page.getByRole("button", { name: "見た目と声" }).click();
   await expect(page.getByText("画面のテーマ")).toBeVisible({ timeout: 5_000 });
   await openFold(page, "背景");
 
@@ -319,7 +319,7 @@ test("画像が要る背景は、画像が無いうちは選べない", async ({
   await page.goto("/");
   await enterApp(page);
   await page.getByLabel("Settings").click();
-  await page.getByRole("button", { name: "見た目" }).click();
+  await page.getByRole("button", { name: "見た目と声" }).click();
   await expect(page.getByText("画面のテーマ")).toBeVisible({ timeout: 5_000 });
   await openFold(page, "背景");
   await expect(page.getByText("画像を保存すると選べます").first()).toBeVisible();
@@ -331,7 +331,7 @@ test("無地を選ぶと、背景の canvas ごと出さない", async ({ page }
   await page.goto("/");
   await enterApp(page);
   await page.getByLabel("Settings").click();
-  await page.getByRole("button", { name: "見た目" }).click();
+  await page.getByRole("button", { name: "見た目と声" }).click();
   await openFold(page, "背景");
   await page.getByRole("button", { name: /無地/ }).click();
   await expect(async () => {
@@ -405,7 +405,7 @@ test("水を張らない「銀の流れ」は、canvas ではなく CSS が絵�
   await page.goto("/");
   await enterApp(page);
   await page.getByLabel("Settings").click();
-  await page.getByRole("button", { name: "見た目" }).click();
+  await page.getByRole("button", { name: "見た目と声" }).click();
   await expect(page.getByText("画面のテーマ")).toBeVisible({ timeout: 5_000 });
   await openFold(page, "背景");
 
@@ -582,7 +582,7 @@ for (const skin of ["retro", "custom"] as const) {
 
     const home = await clipped(page);
     await page.getByLabel("Settings").click();
-    await page.getByRole("button", { name: "見た目" }).click();
+    await page.getByRole("button", { name: "見た目と声" }).click();
     await expect(page.getByText("画面のテーマ")).toBeVisible({ timeout: 5_000 });
   await openFold(page, "背景");
     await page.waitForTimeout(600);            // 字が届いてから測る
@@ -645,7 +645,7 @@ test("自分の画像を保存すると、背景になり、縮んで残る", as
   await page.goto("/");
   await enterApp(page);
   await page.getByLabel("Settings").click();
-  await page.getByRole("button", { name: "見た目" }).click();
+  await page.getByRole("button", { name: "見た目と声" }).click();
   await expect(page.getByText("画面のテーマ")).toBeVisible({ timeout: 5_000 });
   await openFold(page, "背景");
 
@@ -670,7 +670,7 @@ test("画像を消すと、背景が無地へ逃げる（真っ黒にならな�
   await page.goto("/");
   await enterApp(page);
   await page.getByLabel("Settings").click();
-  await page.getByRole("button", { name: "見た目" }).click();
+  await page.getByRole("button", { name: "見た目と声" }).click();
   await expect(page.getByText("画面のテーマ")).toBeVisible({ timeout: 5_000 });
   await openFold(page, "背景");
   expect(await putBigImage(page, 1200, 800)).toBe(true);
@@ -689,7 +689,7 @@ test("自分の画像は、再読込しても残る", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
   await page.getByLabel("Settings").click();
-  await page.getByRole("button", { name: "見た目" }).click();
+  await page.getByRole("button", { name: "見た目と声" }).click();
   await expect(page.getByText("画面のテーマ")).toBeVisible({ timeout: 5_000 });
   await openFold(page, "背景");
   expect(await putBigImage(page, 1000, 600)).toBe(true);
@@ -728,7 +728,7 @@ test("テーマを離れても、背景の膜の濃さは消えない", async ({
 
   // 別のテーマへ移る（色は片付くが、膜は背景の設定なので残る）
   await page.getByLabel("Settings").click();
-  await page.getByRole("button", { name: "見た目" }).click();
+  await page.getByRole("button", { name: "見た目と声" }).click();
   await openFold(page, "画面のテーマ");
   await page.getByRole("button", { name: /CYBER（紺）/ }).click();
   await expect(async () => {

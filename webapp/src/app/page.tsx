@@ -775,41 +775,59 @@ function GearIcon() {
 
 /* ─── Settings Panel (enhanced) ──────────────────────────────────── */
 
-type SettingsTab = "core" | "voice" | "memory" | "look" | "connect" | "keychain" | "diagnostics";
+type SettingsTab = "core" | "memory" | "look" | "connect" | "check";
 
 /**
  * タブの見出し。
  *
  * **用で分ける。中の作りで分けない。**
  *
- * 前は CORE / 見た目 / PERSONA / KEYCHAIN / HF / DIAGNOSTICS だった。
- * このうち CORE が物置になっていて、通知・記憶・AIの提供元・機能の
- * 入り切り・連携・名前・声5種——**無関係な12組**が1枚に積まれていた。
- * 実測で縦 1406px（スマホの画面3.2枚ぶん）、押せる物29個。
+ * 前は CORE が物置になっていて、通知・記憶・AIの提供元・機能の入り切り・
+ * 連携・名前・声5種——**無関係な12組**が1枚に積まれていた。実測で縦
+ * 1406px（スマホの画面3.2枚ぶん）、押せる物29個。そこで7枚に割った。
  *
- * 名前のほうも、KEYCHAIN / HF / DIAGNOSTICS は**中の呼び名**であって、
- * 「何をしたいときにここへ来るか」を言っていない。
+ * 7枚を、今度は全部測り直した（tests/audit/survey.spec.ts）
+ * ----------------------------------------------------------
+ * 割った結果がどうなったかを、接続先ありのビルドで数えた:
  *
- * KEYCHAIN と DIAGNOSTICS は**名前を変えていない**。中の呼び名で分かり
- * にくいのはその通りだが、アプリと API の案内文が25か所で「設定 →
- * KEYCHAIN へ」「DIAGNOSTICS 参照」と書いている。名前だけ変えると、
- * **案内が存在しない場所を指す**——分かりにくいより、そちらのほうが悪い。
- * 名前を変えるなら、案内も同時に直すこと。
+ *     つなぐ        2034px / 押せる物 20   ← また物置になっていた
+ *     基本          1152px / 13
+ *     DIAGNOSTICS    957px /  2
+ *     声             520px /  8
+ *     記憶           499px /  4
+ *     見た目         210px /  3           ← 1画面に満たない
+ *     KEYCHAIN       200px /  8           ← 中身はほぼ「連携をひらく」の案内
  *
- * 枚数は7枚に増えたが、見るべき指標は枚数ではなく**目当てに辿り着くまでに
- * 何を素通りするか**。1枚が3.2画面ぶんあるほうが、1枚増えるより重い。
- * 機能は減らしていない——置き場所を変えただけ。
+ * 210px の札と 2034px の札が同じ「1枚」として並んでいた。枚数ではなく
+ * **1枚の重さ**を見ると、7枚は割り方が合っていない。
+ *
+ * そこで5枚に寄せ直した
+ * ----------------------
+ *   基本        名前・性格・AI・通知・いつも許可
+ *   見た目と声  どう見えて、どう聞こえるか（210+520 を1枚に）
+ *   記憶        覚えていること
+ *   つなぐ      使う機能・連携・手元のパソコン・鍵（KEYCHAIN を畳んだ）
+ *   しらべる    何が使えるか・うまく動かないとき（自己診断をここへ集めた）
+ *
+ * 「何が使えるか（SELF CHECK）」と「うまく動かないとき」は、同じ問いの
+ * 表と裏なのに別のタブに分かれていて、片方を見た人がもう片方に気づか
+ * なかった。1枚にまとめた。
+ *
+ * 呼び名を変えたので、案内も全部直した
+ * ------------------------------------
+ * KEYCHAIN と DIAGNOSTICS は**中の呼び名**で、「何をしたいときにここへ
+ * 来るか」を言っていない。ただし名前だけ変えると、アプリとAPIの案内文
+ * 48か所が**存在しない場所を指す**ことになる。31ファイルを同時に直した。
+ * 直し忘れは tests/oneReason.spec.ts が見張っている。
  *
  * 幅は中身に合わせる（等分しない）。等分すると長い名前が枠に入らない。
  */
 const SETTINGS_TABS: { key: SettingsTab; label: string }[] = [
-  { key: "core", label: "基本" },          // 名前・性格・AI・通知
-  { key: "voice", label: "声" },            // 話し方まわり
+  { key: "core", label: "基本" },          // 名前・性格・AI・通知・いつも許可
+  { key: "look", label: "見た目と声" },     // テーマ・背景・コア・話し方
   { key: "memory", label: "記憶" },         // 覚えていること
-  { key: "look", label: "見た目" },         // テーマ・背景・コア
-  { key: "connect", label: "つなぐ" },      // 機能・外部サービス・モデル
-  { key: "keychain", label: "KEYCHAIN" },   // 鍵。名前は変えない（下記）
-  { key: "diagnostics", label: "DIAGNOSTICS" },
+  { key: "connect", label: "つなぐ" },      // 使う機能・連携・手元のPC・鍵
+  { key: "check", label: "しらべる" },      // 何が使えるか・うまく動かないとき
 ];
 
 function SettingsPanel({
@@ -899,15 +917,22 @@ function SettingsPanel({
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
       />
 
+      {/* 画面の高さを使い切る。
+          ここは長いあいだ「中身だけ max-h-[60vh]」だった。844pxの端末だと
+          中身の枠が506pxで、頭とタブを足しても**190pxほど余っていた**のに、
+          「つなぐ」は 2034px を 506px の窓で読ませていた（4杯ぶんスクロール）。
+          余りを中身に回すだけで、スクロールは目に見えて減る。
+          縦に伸ばすのではなく、**残りを中身が取る**形にする——タブが1段に
+          収まる端末でも2段の端末でも、余りが出ない。 */}
       <motion.div
-        className="panel relative z-10 m-3 w-full max-w-md"
+        className="panel relative z-10 m-3 flex max-h-[calc(100dvh-1.5rem)] w-full max-w-md flex-col"
         initial={{ y: 30, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: 30, opacity: 0 }}
         transition={{ type: "spring", stiffness: 320, damping: 30 }}
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-panel p-4">
+        <div className="flex shrink-0 items-center justify-between border-b border-panel p-4">
           <h2 className="label-mono text-glow text-sm text-fg-strong">CORE SETTINGS</h2>
           <button type="button" onClick={onClose} className="text-muted transition hover:text-fg-strong">✕</button>
         </div>
@@ -918,7 +943,7 @@ function SettingsPanel({
             visible のままで横スクロールもできず、**その画面へ行く道が
             無かった**。横スクロールにする手もあるが、隠れている物がある
             ことに気づけない。2段にすれば、行き先が全部見える。 */}
-        <div className="flex flex-wrap border-b border-panel">
+        <div className="flex shrink-0 flex-wrap border-b border-panel">
           {SETTINGS_TABS.map((t) => (
             <button
               key={t.key}
@@ -935,8 +960,11 @@ function SettingsPanel({
           ))}
         </div>
 
-        <div className="max-h-[60vh] overflow-y-auto p-5">
+        <div data-settings-body className="min-h-0 flex-1 overflow-y-auto p-5">
           {tab === "look" && <AppearanceSettings />}
+          {/* 声はここに置く。見た目と声は「どう見えて・どう聞こえるか」で
+              同じ用。別タブにすると、どちらも1画面に満たない札が2枚並ぶ
+              （実測で 210px と 520px。押せる物は3個と8個だった）。 */}
 
           {/* 覚えていること。1枚に独立させてある——ここは設定というより
               「中身を見て、要らない物を消す」場所で、用が他と違う。 */}
@@ -954,7 +982,6 @@ function SettingsPanel({
                 {/* 何が使えて何が使えないかを、いちばん上に出す。
                     設定の中で迷う原因は「どこを触れば直るのか分からない」
                     ことなので、答えを先に置く（仕様§40 自己診断）。 */}
-                <CapabilityPanel />
                 <FeaturePacks />
                 <IntegrationsSettings />
                 <LocalAgentSettings />
@@ -1016,7 +1043,7 @@ function SettingsPanel({
             </>
           )}
 
-          {tab === "voice" && (
+          {tab === "look" && (
             <>
               <label className="mb-4 flex cursor-pointer items-center justify-between">
                 <span className="text-[10px] tracking-[0.2em] text-muted label-mono">SPOKEN REPLIES</span>
@@ -1114,7 +1141,7 @@ function SettingsPanel({
                   step={0.05}
                   value={rate}
                   onChange={(e) => setRate(Number(e.target.value))}
-                  className="w-full accent-[var(--accent)]"
+                  className="h-11 w-full cursor-pointer accent-[var(--accent)]"
                   aria-label="Talk speed"
                 />
               </div>
@@ -1132,7 +1159,7 @@ function SettingsPanel({
                   step={0.05}
                   value={pitch}
                   onChange={(e) => setPitch(Number(e.target.value))}
-                  className="w-full accent-[var(--accent)]"
+                  className="h-11 w-full cursor-pointer accent-[var(--accent)]"
                   aria-label="Voice pitch"
                 />
               </div>
@@ -1147,10 +1174,15 @@ function SettingsPanel({
             </>
           )}
 
-          {tab === "keychain" && (
+          {/* 鍵の直接編集。**繋いでいなくても出す。**
+              ここは繋いでいない人ほど要る所で、端末の中に暗号化した下書きを
+              作って、繋いだあとに取り込む導線になっている。「つなぐ」へ
+              畳んだときに API_URL の条件を付けてしまい、オフラインの人から
+              入口が消えた（自動テストが捕まえた）。 */}
+          {tab === "connect" && (
             <>
               {/* 同じ設定が2か所にあると、どちらが本物か分からなくなる。
-                  ふだんの操作は拡張機能に一本化し、ここは逃げ道として残す。 */}
+                  ふだんの操作は連携画面に一本化し、ここは逃げ道として残す。 */}
               <div className="mb-3 rounded-forge border border-panel p-3">
                 <p className="text-[11px] leading-relaxed text-fg">
                   連携（Supabase・LINE・Google など）は
@@ -1184,19 +1216,32 @@ function SettingsPanel({
           )}
 
           {/* 繋いでいないときは上の1行で足りている。使えない物の説明書を
-              先に読ませない。 */}
+              先に読ませない。
+
+              **畳んである。** HuggingFace のモデル登録は、使う人には要るが
+              使わない人には一生要らない。開いたままだと「つなぐ」が
+              画面3杯ぶんになり、その手前にある連携まで読まれなくなる。 */}
           {tab === "connect" && API_URL && (
-            <>
-              <div className="mb-3 text-[10px] leading-relaxed text-muted">
-                HuggingFace のモデルを登録して、<b className="text-fg">会話・コード・画像生成・文字起こし</b>に
-                割り当てます。登録したら「テスト」で実際に動くか確かめてください。
+            <details className="mt-3">
+              <summary className="cursor-pointer text-[11px] text-muted">
+                上級者向け：HuggingFace のモデルを割り当てる
+              </summary>
+              <div className="mt-2">
+                <div className="mb-3 text-[10px] leading-relaxed text-muted">
+                  HuggingFace のモデルを登録して、<b className="text-fg">会話・コード・画像生成・文字起こし</b>に
+                  割り当てます。登録したら「テスト」で実際に動くか確かめてください。
+                </div>
+                <HfModels />
               </div>
-              <HfModels />
-            </>
+            </details>
           )}
 
-          {tab === "diagnostics" && (
+          {tab === "check" && (
             <div className="flex flex-col gap-3">
+              {/* 「何が使えるか」と「うまく動かないとき」は、同じ問いの
+                  表と裏。前は別のタブ（つなぐ／DIAGNOSTICS）に分かれていて、
+                  片方を見た人がもう片方に気づかなかった。 */}
+              <CapabilityPanel />
               {/* 困ったときに最初に押すもの。下の技術情報より前に置く */}
               <SelfCheck />
 

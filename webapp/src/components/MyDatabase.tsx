@@ -58,7 +58,7 @@ export default function MyDatabase({ compact = false }: { compact?: boolean } = 
   if (!API_URL) {
     return (
       <div className="mb-4 rounded-forge border border-panel p-3 text-[11px] leading-relaxed text-muted">
-        自分のデータベースの接続は、バックエンド接続後に使えます（DIAGNOSTICS参照）。
+        自分のデータベースの接続は、バックエンド接続後に使えます（設定 →「しらべる」）。
       </div>
     );
   }

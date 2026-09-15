@@ -245,20 +245,20 @@ function IncomeSetupGuide({ open, onToggle }: { open: boolean; onToggle: () => v
           </p>
 
           <GuideStep n="1" title="基盤をつなぐ（必須）" color="#00f3ff">
-            <li><b>Gemini APIキー</b>を取得 → <b>Settings → KEYCHAIN</b> に <code>GEMINI_API_KEY</code> を保存（記事・メタデータ生成の頭脳）</li>
+            <li><b>Gemini APIキー</b>を取得 → <b>設定 →「つなぐ」</b> に <code>GEMINI_API_KEY</code> を保存（記事・メタデータ生成の頭脳）</li>
             <li><b>Supabase</b> プロジェクトを作成し、SQLエディタで <code>supabase_schema.sql</code> を実行（ジョブの保存先）</li>
             <li><b>バックエンド(FastAPI)</b> を Cloud Run 等にデプロイし、<code>SUPABASE_URL</code> / <code>SUPABASE_SERVICE_KEY</code> を設定</li>
             <li>Vercel に <code>NEXT_PUBLIC_API_URL</code>（バックエンドURL）を設定 → アプリが「LINK ACTIVE」になります</li>
           </GuideStep>
 
           <GuideStep n="2" title="スマホ通知を設定（推奨）" color="#60d394">
-            <li><b>LINE Notify</b> / Discord / Slack のトークン・Webhookを取得 → KEYCHAIN に
+            <li><b>LINE Notify</b> / Discord / Slack のトークン・Webhookを取得 → 設定 →「つなぐ」に
               <code>LINE_NOTIFY_TOKEN</code> / <code>DISCORD_WEBHOOK</code> / <code>SLACK_WEBHOOK</code></li>
             <li>夜間ジョブの「✅成功 / ❌失敗」がスマホに届き、朝の承認だけで回せます</li>
           </GuideStep>
 
           <GuideStep n="3" title="配信先アカウントを連携（段階的に）" color="#ffd060">
-            <li><b>画像生成</b>: Leonardo.ai 等のAPIキー → KEYCHAIN <code>LEONARDO_API_KEY</code></li>
+            <li><b>画像生成</b>: Leonardo.ai 等のAPIキー → 設定 →「つなぐ」<code>LEONARDO_API_KEY</code></li>
             <li><b>Shutterstock</b>: コントリビューター登録 → FTP情報を <code>SHUTTERSTOCK_FTP</code></li>
             <li><b>YouTube</b>: Google Cloud で <i>YouTube Data API v3</i> を有効化 → OAuth同意・リフレッシュトークン取得 → <code>YOUTUBE_API_KEY</code></li>
             <li><b>note</b>: ログイントークン → <code>NOTE_TOKEN</code></li>
@@ -277,7 +277,7 @@ function IncomeSetupGuide({ open, onToggle }: { open: boolean; onToggle: () => v
           </GuideStep>
 
           <p className="rounded-forge border border-panel p-2 text-[11px] text-muted">
-            🔐 すべてのAPIキー／トークンは <b>Settings → KEYCHAIN</b> に保管され、画面ではマスク表示されます
+            🔐 すべてのAPIキー／トークンは <b>設定 →「つなぐ」</b> に保管され、画面ではマスク表示されます
             （フルの値は表示されません）。手順の詳細はリポジトリの <code>SETUP.md</code> も参照してください。
           </p>
         </div>

@@ -169,7 +169,7 @@ def _extract_json(text: str):
 def extract_entries(turns: list) -> dict:
     """直近の相談会話から「経験の箱」候補を抽出する（保存はユーザー確認後）。"""
     if llm.active_provider() == "none":
-        return {"error": "AI未設定です。Settings → KEYCHAIN で GEMINI_API_KEY か HUGGINGFACE_TOKEN を設定してください。"}
+        return {"error": "AI未設定です。設定 →「つなぐ」 で GEMINI_API_KEY か HUGGINGFACE_TOKEN を設定してください。"}
     convo = "\n".join(
         f"{'ユーザー' if (t.get('role') == 'user') else 'AI'}: {str(t.get('content') or '')[:800]}"
         for t in (turns or [])[-12:]

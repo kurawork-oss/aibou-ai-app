@@ -104,7 +104,7 @@ export default function MemorySettings() {
        理由を言う。理由なく消えると「保存できないアプリ」に見える。 */
     const secret = secretReason(text);
     if (secret) {
-      setNote(`⚠ ${secret}。記憶ではなく、設定 → KEYCHAIN に入れてください。`);
+      setNote(`⚠ ${secret}。記憶ではなく、設定 →「つなぐ」 に入れてください。`);
       return;
     }
     setBusy(true);

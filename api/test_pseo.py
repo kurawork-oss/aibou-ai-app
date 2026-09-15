@@ -138,7 +138,7 @@ def test_generate_batch_all_failed_reports_error(monkeypatch):
     _clear()
     res = pseo.generate_batch([["犬"], ["しつけ"]], limit=1)
     assert res["count"] == 0 and res.get("error")
-    assert "KEYCHAIN" in res["error"]  # 対処法を案内する
+    assert "つなぐ" in res["error"]  # 対処法を案内する
     _clear()
 
 

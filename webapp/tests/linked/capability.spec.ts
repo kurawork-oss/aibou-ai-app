@@ -45,9 +45,12 @@ function withStatus(be: Backend, items: unknown[] = ITEMS) {
   } }));
 }
 
+/* 自己診断は「つなぐ」から「しらべる」へ移した。
+   「何が使えるか」と「うまく動かないとき」は同じ問いの表と裏なのに、
+   別のタブに分かれていて、片方を見た人がもう片方に気づかなかった。 */
 async function openConnect(page: Page) {
   await page.getByLabel("Settings").click();
-  await page.getByRole("button", { name: "つなぐ", exact: true }).click();
+  await page.getByRole("button", { name: "しらべる", exact: true }).click();
   await expect(page.getByText("SELF CHECK")).toBeVisible({ timeout: 10_000 });
 }
 

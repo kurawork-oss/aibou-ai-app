@@ -9,9 +9,9 @@
  * 問題ないが、**1つの画面に3つ並ぶ所**ができていた。設定の「つなぐ」が
  * それで、繋いでいない人にはこう見えていた（実測）:
  *
- *     使う機能の切り替えは、バックエンド接続後に使えます（DIAGNOSTICS参照）。
- *     Google連携・DB永続化は、バックエンド接続後に使えます（DIAGNOSTICS参照）。
- *     HuggingFaceのモデル登録は、バックエンド接続後に使えます（DIAGNOSTICS参照）。
+ *     使う機能の切り替えは、バックエンド接続後に使えます（設定 →「しらべる」）。
+ *     Google連携・DB永続化は、バックエンド接続後に使えます（設定 →「しらべる」）。
+ *     HuggingFaceのモデル登録は、バックエンド接続後に使えます（設定 →「しらべる」）。
  *
  * 同じことを3回言われると、読む人は3つ別の問題があるのかと考える。
  * 実際には1つ——繋いでいない——だけ。
@@ -31,7 +31,7 @@ export default function NeedsBackend({ what }: {
 }) {
   return (
     <div className="rounded-forge border border-panel p-3 text-[11px] leading-relaxed text-muted">
-      {what}は、バックエンドに繋いでから使えます（設定 → DIAGNOSTICS で接続を確認）。
+      {what}は、バックエンドに繋いでから使えます（設定 →「しらべる」 で接続を確認）。
     </div>
   );
 }

@@ -26,7 +26,7 @@ test("繋いでいないときは、未接続だと言う", async ({ page }) => 
     why: "まだ1台も繋いでいません", next: "合言葉を作ります" } }));
   await enterApp(page);
   await openConnect(page);
-  await expect(page.getByText("未接続")).toBeVisible();
+  await expect(page.getByText("未接続", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "合言葉を作る" })).toBeVisible();
 });
 
