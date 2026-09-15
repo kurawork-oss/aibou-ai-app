@@ -9,11 +9,38 @@
  * 見た目は globals.css の .md 系スタイルで統一。
  */
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import type { PluggableList } from "unified";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
-import rehypeHighlight from "rehype-highlight";
+
+/**
+ * 色つけ（rehype-highlight）は、**コードが出てきてから**運ぶ。
+ *
+ * highlight.js は大きい。最初に読み込む JavaScript の中でも重いほうで、
+ * しかも**ふだんの返事にはコードが1行も入っていない**。入っていない人に
+ * まで先に落とさせるのは割に合わない。
+ *
+ * 運んでいる間は色が付かないだけで、コードそのものは出ている。
+ * 一度運べば、その後はすぐ付く（module は1回しか読まれない）。
+ */
+let highlightPlugin: unknown = null;
+let highlightLoading: Promise<unknown> | null = null;
+
+function useHighlight(text: string): PluggableList {
+  const wantsCode = text.includes("```") || /\n {4}\S/.test(text);
+  const [ready, setReady] = useState<unknown>(highlightPlugin);
+  useEffect(() => {
+    if (!wantsCode || ready) return;
+    let live = true;
+    highlightLoading = highlightLoading
+      ?? import("rehype-highlight").then((m) => { highlightPlugin = m.default; return m.default; });
+    void highlightLoading.then((fn) => { if (live) setReady(() => fn); });
+    return () => { live = false; };
+  }, [wantsCode, ready]);
+  return ready ? ([ready] as PluggableList) : [];
+}
 
 function CodeBlock({ className, children }: { className?: string; children?: ReactNode }) {
   const [copied, setCopied] = useState(false);
@@ -45,11 +72,12 @@ function CodeBlock({ className, children }: { className?: string; children?: Rea
 }
 
 export default function Markdown({ text, className = "" }: { text: string; className?: string }) {
+  const rehypePlugins = useHighlight(text);
   return (
     <div className={`md ${className}`}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkBreaks]}
-        rehypePlugins={[rehypeHighlight]}
+        rehypePlugins={rehypePlugins}
         components={{
           // コードフェンス → ラベル＋コピー付きブロック（インラインはそのまま）
           pre: ({ children }) => <>{children}</>,

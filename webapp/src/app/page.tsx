@@ -18,46 +18,130 @@ import {
   type ShellView,
   PACKS_CHANGED,
 } from "@/lib/shell";
+import dynamic from "next/dynamic";
+/* 起動の途中に出る物は、後から運ばない。運ぶ往復がそのまま
+   「開いてから使えるまで」に足される（実測で 900ms → 1666ms に伸びた）。 */
+import BootScreen from "@/components/BootScreen";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import AiProviderSettings from "@/components/AiProviderSettings";
-import ModelRouter from "@/components/ModelRouter";
-import HfModels from "@/components/HfModels";
-import AppearanceSettings from "@/components/AppearanceSettings";
-import PushSettings from "@/components/PushSettings";
-import AlwaysAllowSettings from "@/components/AlwaysAllowSettings";
-import MemorySettings from "@/components/MemorySettings";
 import { syncOnBoot } from "@/lib/memorySync";
 import { CORE_TYPES, readCoreType, setCoreType, type CoreType } from "@/lib/coreType";
-import FeaturePacks from "@/components/FeaturePacks";
-import IntegrationsSettings from "@/components/IntegrationsSettings";
 import NeedsBackend from "@/components/NeedsBackend";
-import CapabilityPanel from "@/components/CapabilityPanel";
-import LocalAgentSettings from "@/components/LocalAgentSettings";
-import AppArchive from "@/components/AppArchive";
-import Autopilot from "@/components/Autopilot";
-import Backdrop3D from "@/components/Backdrop3D";
-import BootScreen from "@/components/BootScreen";
-import Briefing from "@/components/Briefing";
 import Chat, { type ChatSettings } from "@/components/Chat";
-import CodeMode from "@/components/CodeMode";
+
+/* ── 後から運ぶ画面 ───────────────────────────────────────────────
+ *
+ * 最初に読み込む JavaScript が **496kB** あった（`next build` の
+ * First Load JS）。開いた人が最初に見るのは会話の画面なのに、CODE も
+ * STUDIO も VAULT も設定の中身も、全部そこに入っていた。使うかどうか
+ * 分からない物まで、電波の悪い所で先に落とさせていたことになる。
+ *
+ * `ssr: false` にしてあるのは、どれも「use client」の画面で、サーバー側で
+ * 描いても意味が無いため。押した瞬間に運ぶので、初めて開くときだけ
+ * わずかに間が空く（手元の実測で 6〜60ms が 100ms 前後）。
+ * 2回目からは同じ。
+ */
+const lazy = <T,>(load: () => Promise<{ default: T }>) =>
+  dynamic(load as never, { ssr: false }) as T;
+const NeedsNotice = lazy(() => import("@/components/NeedsNotice"));
+const Briefing = lazy(() => import("@/components/Briefing"));
+const Backdrop3D = lazy(() => import("@/components/Backdrop3D"));
+
+const AiProviderSettings = lazy(() => import("@/components/AiProviderSettings"));
+const ModelRouter = lazy(() => import("@/components/ModelRouter"));
+const HfModels = lazy(() => import("@/components/HfModels"));
+const AppearanceSettings = lazy(() => import("@/components/AppearanceSettings"));
+const PushSettings = lazy(() => import("@/components/PushSettings"));
+const AlwaysAllowSettings = lazy(() => import("@/components/AlwaysAllowSettings"));
+const MemorySettings = lazy(() => import("@/components/MemorySettings"));
+const FeaturePacks = lazy(() => import("@/components/FeaturePacks"));
+const IntegrationsSettings = lazy(() => import("@/components/IntegrationsSettings"));
+const CapabilityPanel = lazy(() => import("@/components/CapabilityPanel"));
+const LocalAgentSettings = lazy(() => import("@/components/LocalAgentSettings"));
+const AppArchive = lazy(() => import("@/components/AppArchive"));
+const Autopilot = lazy(() => import("@/components/Autopilot"));
+const CodeMode = lazy(() => import("@/components/CodeMode"));
+const Dashboard = lazy(() => import("@/components/Dashboard"));
+const Workshop = lazy(() => import("@/components/Workshop"));
+const Capture = lazy(() => import("@/components/Capture"));
+const SnsMode = lazy(() => import("@/components/SnsMode"));
+const Home = lazy(() => import("@/components/Home"));
+const Guide = lazy(() => import("@/components/Guide"));
+const SelfCheck = lazy(() => import("@/components/SelfCheck"));
+const Extensions = lazy(() => import("@/components/Extensions"));
+const Income = lazy(() => import("@/components/Income"));
+const Keychain = lazy(() => import("@/components/Keychain"));
+const LifeMode = lazy(() => import("@/components/LifeMode"));
+const Tasks = lazy(() => import("@/components/Tasks"));
+const Vault = lazy(() => import("@/components/Vault"));
+
+/**
+ * 手が空いたら、先に運んでおく。
+ *
+ * 後から運ぶようにしたぶん、**初めてその画面を開く人は待つ**ことになる。
+ * 実測では 6〜60ms が 100ms 前後になるだけだが、混んでいるときはもっと
+ * 伸びる（自動テストが1件、それで落ちた）。
+ *
+ * 落としどころは「小さく始めて、すぐ追いつく」。最初の描画が終わって
+ * 手が空いた所で、静かに全部取りに行く。利用者は誰も待っていないので、
+ * ここは何ミリ秒かかってもよい。押したときには、もう手元にある。
+ */
+function usePrefetchScreens(ready: boolean): void {
+  useEffect(() => {
+    if (!ready) return;
+    let done = false;
+    const warm = () => {
+      if (done) return;
+      done = true;
+      void Promise.all([
+      import("@/components/NeedsNotice"),
+      import("@/components/Briefing"),
+      import("@/components/Backdrop3D"),
+      import("@/components/AiProviderSettings"),
+      import("@/components/ModelRouter"),
+      import("@/components/HfModels"),
+      import("@/components/AppearanceSettings"),
+      import("@/components/PushSettings"),
+      import("@/components/AlwaysAllowSettings"),
+      import("@/components/MemorySettings"),
+      import("@/components/FeaturePacks"),
+      import("@/components/IntegrationsSettings"),
+      import("@/components/CapabilityPanel"),
+      import("@/components/LocalAgentSettings"),
+      import("@/components/AppArchive"),
+      import("@/components/Autopilot"),
+      import("@/components/CodeMode"),
+      import("@/components/Dashboard"),
+      import("@/components/Workshop"),
+      import("@/components/Capture"),
+      import("@/components/SnsMode"),
+      import("@/components/Home"),
+      import("@/components/Guide"),
+      import("@/components/SelfCheck"),
+      import("@/components/Extensions"),
+      import("@/components/Income"),
+      import("@/components/Keychain"),
+      import("@/components/LifeMode"),
+      import("@/components/Tasks"),
+      import("@/components/Vault"),
+      ]).catch(() => null);
+    };
+    const idle = (window as unknown as {
+      requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    });
+    if (idle.requestIdleCallback) {
+      const id = idle.requestIdleCallback(warm, { timeout: 3000 });
+      return () => idle.cancelIdleCallback?.(id);
+    }
+    const t = setTimeout(warm, 1500);
+    return () => clearTimeout(t);
+  }, [ready]);
+}
+
 import CoreOrb from "@/components/CoreOrb";
 import { coreStateLabel, type CoreState } from "@/lib/coreState";
-import Dashboard from "@/components/Dashboard";
 import EntryGate from "@/components/EntryGate";
-import Workshop from "@/components/Workshop";
-import Capture from "@/components/Capture";
-import SnsMode from "@/components/SnsMode";
-import Home from "@/components/Home";
-import Guide from "@/components/Guide";
-import NeedsNotice from "@/components/NeedsNotice";
-import SelfCheck from "@/components/SelfCheck";
-import Extensions from "@/components/Extensions";
-import Income from "@/components/Income";
-import Keychain from "@/components/Keychain";
-import LifeMode from "@/components/LifeMode";
-import Tasks from "@/components/Tasks";
-import Vault from "@/components/Vault";
 import { API_URL, capabilitiesShared, health, profileGet } from "@/lib/api";
 import {
   loadVoiceSettings, saveVoiceSettings, speakCore, stopCoreVoice, type VoiceEngine,
@@ -114,6 +198,8 @@ function Hud() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [view, setView] = useState<View>("chat");
+  // 使える状態になったら、まだ運んでいない画面を静かに取りに行く
+  usePrefetchScreens(loaded);
   const [fullscreen, setFullscreen] = useState(false);
 
   /* ── 持ち主かどうか ───────────────────────────────────────────────
@@ -691,7 +777,15 @@ function ModeLauncher({ view, onChange, items: navItems }:
             <motion.nav
               initial={{ opacity: 0, y: -8, scale: 0.97, rotateX: -16 }}
               animate={{ opacity: 1, y: 0, scale: 1, rotateX: 0 }}
-              exit={{ opacity: 0, y: -8, scale: 0.97, rotateX: -12 }}
+              /* 消えるときは**バネを使わない**。
+                  入るときのバネ（stiffness 360 / damping 28）は
+                  臨界（約38）より弱いので揺り戻す。揺れが収まるまで
+                  framer-motion は要素を外さない——実測で、押してから
+                  メニューが消え切るまで**中央値 1769ms**かかっていた。
+                  画面そのものは 6〜61ms で描き終わっているのに、
+                  1.8秒ぶん「重い」と感じていたのはこれ。 */
+              exit={{ opacity: 0, y: -8, scale: 0.97, rotateX: -12,
+                      transition: { duration: 0.12, ease: "easeOut" } }}
               transition={{ type: "spring", stiffness: 360, damping: 28 }}
               style={{ transformPerspective: 900 }}
               className="absolute right-0 top-11 z-50 w-[17rem] origin-top-right"
@@ -928,7 +1022,7 @@ function SettingsPanel({
         className="panel relative z-10 m-3 flex max-h-[calc(100dvh-1.5rem)] w-full max-w-md flex-col"
         initial={{ y: 30, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        exit={{ y: 30, opacity: 0 }}
+        exit={{ y: 30, opacity: 0, transition: { duration: 0.12, ease: "easeOut" } }}
         transition={{ type: "spring", stiffness: 320, damping: 30 }}
       >
         {/* Header */}

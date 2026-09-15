@@ -59,6 +59,16 @@ test("管理タブの読み込みは、数珠つなぎにしない", async ({ pa
   be.latency = 200;                    // 1往復ぶん遅らせて、つながりを見えるようにする
   await enterApp(page);
 
+  /* **画面のコードが手元に届いてから測る。**
+     最初に読み込む JavaScript を減らすため、画面の中身は後から運ぶように
+     した（496kB → 308kB）。そのぶん初回だけ「コードが届くのを待つ」時間が
+     入り、その画面の問い合わせが数十ms後ろにずれる。それは**他の返事を
+     待っている**のとは別の話で、ここで見たいのは後者。
+
+     実際の利用では、手が空いた所で先に運んである（usePrefetchScreens）ので、
+     押したときにはもう手元にある。同じ状態にしてから測る。 */
+  await page.waitForLoadState("networkidle").catch(() => {});
+
   be.reset();
   await openManage(page, "今日");
   await expect(page.getByText("PERSONAL COCKPIT")).toBeVisible({ timeout: 15_000 });

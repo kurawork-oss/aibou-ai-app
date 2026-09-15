@@ -1,15 +1,15 @@
 {
-  "at": "2026-09-15T14:40:29.245Z",
+  "at": "2026-09-15T15:29:12.121Z",
   "viewport": "390×844",
-  "boot_ms": 869,
+  "boot_ms": 873,
   "round_trips": 49,
   "duplicates": [
     "/health×4",
     "/account/profile×3",
     "/capabilities×2",
-    "/keys×2",
     "/conversations×2",
     "/setup/pending×2",
+    "/keys×2",
     "/admin/db/status×2",
     "/artifacts×2",
     "/memory/sync×2",
@@ -31,7 +31,7 @@
       "empty": false,
       "screens": 2.44,
       "complaints": [],
-      "ms": 128
+      "ms": 73
     },
     {
       "where": "画面/GUIDE",
@@ -44,7 +44,7 @@
       "empty": false,
       "screens": 1.97,
       "complaints": [],
-      "ms": 1381
+      "ms": 705
     },
     {
       "where": "設定/基本",
@@ -59,7 +59,7 @@
       "empty": false,
       "screens": 1.66,
       "complaints": [],
-      "ms": 362
+      "ms": 424
     },
     {
       "where": "設定/しらべる",
@@ -72,7 +72,7 @@
       "empty": false,
       "screens": 1.53,
       "complaints": [],
-      "ms": 64
+      "ms": 95
     },
     {
       "where": "設定/見た目と声",
@@ -85,7 +85,7 @@
       "empty": false,
       "screens": 1.07,
       "complaints": [],
-      "ms": 99
+      "ms": 65
     },
     {
       "where": "画面/HOME",
@@ -98,7 +98,7 @@
       "empty": false,
       "screens": 1,
       "complaints": [],
-      "ms": 2623
+      "ms": 1482
     },
     {
       "where": "画面/CHAT",
@@ -113,7 +113,7 @@
       "empty": false,
       "screens": 1,
       "complaints": [],
-      "ms": 1383
+      "ms": 1220
     },
     {
       "where": "画面/ME",
@@ -128,7 +128,7 @@
       "empty": false,
       "screens": 1,
       "complaints": [],
-      "ms": 1334
+      "ms": 1233
     },
     {
       "where": "画面/CODE",
@@ -141,7 +141,7 @@
       "empty": false,
       "screens": 1,
       "complaints": [],
-      "ms": 1329
+      "ms": 1228
     },
     {
       "where": "画面/STUDIO",
@@ -154,7 +154,7 @@
       "empty": false,
       "screens": 1,
       "complaints": [],
-      "ms": 1332
+      "ms": 1220
     },
     {
       "where": "画面/SNS",
@@ -167,7 +167,7 @@
       "empty": false,
       "screens": 1,
       "complaints": [],
-      "ms": 1340
+      "ms": 1190
     },
     {
       "where": "画面/CAPTURE",
@@ -180,7 +180,7 @@
       "empty": false,
       "screens": 1,
       "complaints": [],
-      "ms": 1335
+      "ms": 687
     },
     {
       "where": "画面/VAULT",
@@ -193,7 +193,7 @@
       "empty": false,
       "screens": 1,
       "complaints": [],
-      "ms": 1326
+      "ms": 1194
     },
     {
       "where": "画面/TASKS",
@@ -208,7 +208,7 @@
       "empty": false,
       "screens": 1,
       "complaints": [],
-      "ms": 1328
+      "ms": 710
     },
     {
       "where": "画面/AUTO",
@@ -221,7 +221,7 @@
       "empty": false,
       "screens": 1,
       "complaints": [],
-      "ms": 1335
+      "ms": 722
     },
     {
       "where": "画面/BOARD",
@@ -234,7 +234,7 @@
       "empty": false,
       "screens": 1,
       "complaints": [],
-      "ms": 1818
+      "ms": 725
     },
     {
       "where": "画面/ARCHIVE",
@@ -247,7 +247,7 @@
       "empty": false,
       "screens": 1,
       "complaints": [],
-      "ms": 1828
+      "ms": 1206
     },
     {
       "where": "画面/EXTEND",
@@ -260,7 +260,7 @@
       "empty": false,
       "screens": 1,
       "complaints": [],
-      "ms": 1394
+      "ms": 1206
     },
     {
       "where": "設定/記憶",
@@ -273,7 +273,7 @@
       "empty": false,
       "screens": 1,
       "complaints": [],
-      "ms": 104
+      "ms": 96
     }
   ]
 }

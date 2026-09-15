@@ -286,6 +286,10 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
 
   useEffect(() => { setConvos(loadConvos()); }, []);
 
+  /* 記憶の置き場を先に開けておく。1通目を送る瞬間に開くと、開く時間
+     （実測 57〜70ms）がそのまま返事までの待ち時間に乗る。 */
+  useEffect(() => { memory.warm(); }, []);
+
   /* 前に開いていたときに、記憶を作りきれなかったぶんを拾う。
      「だまってから取りに行く」決まりなので、その手前で閉じられると
      溜めたぶんが消える——本人からは「一言も覚えていない」に見える。 */
@@ -1711,7 +1715,7 @@ function ChatHistory({
               className="fixed left-0 top-0 z-50 h-full w-72 max-w-[82vw] p-2"
               initial={{ x: "-100%" }}
               animate={{ x: 0 }}
-              exit={{ x: "-100%" }}
+              exit={{ x: "-100%", transition: { duration: 0.12, ease: "easeOut" } }}
               transition={{ type: "spring", stiffness: 320, damping: 32 }}
             >
               <div className="glass-silver flex h-full flex-col p-2">

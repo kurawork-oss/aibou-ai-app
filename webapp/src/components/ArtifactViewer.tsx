@@ -150,7 +150,7 @@ export default function ArtifactViewer({ meta, onClose }: { meta: ArtifactMeta; 
         className="fixed inset-0 z-[75] flex items-center justify-center bg-black/80 p-3 backdrop-blur-sm"
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
         <motion.div className="panel flex max-h-[92vh] w-full max-w-4xl flex-col"
-          initial={{ y: 24, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 24, opacity: 0 }}
+          initial={{ y: 24, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 24, opacity: 0, transition: { duration: 0.12, ease: "easeOut" } }}
           transition={{ type: "spring", stiffness: 320, damping: 30 }} onClick={(e) => e.stopPropagation()}>
           {/* Header */}
           <div className="flex items-center justify-between gap-2 border-b border-panel p-3">

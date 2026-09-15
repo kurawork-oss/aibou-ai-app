@@ -140,7 +140,7 @@ export default function Canvas({
         aria-label="作った物"
         initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: 24 }}
+        exit={{ opacity: 0, y: 24, transition: { duration: 0.12, ease: "easeOut" } }}
         transition={{ type: "spring", stiffness: 320, damping: 32 }}
         /* スマホは会話にかぶせる。PC（lg以上）は右半分に置いて、
            会話と並べて見られるようにする。 */

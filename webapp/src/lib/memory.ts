@@ -55,7 +55,57 @@ export interface MemoryItem extends Recallable {
 
 /* ── 置き場 ─────────────────────────────────────────────────────── */
 
+/**
+ * 開いた接続を、使い回す。
+ *
+ * これまでは読み書きのたびに開いて、終わったら閉じていた。作りとしては
+ * 素直だが、**開く所がいちばん高い**。実測で、空のデータベースでも
+ * 開くだけで 57ms かかる。記憶は会話を送るたびに引くので、その 57ms は
+ * まるごと「返事が始まるまでの待ち時間」に乗る。
+ *
+ * 開きっぱなしで困るのは、別のタブが版を上げたいときだけ。そのときは
+ * `onversionchange` が飛んでくるので、そこで閉じて手放す（次に要るとき
+ * 開き直す）。
+ */
+let shared: IDBDatabase | null = null;
+let opening: Promise<IDBDatabase | null> | null = null;
+
+/**
+ * 先に開けておく。
+ *
+ * 会話の画面が立ち上がったところで呼ぶ。開くのに 57〜70ms かかるので、
+ * 1通目を送る瞬間まで待つと、そのまま「返事が始まるまでの待ち時間」に
+ * 乗る。まだ誰も待っていないうちに済ませておく。
+ */
+export function warm(): void {
+  void openDb();
+}
+
+/** 手放す（版が変わったとき・テスト）。 */
+export function closeDb(): void {
+  try { shared?.close(); } catch { /* もう閉じている */ }
+  shared = null;
+  opening = null;
+}
+
 function openDb(): Promise<IDBDatabase | null> {
+  if (shared) return Promise.resolve(shared);
+  if (opening) return opening;
+  opening = rawOpen().then((db) => {
+    opening = null;
+    if (db) {
+      shared = db;
+      /* 別のタブが版を上げようとしたら、こちらは邪魔をしない。
+         掴んだままだと、向こうが永久に開けない（onblocked）。 */
+      db.onversionchange = () => closeDb();
+      db.onclose = () => { shared = null; };
+    }
+    return db;
+  });
+  return opening;
+}
+
+function rawOpen(): Promise<IDBDatabase | null> {
   return new Promise((resolve) => {
     try {
       if (typeof indexedDB === "undefined") return resolve(null);
@@ -131,7 +181,7 @@ export async function allRaw(): Promise<MemoryItem[]> {
   }
   const rows = await tx<MemoryItem[]>(db, "readonly",
     (s) => s.getAll() as IDBRequest<MemoryItem[]>);
-  db.close();
+  /* 閉じない（使い回す。closeDb() が要るときだけ手放す） */
   return rows || [];
 }
 
@@ -143,7 +193,7 @@ async function put(item: MemoryItem): Promise<boolean> {
     return true;
   }
   const ok = await tx(db, "readwrite", (s) => s.put(item));
-  db.close();
+  /* 閉じない（使い回す。closeDb() が要るときだけ手放す） */
   return ok !== null;
 }
 
@@ -235,7 +285,7 @@ export async function clearAll(): Promise<void> {
   const db = await openDb();
   if (!db) { fallback.clear(); return; }
   await tx(db, "readwrite", (s) => s.clear());
-  db.close();
+  /* 閉じない（使い回す。closeDb() が要るときだけ手放す） */
 }
 
 /**
@@ -276,7 +326,7 @@ async function prune(): Promise<void> {
   const db = await openDb();
   if (!db) { drop.forEach((d) => fallback.delete(d.id)); return; }
   for (const d of drop) await tx(db, "readwrite", (s) => s.delete(d.id));
-  db.close();
+  /* 閉じない（使い回す。closeDb() が要るときだけ手放す） */
 }
 
 /* ── 合流（サーバーと揃える） ───────────────────────────────────── */
