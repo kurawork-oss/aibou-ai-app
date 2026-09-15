@@ -43,6 +43,10 @@ LEVELS: Dict[str, int] = {
     "recall": 0,
     "web_search": 0,
     "web_read": 0,
+    # 押す・打ち込むところまでやれるが、行き先は外のページの中だけ。
+    # このアプリの中も、外のサービスも変わらない。ただし**連鎖**では
+    # web_read と同じ扱いにする（下の CHAIN_AFTER_EXTERNAL）。
+    "browser_visit": 0,
     "email_inbox": 0,
     "calendar_list": 0,
     "income_status": 0,
@@ -124,7 +128,7 @@ def level(tool: str) -> int:
 #: 1枚目は確認しない（「調べて」→検索→1枚読む、がいちばん普通の流れで、
 #: ここに確認を挟むと毎回止まる）。2枚目から聞く。聞く画面にはURLが出るので、
 #: 持ち出そうとしていれば、その場で見える。
-CHAIN_AFTER_EXTERNAL = {"web_read"}
+CHAIN_AFTER_EXTERNAL = {"web_read", "browser_visit"}
 
 
 def may_always_allow(tool: str, external_reads: int = 0) -> bool:

@@ -72,6 +72,8 @@ CAPABILITIES: List[dict] = [
      "tool": "web_search", "arg": "調べたいこと", "icon": "🔍"},
     {"cmd": "読む", "yomi": "よむ read url", "label": "ページを読む", "pack": "core",
      "tool": "web_read", "arg": "URL", "icon": "📖"},
+    {"cmd": "ブラウザ", "yomi": "ぶらうざ browser", "label": "ブラウザで開いて読む", "pack": "core",
+     "tool": "browser_visit", "arg": "URL", "icon": "🌐"},
     {"cmd": "覚えて", "yomi": "おぼえて remember", "label": "覚えておく", "pack": "core",
      "tool": "remember", "arg": "覚える内容", "icon": "🧠"},
     {"cmd": "思い出して", "yomi": "おもいだして recall", "label": "思い出す", "pack": "core",

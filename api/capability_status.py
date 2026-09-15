@@ -134,6 +134,13 @@ GROUPS: List[dict] = [
      "next": "自分のサーバーで動かしていて、必要な場合だけ ENABLE_SHELL=1 を設定します",
      "action": {"kind": "env", "name": "ENABLE_SHELL"}},
 
+    {"id": "browser", "name": "ブラウザでページを開いて読む・押す", "kind": "off",
+     "env": "ENABLE_BROWSER", "pack": "core", "tools": ["browser_visit"],
+     "why_missing": "メモリを多く使うため、既定で切ってあります",
+     "next": ("無料のRender（512MB）では、開いたページ1枚でAPIごと落ちることが"
+              "あります。余裕のある置き場なら ENABLE_BROWSER=1 で入ります"),
+     "action": {"kind": "env", "name": "ENABLE_BROWSER"}},
+
     {"id": "local_agent", "name": "パソコンの中を触る（ローカル相棒）",
      "kind": "off", "env": "LOCAL_AGENT_URL", "pack": "dev", "tools": [],
      "why_missing": "まだ用意していません（別プロセスとして作る予定）",

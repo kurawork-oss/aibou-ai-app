@@ -83,6 +83,13 @@ SCHEMAS: Dict[str, Dict[str, Any]] = {
     "web_read": {"fields": {
         "url": ("str", True, "読み取るページのURL"),
     }},
+    "browser_visit": {"fields": {
+        "url": ("str", True, "開くページのURL"),
+        "steps": ("list", False,
+                  '押す・打ち込む手順。例 [{"do":"click","target":"続きを読む"},'
+                  '{"do":"fill","target":"検索","value":"東京"}]。'
+                  'do は click / fill / select / press / wait のどれか'),
+    }},
 
     # ── つくる（AIbouの中に保存） ─────────────────────────────────
     "create_document": {"fields": {

@@ -21,6 +21,22 @@ WORKDIR /app
 COPY api/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
+# ── ブラウザ操作（仕様§24）。既定では入れない ──────────────────────
+#
+# 入れない理由は危なさではなく**大きさ**。playwright と Chromium で
+# 400MB近く増え、無料のRender（メモリ512MB）ではページ1枚でAPIごと
+# 落ちうる。要る人だけが入れられるようにしてある:
+#
+#   docker build --build-arg WITH_BROWSER=1 -f api/Dockerfile .
+#
+# 入れたうえで、実行時に ENABLE_BROWSER=1 を置くと使えるようになる。
+# 入れていない置き場では、自己診断（設定 → つなぐ）に理由が出る。
+ARG WITH_BROWSER=0
+RUN if [ "$WITH_BROWSER" = "1" ]; then \
+      pip install --no-cache-dir playwright \
+      && playwright install --with-deps chromium ; \
+    fi
+
 # アプリ本体（api/ の中身を /app へ）
 COPY api/ /app/
 

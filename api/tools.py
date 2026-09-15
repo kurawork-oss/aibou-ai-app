@@ -94,6 +94,11 @@ TOOL_DOCS: Dict[str, str] = {
         'Webを検索して最新情報の上位結果（タイトル/URL/要約）を得る / params: { "query": "検索したいこと" }',
     "web_read":
         '指定URLのページ本文を読み取る（記事や資料の要約に使う） / params: { "url": "https://example.com/article" }',
+    "browser_visit":
+        '本物のブラウザでページを開いて読む。web_read が「内容がありませんでした」と'
+        '返したページ（本文をJavaScriptで後から入れるページ）に使う。'
+        'stepsを渡すと、押す・打ち込むところまでやってから読む / params: '
+        '{ "url": "https://example.com", "steps": [{"do": "click", "target": "続きを読む"}] }',
     "generate_image":
         'プロンプトから画像を生成する（HOMEの生成物に保存される） / params: { "prompt": "夕焼けの富士山、油絵風" }',
     "draw_diagram":
@@ -784,6 +789,39 @@ def _do_web_search(params: dict) -> str:
     return untrusted.wrap("\n".join(lines), source="Web検索", kind=f"「{query}」の検索結果")
 
 
+def _do_browser_visit(params: dict) -> str:
+    """本物のブラウザで開いて読む。押す手順があればそこまでやる。
+
+    web_read との違いは「JavaScriptが走ったあとを見るか」だけ。重いので、
+    web_read で足りるページにはそちらを使わせる（catalog にそう書いてある）。
+    """
+    url = (params.get("url") or "").strip()
+    if not url:
+        return "URLが空です。"
+    steps = params.get("steps")
+    if isinstance(steps, dict):
+        steps = [steps]
+    try:
+        import browser as browser_mod
+        res = browser_mod.visit(url, steps if isinstance(steps, list) else None,
+                                int(params.get("max_chars") or browser_mod.MAX_CHARS))
+    except Exception as e:
+        return f"ブラウザを動かせませんでした：{e}"
+    if not res.get("ok"):
+        return f"開けませんでした：{res.get('error')}"
+    parts = []
+    if res.get("title"):
+        parts.append(f"【{res['title']}】{res.get('url', '')}")
+    for line in res.get("did") or []:
+        parts.append(f"（{line}）")
+    parts.append(res.get("text", ""))
+    links = res.get("links") or []
+    if links:
+        parts.append("押せるもの: " + " / ".join(
+            l["label"] for l in links[:12] if l.get("label")))
+    return "\n".join(parts)
+
+
 def _do_web_read(params: dict) -> str:
     """URLのページ本文を取得して返す。"""
     url = (params.get("url") or "").strip()
@@ -1068,6 +1106,7 @@ _DISPATCH = {
     "email_inbox": _do_email_inbox,
     "web_search": _do_web_search,
     "web_read": _do_web_read,
+    "browser_visit": _do_browser_visit,
     "generate_image": _do_generate_image,
     "draw_diagram": _do_draw_diagram,
     "schedule_add": _do_schedule_add,
