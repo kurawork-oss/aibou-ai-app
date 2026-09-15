@@ -12,6 +12,7 @@
  */
 
 import { AnimatePresence, motion } from "framer-motion";
+import * as alwaysAllow from "@/lib/alwaysAllow";
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ClipboardEvent } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -408,6 +409,7 @@ function AgentConsole({
       [],
       settings.name,
       approval,
+      alwaysAllow.allowed(),
       (ev: AgentEvent) => {
         switch (ev.phase) {
           case "prepare":

@@ -199,7 +199,8 @@ def _build_convo(system_prompt: str, history, instruction: str) -> str:
     return "\n".join(lines)
 
 
-def run_stream(instruction: str, history=None, name: str = "AIbou", approval: bool = False):
+def run_stream(instruction: str, history=None, name: str = "AIbou", approval: bool = False,
+               allowed=None):
     """エージェントを実行し、進捗イベントを逐次 yield するジェネレータ。
 
     「作った物の置き場」を、この実行のあいだだけ開ける。途中で読むのを
@@ -208,12 +209,13 @@ def run_stream(instruction: str, history=None, name: str = "AIbou", approval: bo
     """
     token = present.begin()
     try:
-        yield from _run_stream(instruction, history, name, approval)
+        yield from _run_stream(instruction, history, name, approval, allowed)
     finally:
         present.end(token)
 
 
-def _run_stream(instruction: str, history=None, name: str = "AIbou", approval: bool = False):
+def _run_stream(instruction: str, history=None, name: str = "AIbou", approval: bool = False,
+                allowed=None):
     """approval=True のとき、機微なツール（SENSITIVE_TOOLS）は実行せず 'approval'
     イベントを出して停止する（人間が承認したら /agent/execute で実行する）。"""
     instruction = (instruction or "").strip()
@@ -298,12 +300,13 @@ def _run_stream(instruction: str, history=None, name: str = "AIbou", approval: b
         # 実行の前に人に聞くべきか。段階3（送る・投稿する・お金が動く）は
         # 承認モードを切っていても必ず聞く。設定の組み合わせで
         # 「黙ってメールが飛んだ」が起きないようにする。
-        if risk.needs_confirmation(tool, approval, external_reads):
+        if risk.needs_confirmation(tool, approval, external_reads, allowed or ()):
             info = risk.describe(tool, external_reads)
             yield stamp({"phase": "approval", "step": step, "tool": tool,
                          "params": params, "note": (preface or "").strip(),
                          "level": info["level"], "level_label": info["label"],
                          "why": info["why"], "chained": info.get("chained", False),
+                         "may_always": info["may_always"],
                          "always_confirm": info["always_confirm"]})
             yield stamp({"phase": "done", "steps": step - 1, "awaiting_approval": True})
             return

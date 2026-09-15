@@ -607,6 +607,14 @@ export interface AgentEvent {
   /** 承認モードを切っていても必ず聞く操作か。 */
   always_confirm?: boolean;
   /**
+   * 「この操作はいつも許可」を出してよいか。
+   *
+   * 決めるのはサーバー（api/risk.py）。段階3（取り返せない）と、外の
+   * ページを読んだ後の連鎖には出さない——毎回聞くことが、その2つの
+   * 中身そのものなので。
+   */
+  may_always?: boolean;
+  /**
    * 危なさではなく「連鎖」で聞いているか。
    *
    * すでに外のページを読んだ後は、次に読むURLがそのページに書かれていた
@@ -641,6 +649,13 @@ export function agentActStream(
   history: ChatTurn[],
   name: string | undefined,
   approval: boolean,
+  /**
+   * 本人が「いつも許可」を押した道具。
+   *
+   * ここに何を入れても、サーバーは段階3（送る・投稿する・お金が動く）と、
+   * 外のページを読んだ後の連鎖を必ず聞いてくる（api/risk.py）。
+   */
+  allow: string[],
   onEvent: (ev: AgentEvent) => void,
   onDone: (error?: string) => void,
 ): StreamHandlers {
@@ -655,7 +670,7 @@ export function agentActStream(
       const res = await fetch(url, {
         method: "POST",
         headers: authHeaders({ "Content-Type": "application/json", Accept: "text/event-stream" }),
-        body: JSON.stringify({ instruction, history, name, approval }),
+        body: JSON.stringify({ instruction, history, name, approval, allow }),
         signal: controller.signal,
       });
       if (!res.ok || !res.body) { onDone(`Agent failed (${res.status})`); return; }

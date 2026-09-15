@@ -35,6 +35,7 @@ import {
   type MadeItem,
 } from "@/lib/api";
 import * as facts from "@/lib/facts";
+import * as alwaysAllow from "@/lib/alwaysAllow";
 import CommandPalette, { readHashInput } from "@/components/CommandPalette";
 import Canvas, { pushItem } from "@/components/Canvas";
 import { PACKS_CHANGED } from "@/lib/shell";
@@ -80,6 +81,14 @@ interface PendingAct {
   alwaysConfirm?: boolean;
   /** 危なさではなく、外のページを読んだ後の連鎖で聞いている。 */
   chained?: boolean;
+  /**
+   * 「この操作はいつも許可」を出してよいか。
+   *
+   * 決めるのはサーバー（api/risk.py）。段階3（取り返せない）と、外の
+   * ページを読んだ後の連鎖には出さない——毎回聞くことが、その2つの
+   * 中身そのものだから。
+   */
+  mayAlways?: boolean;
 }
 
 /**
@@ -594,6 +603,7 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
             m.id === assistantId ? { ...m, steps: fn(m.steps ?? []), pending: false } : m)));
         cancelRef.current = agentActStream(
           text, history, settings.name || undefined, approval,
+          alwaysAllow.allowed(),
           (ev: AgentEvent) => {
             switch (ev.phase) {
               case "prepare":
@@ -633,6 +643,7 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
                       level: ev.level, levelLabel: ev.level_label, why: ev.why,
                       alwaysConfirm: ev.always_confirm,
                       chained: ev.chained,
+                      mayAlways: ev.may_always,
                     } }
                   : m)));
                 break;
@@ -1156,6 +1167,10 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
               }
               onApprove={m.await ? () => void approveAct(m.id) : undefined}
               onReject={m.await ? () => rejectAct(m.id) : undefined}
+              onAlways={m.await ? () => {
+                alwaysAllow.allow(m.await!.tool, m.await!.levelLabel);
+                void approveAct(m.id);
+              } : undefined}
             />
           ))}
         </AnimatePresence>
@@ -1740,11 +1755,13 @@ function MicIcon() {
   );
 }
 
-function MessageBubble({ message, onRegenerate, onApprove, onReject }: {
+function MessageBubble({ message, onRegenerate, onApprove, onReject, onAlways }: {
   message: Message;
   onRegenerate?: () => void;
   onApprove?: () => void;
   onReject?: () => void;
+  /** 「いつも許可」して、そのまま実行する。 */
+  onAlways?: () => void;
 }) {
   const isUser = message.role === "user";
   const settled = !isUser && !message.pending && (message.content.trim().length > 0 || message.error);
@@ -1866,7 +1883,23 @@ function MessageBubble({ message, onRegenerate, onApprove, onReject }: {
                 className="rounded-forge border border-panel px-3 py-1 text-[10px] text-muted transition hover:text-fg-strong label-mono">
                 やめる
               </button>
+              {/* 同じ確認が何度も出ると、読まずに押す癖がつく。そうなると
+                  本当に読んでほしい確認（送る・お金が動く）も素通りする。
+                  だから確認を減らせる所では減らす——ただし段階3と、外の
+                  ページを読んだ後には**出さない**（サーバーが決める）。 */}
+              {message.await.mayAlways && onAlways && (
+                <button type="button" onClick={onAlways}
+                  className="rounded-forge border border-panel px-3 py-1 text-[10px] text-muted transition hover:text-fg-strong label-mono">
+                  いつも許可
+                </button>
+              )}
             </div>
+            {message.await.mayAlways && (
+              <p className="mt-1 text-[10px] leading-relaxed text-muted">
+                「いつも許可」は、この端末でこの操作だけを聞かなくします。
+                設定 →「基本」から戻せます。
+              </p>
+            )}
           </div>
         )}
 

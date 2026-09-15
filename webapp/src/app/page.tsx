@@ -25,6 +25,7 @@ import ModelRouter from "@/components/ModelRouter";
 import HfModels from "@/components/HfModels";
 import AppearanceSettings from "@/components/AppearanceSettings";
 import PushSettings from "@/components/PushSettings";
+import AlwaysAllowSettings from "@/components/AlwaysAllowSettings";
 import MemorySettings from "@/components/MemorySettings";
 import { syncOnBoot } from "@/lib/memorySync";
 import { CORE_TYPES, readCoreType, setCoreType, type CoreType } from "@/lib/coreType";
@@ -1009,6 +1010,7 @@ function SettingsPanel({
               <ModelRouter />
               <AiProviderSettings />
               <PushSettings />
+              <AlwaysAllowSettings />
             </>
           )}
 

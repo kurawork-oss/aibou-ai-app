@@ -610,6 +610,10 @@ class AgentActRequest(BaseModel):
     history: Optional[List[ChatMessage]] = None
     name: Optional[str] = None       # アシスタント名（既定 "AIbou"）
     approval: bool = False           # 機微なツールを実行前に承認させる
+    # 本人が「この操作はいつも許可」を押した道具。
+    # ここに何を入れても、段階3（送る・投稿する・お金が動く）と、外の
+    # ページを読んだ後の連鎖は**必ず聞く**（risk.needs_confirmation）。
+    allow: List[str] = []
 
 
 class AgentExecuteRequest(BaseModel):
@@ -1351,7 +1355,8 @@ async def agent_act(req: AgentActRequest, _auth: None = Depends(require_auth)):
 
     async def event_stream():
         loop = asyncio.get_event_loop()
-        gen = agent.run_stream(req.instruction, history, req.name or "AIbou", req.approval)
+        gen = agent.run_stream(req.instruction, history, req.name or "AIbou", req.approval,
+                               req.allow or [])
 
         # 1手ごとに別のワーカースレッドへ移る。作った物の置き場（present）は
         # スレッドではなく**この文脈**に持たせて、手をまたいでも同じ箱を

