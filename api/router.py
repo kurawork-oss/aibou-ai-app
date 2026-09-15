@@ -86,6 +86,10 @@ TASKS: Dict[str, List[str]] = {
     "private": ["ollama", "gemini", "huggingface"],
     # 画像を読む。いまは Gemini だけ。
     "vision": ["gemini"],
+    # 会話から記憶を作る。短い仕事なので無料枠で足りる。
+    # ここを分けてあるのは、`ROUTE_FACTS=ollama` と書けば
+    # 「記憶を作るところだけは外へ出さない」ができるようにするため。
+    "facts": ["gemini", "huggingface"],
 }
 
 DEFAULT_TASK = "chat"

@@ -3287,3 +3287,39 @@ export async function memorySync(
            pushed: d.pushed ?? 0, pulled: d.pulled ?? 0,
            items: Array.isArray(d.items) ? d.items : [], reason: d.reason };
 }
+
+export interface ExtractedFact {
+  text: string;
+  importance: number;
+}
+
+/**
+ * POST /memory/extract — 会話から「後で効く事実」を取り出す。
+ *
+ * **返事が終わったあとの裏方**なので、失敗しても黙って空を返す。
+ * ここで画面に何か出すと、利用者にとっては「頼んでいない処理が失敗した」
+ * という報せにしかならない。
+ */
+export async function memoryExtract(
+  turns: { role: string; content: string }[], known: string[] = [],
+  signal?: AbortSignal,
+): Promise<ExtractedFact[]> {
+  if (!API_URL) return [];
+  try {
+    const res = await fetch(`${API_URL}/memory/extract`, {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ turns, known }),
+      signal,
+    });
+    if (!res.ok) return [];
+    const d = (await res.json().catch(() => ({}))) as { facts?: unknown };
+    if (!Array.isArray(d.facts)) return [];
+    return d.facts
+      .map((f) => (f && typeof f === "object" ? f : { text: String(f) }) as Record<string, unknown>)
+      .map((f) => ({ text: String(f.text ?? "").trim(), importance: Number(f.importance) || 0 }))
+      .filter((f) => f.text.length > 0);
+  } catch {
+    return [];
+  }
+}

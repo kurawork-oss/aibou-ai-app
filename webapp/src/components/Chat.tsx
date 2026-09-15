@@ -34,6 +34,7 @@ import {
   type ChatTurn, type AgentEvent, type CommandItem, type CommandResult,
   type MadeItem,
 } from "@/lib/api";
+import * as facts from "@/lib/facts";
 import CommandPalette, { readHashInput } from "@/components/CommandPalette";
 import Canvas, { pushItem } from "@/components/Canvas";
 import { PACKS_CHANGED } from "@/lib/shell";
@@ -275,6 +276,11 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
   const [historyOpen, setHistoryOpen] = useState(false);
 
   useEffect(() => { setConvos(loadConvos()); }, []);
+
+  /* 前に開いていたときに、記憶を作りきれなかったぶんを拾う。
+     「だまってから取りに行く」決まりなので、その手前で閉じられると
+     溜めたぶんが消える——本人からは「一言も覚えていない」に見える。 */
+  useEffect(() => { facts.resume(); }, []);
 
   // 履歴はこれまで端末の中（localStorage）にしか無かったので、
   // 端末を変えると全部消えていた。自分のDBにも残し、開いたときに取り込む。
@@ -580,6 +586,9 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
       // 実行過程を同じ吹き出しの中に出すので、会話の流れが途切れない。
       if (agentMode) {
         actedRef.current = false;
+        /* 最後の返事。setMessages の外で持つ——更新関数の中で読もうとすると、
+           React が更新をまとめる（あるいは2度呼ぶ）ぶんだけ取り違える。 */
+        let agentFinal = "";
         const setSteps = (fn: (prev: AgentStep[]) => AgentStep[]) =>
           setMessages((prev) => prev.map((m) => (
             m.id === assistantId ? { ...m, steps: fn(m.steps ?? []), pending: false } : m)));
@@ -645,6 +654,7 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
                   { kind: "error", detail: ev.detail || "エラー" }]);
                 break;
               case "final":
+                agentFinal = ev.text || "";
                 setSteps((s) => s.filter((x) => x.kind !== "thinking"));
                 setMessages((prev) => prev.map((m) => (
                   m.id === assistantId ? { ...m, content: ev.text || "", pending: false } : m)));
@@ -673,6 +683,11 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
               if (me?.content?.trim()) void speakReply(me.content);
               return done;
             });
+            /* このやりとりを、記憶を作るほうへ渡す。**終わってから**やる
+               ——返事の前に1往復足すと、そのぶんまるごと「返事が始まる
+               までの待ち時間」になる。 */
+            facts.note("user", text);
+            if (agentFinal.trim()) facts.note("assistant", agentFinal);
           },
         ).cancel;
         return;
@@ -744,6 +759,11 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
           // Mark complete and speak whatever is still unspoken.
           setMessages((prev) => prev.map((m) => (m.id === assistantId ? { ...m, pending: false } : m)));
           if (acc.trim()) flushSpeech(acc);
+          /* このやりとりを、記憶を作るほうへ渡す。**終わってから**やる
+             ——返事の前に1往復足すと、そのぶんまるごと「返事が始まる
+             までの待ち時間」になる。 */
+          facts.note("user", text);
+          if (acc.trim()) facts.note("assistant", acc);
         },
         "/chat",
         {

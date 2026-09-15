@@ -20,6 +20,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import * as memory from "@/lib/memory";
 import { recall } from "@/lib/recall";
 import { secretReason } from "@/lib/secretsGuard";
+import * as facts from "@/lib/facts";
 import {
   forgetSyncMark, lastSyncedAt, syncBlockedReason, syncMemory, type SyncOutcome,
 } from "@/lib/memorySync";
@@ -39,6 +40,10 @@ export default function MemorySettings() {
   const [note, setNote] = useState("");
   const [sync, setSync] = useState<SyncOutcome | null>(null);
   const [syncing, setSyncing] = useState(false);
+  /* 既定は「入」。ただし localStorage は描き出しの時点では読めない
+     （サーバー側では存在しない）ので、最初の描画のあとで合わせる。 */
+  const [autoLearn, setAutoLearn] = useState(true);
+  useEffect(() => { setAutoLearn(facts.enabled()); }, []);
   const blocked = syncBlockedReason();
 
   /**
@@ -160,6 +165,24 @@ export default function MemorySettings() {
           </span>
         )}
       </p>
+
+      {/* 会話から自動で覚えるか。
+          ここを画面に出していないと、**言った覚えのないことが記憶に増える**
+          ことになる。切れる場所と、どこから来たかの印（· AI）は対で要る。 */}
+      <label className="mb-2 flex items-start gap-2 text-[11px] leading-relaxed text-muted">
+        <input
+          type="checkbox"
+          checked={autoLearn}
+          onChange={(e) => { facts.setEnabled(e.target.checked); setAutoLearn(e.target.checked); }}
+          className="mt-0.5 shrink-0"
+        />
+        <span>
+          <b className="text-fg-strong">会話から自動で覚える</b>
+          {" "}— 話の中に出てきた「後で効くこと」（好み・予定・家族のことなど）を、
+          返事が終わったあとに拾って残します。拾った物には <span className="label-mono">· AI</span> と
+          付くので、消せます。
+        </span>
+      </label>
 
       {/* 足す */}
       <div className="mb-2 flex gap-1.5">

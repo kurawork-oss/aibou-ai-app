@@ -43,6 +43,7 @@ import capability_status
 import router
 import code_agent
 import evolve
+import facts
 import fileread
 import forge
 import gh
@@ -513,6 +514,16 @@ class MemoryItem(BaseModel):
     createdAt: int = 0
     updatedAt: int = 0
     deletedAt: Optional[int] = None
+
+
+class FactsExtractRequest(BaseModel):
+    """会話のかたまりから、覚えておく価値のある事実を取り出してもらう。
+
+    `known` はすでに端末が持っている記憶。同じことを何度も入れないために
+    渡す（渡さなくても動くが、同じ事実が少しずつ言い回しを変えて増える）。
+    """
+    turns: List[dict] = []
+    known: List[str] = []
 
 
 class MemorySyncRequest(BaseModel):
@@ -1492,6 +1503,32 @@ async def memory_sync(req: MemorySyncRequest, _auth: None = Depends(require_auth
     items = [i.model_dump() for i in (req.items or [])]
     return await asyncio.get_event_loop().run_in_executor(
         None, lambda: memory_sync_store.sync(int(req.since or 0), items))
+
+
+@app.post("/memory/extract")
+async def memory_extract(req: FactsExtractRequest, _auth: None = Depends(require_auth)):
+    """会話から「後で効く事実」を取り出す（保存はしない）。
+
+    **保存はここではしない。** 返すだけにしてある理由が2つある。
+
+      1. 端末の記憶（IndexedDB）が、繋いでいない人にとっては唯一の記憶。
+         入れる場所を1つ（端末）に保って、合流で上げるほうがずれない。
+      2. 取り出した文は**AIが書いた文**なので、本人が見て消せる所に
+         置きたい。サーバーに直接入れると、端末の画面に出ないまま増える。
+
+    `require_storage` を付けていないのも同じ理由——保存先が無い人にも
+    この機能は効く。
+    """
+    turns = [t for t in (req.turns or []) if isinstance(t, dict)]
+    if not turns:
+        return {"ok": True, "facts": []}
+    if llm.active_provider() == "none":
+        # 会話そのものが動いていない状態。ここで騒いでも仕方がないので、
+        # 黙って0件を返す（呼ぶ側は返事のあとの裏方）。
+        return {"ok": True, "facts": [], "why": "AI未設定"}
+    items = await asyncio.get_event_loop().run_in_executor(
+        None, lambda: facts.extract(turns, req.known or []))
+    return {"ok": True, "facts": items}
 
 
 @app.get("/income/summary")
