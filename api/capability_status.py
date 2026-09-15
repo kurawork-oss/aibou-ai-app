@@ -141,11 +141,14 @@ GROUPS: List[dict] = [
               "あります。余裕のある置き場なら ENABLE_BROWSER=1 で入ります"),
      "action": {"kind": "env", "name": "ENABLE_BROWSER"}},
 
-    {"id": "local_agent", "name": "パソコンの中を触る（ローカル相棒）",
-     "kind": "off", "env": "LOCAL_AGENT_URL", "pack": "dev", "tools": [],
-     "why_missing": "まだ用意していません（別プロセスとして作る予定）",
-     "next": "いまは Web からできる範囲で代用してください",
-     "action": {"kind": "none"}},
+    {"id": "local_agent", "name": "パソコンの中を触る（手元の相棒）",
+     "kind": "local_agent", "pack": "core",
+     "tools": ["local_list", "local_read", "local_write", "local_append",
+               "obsidian_note"],
+     "why_missing": "手元のパソコンで相棒を動かしていません",
+     "next": ("設定 → つなぐ →「手元のパソコン」で合言葉を作り、"
+              "パソコンで `python aibou_local.py` を動かします"),
+     "action": {"kind": "local_agent"}},
 ]
 
 
@@ -171,6 +174,12 @@ def _oauth_status(provider: str) -> dict:
 def _packs_on(is_owner: bool) -> Set[str]:
     import capabilities
     return set(capabilities.enabled_packs(is_owner))
+
+
+def _local_agent_status() -> dict:
+    import config
+    import localagent
+    return localagent.status(config.current_user_id() or "local")
 
 
 def _env_on(name: str) -> bool:
@@ -256,7 +265,23 @@ def _judge(g: dict, packs: Set[str]) -> dict:
                            "path": f"/connect/{g['provider']}"})
         return out
 
-    # ⑤ 繋ぐ物が無い（端末とサーバーだけで完結する）
+    # ⑤ 手元のパソコンで動く相棒（仕様§29〜§31）
+    #
+    # 「合言葉を作った」と「いま動いている」は別のこと。作っただけで
+    # 「使えます」と出すと、頼んだあとで無言のまま返事が来なくなる。
+    if g["kind"] == "local_agent":
+        st = _local_agent_status()
+        if st.get("online"):
+            out.update(status="connected", connected=True,
+                       account=st.get("name") or "")
+            return out
+        out.update(status="not_connected", connected=False,
+                   why=st.get("why") or g.get("why_missing", ""),
+                   next=st.get("next") or g.get("next", ""),
+                   action=g.get("action", {"kind": "none"}))
+        return out
+
+    # ⑥ 繋ぐ物が無い（端末とサーバーだけで完結する）
     out.update(status="available", connected=True)
     return out
 

@@ -83,6 +83,23 @@ SCHEMAS: Dict[str, Dict[str, Any]] = {
     "web_read": {"fields": {
         "url": ("str", True, "読み取るページのURL"),
     }},
+    "local_list": {"fields": {
+        "path": ("str", False, "フォルダ（相棒が許したフォルダからの相対）"),
+    }},
+    "local_read": {"fields": {
+        "path": ("str", True, "ファイル（相棒が許したフォルダからの相対）"),
+    }},
+    "local_write": {"fields": {
+        "path": ("str", True, "書き先（相棒が許したフォルダからの相対）"),
+        "text": ("str", True, "本文"),
+    }},
+    "local_append": {"fields": {
+        "path": ("str", True, "書き足す先"),
+        "text": ("str", True, "足す本文"),
+    }},
+    "obsidian_note": {"fields": {
+        "text": ("str", True, "今日の日誌に足す本文"),
+    }},
     "browser_visit": {"fields": {
         "url": ("str", True, "開くページのURL"),
         "steps": ("list", False,

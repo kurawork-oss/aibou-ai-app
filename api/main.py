@@ -60,8 +60,10 @@ import inbox as inbox_mod
 import hfhub
 import imagegen
 import income
+import keepalive
 import keepalive as keepalive_mod
 import keychain
+import localagent
 import life
 import llm
 import lp as lp_mod
@@ -312,15 +314,21 @@ async def use_own_database(user_id: str = Depends(current_user),
     if not user_id:
         yield ""
         return
-    client = tenancy.client_for(user_id)
-    if client is None and is_owner_claims(claims):
-        yield user_id            # 差し替えない = サーバーの既定DBのまま
-        return
-    token = config.bind_request_client(client)
+    # 「いま誰のリクエストか」を、道具の側からも引けるようにしておく。
+    # DBを使わない機能（手元のパソコンで動く相棒）にも要る。
+    who = config.bind_request_user(user_id)
     try:
-        yield user_id
+        client = tenancy.client_for(user_id)
+        if client is None and is_owner_claims(claims):
+            yield user_id        # 差し替えない = サーバーの既定DBのまま
+            return
+        token = config.bind_request_client(client)
+        try:
+            yield user_id
+        finally:
+            config.reset_request_client(token)
     finally:
-        config.reset_request_client(token)
+        config.reset_request_user(who)
 
 
 async def require_storage(_db: str = Depends(use_own_database)) -> None:
@@ -1534,6 +1542,67 @@ async def memory_extract(req: FactsExtractRequest, _auth: None = Depends(require
     items = await asyncio.get_event_loop().run_in_executor(
         None, lambda: facts.extract(turns, req.known or []))
     return {"ok": True, "facts": items}
+
+
+# ── 手元のパソコンで動く相棒（仕様§29〜§31） ──────────────────────
+#
+# 向きに注意。**手元から取りに来る**。サーバーが手元を呼びに行くのではない
+# （家のパソコンはルーターの内側にあって、外からは呼べない）。
+
+class LocalPairRequest(BaseModel):
+    name: str = ""
+
+
+class LocalResultRequest(BaseModel):
+    job_id: str
+    result: dict = Field(default_factory=dict)
+
+
+async def _local_caller(x_local_token: Optional[str] = Header(default=None)) -> str:
+    """合言葉から、どの人の相棒かを引く。
+
+    ここは**ふつうの通行証（require_auth）を通さない**。手元の相棒は
+    ログイン画面を持たないので、合言葉だけで名乗る。そのぶん、合言葉が
+    無効なら何も返さない。
+    """
+    user_id = localagent.whoami((x_local_token or "").strip())
+    if not user_id:
+        raise HTTPException(status_code=401, detail="合言葉が違います")
+    return user_id
+
+
+@app.post("/local/pair")
+async def local_pair(req: LocalPairRequest, _auth: None = Depends(require_auth),
+                     user_id: str = Depends(current_user)):
+    """手元のパソコン用の合言葉を作る。**返すのはこの1回だけ。**"""
+    return localagent.pair(user_id or "local", req.name)
+
+
+@app.post("/local/unpair")
+async def local_unpair(_auth: None = Depends(require_auth),
+                       user_id: str = Depends(current_user)):
+    return localagent.unpair(user_id or "local")
+
+
+@app.get("/local/status")
+async def local_status(_auth: None = Depends(require_auth),
+                       user_id: str = Depends(current_user)):
+    """繋がっているか。「たぶん繋がっている」とは言わない。"""
+    return localagent.status(user_id or "local")
+
+
+@app.get("/local/jobs")
+async def local_jobs(wait: float = 25.0, user_id: str = Depends(_local_caller)):
+    """手元の相棒が「仕事ある？」と聞きに来る所。無ければ待つ。"""
+    job = await asyncio.get_event_loop().run_in_executor(
+        None, lambda: localagent.take(user_id, wait))
+    return {"ok": True, "job": job}
+
+
+@app.post("/local/result")
+async def local_result(req: LocalResultRequest, user_id: str = Depends(_local_caller)):
+    """手元の相棒が結果を持ってくる所。"""
+    return localagent.deliver(user_id, req.job_id, req.result)
 
 
 @app.get("/income/summary")

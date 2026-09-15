@@ -312,6 +312,32 @@ def reset_request_client(token) -> None:
         pass
 
 
+# ── いま誰のリクエストか ────────────────────────────────────────────
+#
+# DBの差し替えだけでは足りない所が出てきた。手元のパソコンで動く相棒
+# （localagent.py）は Supabase を使わないのに、「誰の相棒か」は要る。
+# ここに置くのは**名前だけ**で、鍵も本人確認の材料も入れない
+# （入れると、道具の側から本人になりすませることになる）。
+_request_user: contextvars.ContextVar = contextvars.ContextVar(
+    "request_user_id", default="")
+
+
+def bind_request_user(user_id: str) -> object:
+    return _request_user.set(str(user_id or ""))
+
+
+def reset_request_user(token) -> None:
+    try:
+        _request_user.reset(token)
+    except Exception:
+        pass
+
+
+def current_user_id() -> str:
+    """このリクエストの利用者。特定できなければ空文字。"""
+    return _request_user.get() or ""
+
+
 def storage_is_bound() -> bool:
     """このリクエストに「保存先の差し替え」が入っているか。
 

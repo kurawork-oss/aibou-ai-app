@@ -94,6 +94,20 @@ TOOL_DOCS: Dict[str, str] = {
         'Webを検索して最新情報の上位結果（タイトル/URL/要約）を得る / params: { "query": "検索したいこと" }',
     "web_read":
         '指定URLのページ本文を読み取る（記事や資料の要約に使う） / params: { "url": "https://example.com/article" }',
+    "local_list":
+        '手元のパソコンの、決めたフォルダの中身を一覧する（相棒を動かしている場合） / '
+        'params: { "path": "メモ" }',
+    "local_read":
+        '手元のパソコンのテキストファイルを読む / params: { "path": "メモ/買い物.md" }',
+    "local_write":
+        '手元のパソコンにテキストファイルを書く（元の内容は .bak に残る） / '
+        'params: { "path": "メモ/下書き.md", "text": "本文" }',
+    "local_append":
+        '手元のパソコンのファイルの末尾に足す。Obsidianの日誌のように'
+        '「消さずに積む」物に使う / params: { "path": "日誌/2026-09-15.md", "text": "本文" }',
+    "obsidian_note":
+        'Obsidianの日誌（今日の日付のノート）に書き足す。vaultの場所は相棒側で'
+        '決めてある / params: { "text": "書き足す内容" }',
     "browser_visit":
         '本物のブラウザでページを開いて読む。web_read が「内容がありませんでした」と'
         '返したページ（本文をJavaScriptで後から入れるページ）に使う。'
@@ -789,6 +803,77 @@ def _do_web_search(params: dict) -> str:
     return untrusted.wrap("\n".join(lines), source="Web検索", kind=f"「{query}」の検索結果")
 
 
+def _local(kind: str, params: dict, timeout: float = 60.0) -> dict:
+    """手元のパソコンの相棒に頼む。
+
+    誰の相棒かは**リクエストの文脈**から引く（config.current_user_id）。
+    道具の引数で渡させると、他人の相棒を名指しできることになる。
+    """
+    import config as _config
+    import localagent
+    return localagent.run(_config.current_user_id() or "local", kind, params, timeout)
+
+
+def _local_say(got: dict, done: str) -> str:
+    """結果を人の言葉にする。**できなかったときは、できたと言わない。**"""
+    if not got.get("ok"):
+        why = got.get("error") or "手元のパソコンから返事がありませんでした"
+        nxt = got.get("next") or ""
+        return f"{why}{'。' + nxt if nxt else ''}"
+    return got.get("text") or got.get("message") or done
+
+
+def _do_local_list(params: dict) -> str:
+    got = _local("list", {"path": (params.get("path") or "").strip()})
+    if not got.get("ok"):
+        return _local_say(got, "")
+    items = got.get("items") or []
+    if not items:
+        return "そのフォルダは空でした。"
+    return "\n".join(f"{i.get('name')}{'/' if i.get('dir') else ''}" for i in items[:200])
+
+
+def _do_local_read(params: dict) -> str:
+    path = (params.get("path") or "").strip()
+    if not path:
+        return "どのファイルか分かりません。"
+    got = _local("read", {"path": path})
+    if not got.get("ok"):
+        return _local_say(got, "")
+    # 手元のファイルの中身も、**指示ではない**。包んでから渡す。
+    import untrusted
+    return untrusted.wrap(got.get("text") or "", source=path, kind="手元のファイル")
+
+
+def _do_local_write(params: dict) -> str:
+    path = (params.get("path") or "").strip()
+    if not path:
+        return "どこに書くのか分かりません。"
+    got = _local("write", {"path": path, "text": params.get("text") or ""})
+    return _local_say(got, f"{path} に書きました。")
+
+
+def _do_local_append(params: dict) -> str:
+    path = (params.get("path") or "").strip()
+    if not path:
+        return "どこに書き足すのか分かりません。"
+    got = _local("append", {"path": path, "text": params.get("text") or ""})
+    return _local_say(got, f"{path} に書き足しました。")
+
+
+def _do_obsidian_note(params: dict) -> str:
+    """Obsidianの日誌に足す（仕様§26）。
+
+    日付とvaultの場所は**相棒側が決める**。サーバーから絶対パスを渡すと、
+    サーバーが乗っ取られたときにパソコンのどこへでも書けることになる。
+    """
+    text = (params.get("text") or "").strip()
+    if not text:
+        return "書き足す内容がありません。"
+    got = _local("append", {"vault": "daily", "text": text})
+    return _local_say(got, "今日の日誌に書き足しました。")
+
+
 def _do_browser_visit(params: dict) -> str:
     """本物のブラウザで開いて読む。押す手順があればそこまでやる。
 
@@ -1106,7 +1191,26 @@ _DISPATCH = {
     "email_inbox": _do_email_inbox,
     "web_search": _do_web_search,
     "web_read": _do_web_read,
+    "local_list":
+        '手元のパソコンの、決めたフォルダの中身を一覧する（相棒を動かしている場合） / '
+        'params: { "path": "メモ" }',
+    "local_read":
+        '手元のパソコンのテキストファイルを読む / params: { "path": "メモ/買い物.md" }',
+    "local_write":
+        '手元のパソコンにテキストファイルを書く（元の内容は .bak に残る） / '
+        'params: { "path": "メモ/下書き.md", "text": "本文" }',
+    "local_append":
+        '手元のパソコンのファイルの末尾に足す。Obsidianの日誌のように'
+        '「消さずに積む」物に使う / params: { "path": "日誌/2026-09-15.md", "text": "本文" }',
+    "obsidian_note":
+        'Obsidianの日誌（今日の日付のノート）に書き足す。vaultの場所は相棒側で'
+        '決めてある / params: { "text": "書き足す内容" }',
     "browser_visit": _do_browser_visit,
+    "local_list": _do_local_list,
+    "local_read": _do_local_read,
+    "local_write": _do_local_write,
+    "local_append": _do_local_append,
+    "obsidian_note": _do_obsidian_note,
     "generate_image": _do_generate_image,
     "draw_diagram": _do_draw_diagram,
     "schedule_add": _do_schedule_add,

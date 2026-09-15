@@ -1,0 +1,404 @@
+"""
+手元のパソコンで動く相棒（localagent.py + agent_local/aibou_local.py）。
+
+いちばん守りたいこと
+--------------------
+この機能は、**クラウドのAIにパソコンの中を触らせる**もの。ここが破られると、
+ほかで何をしていても意味が無い。
+
+  ・許したフォルダの外へ出られないか（`..` とシンボリックリンク）
+  ・他人の相棒に仕事を頼めないか
+  ・消えないか（上書きで元が消えないか）
+  ・切ってある物（開く・画面を撮る）が動かないか
+
+「繋がっていないときに黙らないか」も見る。相棒が止まっているのに
+「書いておきました」と言うのが、この機能でいちばん困る嘘になる。
+"""
+
+import os
+import sys
+import threading
+import time
+
+import pytest
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "agent_local"))
+
+import localagent
+
+
+@pytest.fixture(autouse=True)
+def clean():
+    localagent.reset()
+    yield
+    localagent.reset()
+
+
+# ── つなぐ ──────────────────────────────────────────────────────────
+
+def test_the_token_is_shown_once_and_not_stored_as_is():
+    """漏れたらそのままパソコンの中を取りに行ける物なので、そのままは置かない。"""
+    got = localagent.pair("u1", "しごと用")
+    token = got["token"]
+    assert len(token) > 20
+    # 保管してあるのは照合用の形だけ
+    stored = localagent._store.devices["u1"]["token_hash"]
+    assert token not in stored
+    assert localagent.whoami(token) == "u1"
+
+
+def test_a_wrong_token_names_nobody():
+    localagent.pair("u1")
+    assert localagent.whoami("でたらめ") == ""
+    assert localagent.whoami("") == ""
+
+
+def test_one_persons_token_cannot_reach_another(monkeypatch):
+    """ここが抜けると、合言葉1つで他人のパソコンに仕事を頼める。"""
+    a = localagent.pair("u1")["token"]
+    localagent.pair("u2")
+    assert localagent.whoami(a) == "u1"
+    localagent.submit("u2", "read", {"path": "秘密.md"})
+    # u1 の相棒として取りに来ても、u2 の仕事は渡らない
+    assert localagent.take("u1", wait=0.05) is None
+
+
+def test_pairing_again_invalidates_the_old_token():
+    old = localagent.pair("u1")["token"]
+    new = localagent.pair("u1")["token"]
+    assert localagent.whoami(old) == ""
+    assert localagent.whoami(new) == "u1"
+
+
+def test_unpair_forgets_everything():
+    t = localagent.pair("u1")["token"]
+    localagent.submit("u1", "read", {"path": "a"})
+    localagent.unpair("u1")
+    assert localagent.whoami(t) == ""
+    assert localagent.status("u1")["paired"] is False
+
+
+# ── 繋がっているか、正直に言う ──────────────────────────────────────
+
+def test_says_plainly_when_nothing_is_paired():
+    st = localagent.status("u1")
+    assert st["paired"] is False and st["online"] is False
+    assert st["why"] and st["next"]
+
+
+def test_paired_but_never_seen_is_not_called_online():
+    """「合言葉を作った」と「動いている」は別のこと。"""
+    localagent.pair("u1")
+    st = localagent.status("u1")
+    assert st["paired"] is True
+    assert st["online"] is False
+    assert "動いていません" in st["why"]
+
+
+def test_coming_to_ask_counts_as_alive():
+    localagent.pair("u1")
+    localagent.take("u1", wait=0.01)
+    assert localagent.status("u1")["online"] is True
+
+
+# ── 仕事を渡す ──────────────────────────────────────────────────────
+
+def test_cannot_ask_for_a_job_we_do_not_know():
+    localagent.pair("u1")
+    got = localagent.submit("u1", "delete", {"path": "a"})
+    assert got["ok"] is False
+
+
+def test_cannot_ask_before_pairing():
+    got = localagent.submit("u1", "read", {"path": "a"})
+    assert got["ok"] is False
+    assert "繋いでいません" in got["error"]
+
+
+def test_a_job_waits_until_the_helper_comes():
+    localagent.pair("u1")
+    localagent.submit("u1", "read", {"path": "a.md"})
+    job = localagent.take("u1", wait=0.1)
+    assert job and job["kind"] == "read" and job["params"]["path"] == "a.md"
+    # 2回は渡らない
+    assert localagent.take("u1", wait=0.05) is None
+
+
+def test_waiting_ends_when_a_job_arrives(monkeypatch):
+    """1秒ごとに聞きに来させると、平均0.5秒遅れる。待たせて、来たら起こす。"""
+    localagent.pair("u1")
+
+    def later():
+        time.sleep(0.2)
+        localagent.submit("u1", "read", {"path": "a"})
+
+    threading.Thread(target=later, daemon=True).start()
+    start = time.time()
+    job = localagent.take("u1", wait=5.0)
+    assert job is not None
+    assert time.time() - start < 2.0
+
+
+def test_stale_jobs_are_not_handed_over(monkeypatch):
+    """相棒が止まっているあいだに溜まった物は、渡さない（もう誰も待っていない）。"""
+    localagent.pair("u1")
+    localagent.submit("u1", "read", {"path": "a"})
+    monkeypatch.setattr(localagent, "JOB_TTL", -1)
+    assert localagent.take("u1", wait=0.05) is None
+
+
+def test_a_result_comes_back_to_the_one_who_asked():
+    localagent.pair("u1")
+    sent = localagent.submit("u1", "read", {"path": "a"})
+    localagent.deliver("u1", sent["job_id"], {"ok": True, "text": "中身"})
+    got = localagent.collect(sent["job_id"], timeout=1.0)
+    assert got["ok"] is True and got["text"] == "中身"
+
+
+def test_no_answer_is_reported_as_no_answer():
+    """ここで「書いておきました」と言うのが、この機能でいちばん困る嘘。"""
+    localagent.pair("u1")
+    sent = localagent.submit("u1", "write", {"path": "a", "text": "x"})
+    got = localagent.collect(sent["job_id"], timeout=0.2)
+    assert got["ok"] is False
+    assert "返事がありません" in got["error"]
+
+
+# ── 手元側の門番（agent_local/aibou_local.py） ──────────────────────
+
+@pytest.fixture
+def workspace(tmp_path):
+    (tmp_path / "メモ").mkdir()
+    (tmp_path / "メモ" / "買い物.md").write_text("にんじん\n", encoding="utf-8")
+    (tmp_path / ".隠し").write_text("見せない", encoding="utf-8")
+    outside = tmp_path.parent / "そとがわ.txt"
+    outside.write_text("読まれてはいけない", encoding="utf-8")
+    return tmp_path, outside
+
+
+def _runner(root, **kw):
+    import aibou_local
+    guard = aibou_local.Guard([str(root)], kw.pop("vault", ""), kw.pop("daily", "日誌"))
+    return aibou_local.Runner(guard, kw.pop("allow_open", False),
+                              kw.pop("allow_screen", False), lambda *_: None)
+
+
+@pytest.mark.parametrize("bad", [
+    "../そとがわ.txt",
+    "メモ/../../そとがわ.txt",
+    "/etc/passwd",
+    "メモ/../../../../../../etc/passwd",
+    "",
+])
+def test_cannot_escape_the_allowed_folder(workspace, bad):
+    """文字列のままだと「メモの中」に見える指定がある。実際の道に直して比べる。"""
+    root, _ = workspace
+    got = _runner(root).do({"kind": "read", "params": {"path": bad}})
+    assert got["ok"] is False
+
+
+def test_a_symlink_out_of_the_folder_is_refused(workspace):
+    root, outside = workspace
+    link = root / "近道.txt"
+    try:
+        link.symlink_to(outside)
+    except OSError:                                        # pragma: no cover
+        pytest.skip("この環境ではシンボリックリンクを作れない")
+    got = _runner(root).do({"kind": "read", "params": {"path": "近道.txt"}})
+    assert got["ok"] is False
+    assert "外です" in got["error"]
+
+
+def test_reads_inside_the_folder(workspace):
+    root, _ = workspace
+    got = _runner(root).do({"kind": "read", "params": {"path": "メモ/買い物.md"}})
+    assert got["ok"] is True and "にんじん" in got["text"]
+
+
+def test_hidden_files_are_not_listed(workspace):
+    root, _ = workspace
+    got = _runner(root).do({"kind": "list", "params": {}})
+    assert got["ok"] is True
+    assert all(not i["name"].startswith(".") for i in got["items"])
+
+
+def test_big_files_are_not_read(workspace):
+    """読んだ物はAIへ渡る。大きい物は渡さない。"""
+    import aibou_local
+    root, _ = workspace
+    big = root / "おおきい.txt"
+    big.write_text("あ" * (aibou_local.MAX_READ + 10), encoding="utf-8")
+    got = _runner(root).do({"kind": "read", "params": {"path": "おおきい.txt"}})
+    assert got["ok"] is False and "大きすぎます" in got["error"]
+
+
+def test_overwriting_keeps_the_old_content(workspace):
+    """消さないのが決まり。上書きしても、元は .bak に残る。"""
+    root, _ = workspace
+    got = _runner(root).do({"kind": "write",
+                            "params": {"path": "メモ/買い物.md", "text": "だいこん"}})
+    assert got["ok"] is True
+    assert (root / "メモ" / "買い物.md").read_text(encoding="utf-8") == "だいこん"
+    assert (root / "メモ" / "買い物.md.bak").read_text(encoding="utf-8") == "にんじん\n"
+
+
+def test_append_adds_without_losing(workspace):
+    root, _ = workspace
+    _runner(root).do({"kind": "append",
+                      "params": {"path": "メモ/買い物.md", "text": "たまねぎ"}})
+    body = (root / "メモ" / "買い物.md").read_text(encoding="utf-8")
+    assert "にんじん" in body and "たまねぎ" in body
+
+
+def test_there_is_no_delete_and_no_shell():
+    """作っていない物は、頼めない。"""
+    assert "delete" not in localagent.JOBS
+    assert "run" not in localagent.JOBS
+    import aibou_local
+    assert not hasattr(aibou_local.Runner, "_delete")
+    assert not hasattr(aibou_local.Runner, "_run")
+
+
+def test_open_and_screen_are_off_unless_asked(workspace):
+    root, _ = workspace
+    r = _runner(root)
+    assert r.do({"kind": "open", "params": {"path": "メモ/買い物.md"}})["ok"] is False
+    assert r.do({"kind": "shot", "params": {}})["ok"] is False
+
+
+def test_unknown_jobs_are_refused(workspace):
+    root, _ = workspace
+    got = _runner(root).do({"kind": "rm", "params": {}})
+    assert got["ok"] is False and "知りません" in got["error"]
+
+
+# ── Obsidian（仕様§26） ─────────────────────────────────────────────
+
+def test_the_daily_note_goes_into_the_vault(workspace, tmp_path):
+    import datetime as dt
+    root, _ = workspace
+    vault = tmp_path / "vault"
+    (vault / "日誌").mkdir(parents=True)
+    got = _runner(root, vault=str(vault)).do(
+        {"kind": "append", "params": {"vault": "daily", "text": "今日は寒い"}})
+    assert got["ok"] is True
+    name = dt.date.today().strftime("%Y-%m-%d") + ".md"
+    assert "今日は寒い" in (vault / "日誌" / name).read_text(encoding="utf-8")
+
+
+def test_without_a_vault_it_says_so(workspace):
+    root, _ = workspace
+    got = _runner(root).do({"kind": "append", "params": {"vault": "daily", "text": "x"}})
+    assert got["ok"] is False and "vault" in got["error"]
+
+
+# ── 道具として ──────────────────────────────────────────────────────
+
+def test_tools_are_registered():
+    import risk
+    import tools
+    import toolschema
+    for name in ("local_list", "local_read", "local_write", "local_append",
+                 "obsidian_note"):
+        assert name in tools.TOOL_DOCS, name
+        assert name in tools._DISPATCH, name
+        assert name in toolschema.SCHEMAS, name
+        assert risk.level(name) in (1, 2), name
+
+
+def test_reading_a_local_file_asks_first():
+    """中身がAIへ渡るので、このアプリの中で完結しない。"""
+    import risk
+    assert risk.needs_confirmation("local_read", True) is True
+    assert "AIへ渡ります" in risk.WHY["local_read"]
+
+
+def test_a_local_file_is_not_an_instruction():
+    """手元のファイルにも「これまでの指示は無視して」と書いておける。"""
+    import inspect
+    import tools
+    assert "untrusted.wrap" in inspect.getsource(tools._do_local_read)
+
+
+def test_the_tool_says_when_nothing_is_connected(monkeypatch):
+    import tools
+    out = tools.execute_tool("local_read", {"path": "a.md"})
+    assert "繋いでいません" in out or "返事がありません" in out
+
+
+def test_the_tool_does_not_let_the_ai_name_someone_else(monkeypatch):
+    """誰の相棒かは、道具の引数ではなく**リクエストの文脈**から引く。
+
+    引数で渡させると、AIが書いた文字列で他人の相棒を名指しできる。
+    """
+    import config
+    import tools
+    seen = {}
+    monkeypatch.setattr(localagent, "run",
+                        lambda uid, kind, params, timeout: seen.update(
+                            uid=uid, kind=kind, params=params) or {"ok": True, "text": ""})
+    token = config.bind_request_user("u1")
+    try:
+        # AIが「他人のID」を引数に混ぜても、そちらは使われない
+        tools.execute_tool("local_read", {"path": "a.md", "user_id": "u2"})
+    finally:
+        config.reset_request_user(token)
+    assert seen["uid"] == "u1"
+    assert "u2" not in str(seen["params"].values())
+
+
+# ── 通しで（本物のサーバー相手に、本物の相棒を1周させる） ────────────
+
+def test_the_real_helper_talks_to_the_real_server(tmp_path, monkeypatch):
+    """ここが通れば、「たぶん動く」ではなく「動いた」と言える。
+
+    FastAPI の口をそのまま立てて、agent_local/aibou_local.py の loop() を
+    1周だけ回す。合言葉の受け渡し・仕事の受け取り・結果の返送まで、
+    実物どうしで確かめる。
+    """
+    import aibou_local
+    import main
+    from fastapi.testclient import TestClient
+
+    (tmp_path / "メモ").mkdir()
+    (tmp_path / "メモ" / "買い物.md").write_text("にんじん\n", encoding="utf-8")
+
+    client = TestClient(main.app)
+    token = client.post("/local/pair", json={"name": "試験機"}).json()["token"]
+
+    # requests の代わりに、TestClient を使わせる（本物のHTTPの代わり）
+    class Session:
+        def get(self, url, params=None, headers=None, timeout=None):
+            return client.get(url.replace("http://server", ""),
+                              params=params, headers=headers)
+
+        def post(self, url, json=None, headers=None, timeout=None):
+            return client.post(url.replace("http://server", ""),
+                               json=json, headers=headers)
+
+    monkeypatch.setattr(aibou_local.requests, "Session", lambda: Session())
+
+    # 先に仕事を1つ預けておく（利用者を特定できないので "local" に入る）
+    sent = localagent.submit(localagent.whoami(token), "read",
+                             {"path": "メモ/買い物.md"})
+    assert sent["ok"] is True
+
+    runner = _runner(tmp_path)
+    aibou_local.loop("http://server", token, runner, lambda *_: None, once=True)
+
+    got = localagent.collect(sent["job_id"], timeout=1.0)
+    assert got["ok"] is True
+    assert "にんじん" in got["text"]
+
+
+def test_a_bad_token_is_turned_away_at_the_door():
+    import main
+    from fastapi.testclient import TestClient
+    client = TestClient(main.app)
+    r = client.get("/local/jobs", headers={"X-Local-Token": "nonsense-token"})
+    assert r.status_code == 401
+    r = client.post("/local/result", json={"job_id": "x", "result": {}},
+                    headers={"X-Local-Token": "nonsense-token"})
+    assert r.status_code == 401

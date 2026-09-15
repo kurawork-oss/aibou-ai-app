@@ -33,6 +33,7 @@ import FeaturePacks from "@/components/FeaturePacks";
 import IntegrationsSettings from "@/components/IntegrationsSettings";
 import NeedsBackend from "@/components/NeedsBackend";
 import CapabilityPanel from "@/components/CapabilityPanel";
+import LocalAgentSettings from "@/components/LocalAgentSettings";
 import AppArchive from "@/components/AppArchive";
 import Autopilot from "@/components/Autopilot";
 import Backdrop3D from "@/components/Backdrop3D";
@@ -956,6 +957,7 @@ function SettingsPanel({
                 <CapabilityPanel />
                 <FeaturePacks />
                 <IntegrationsSettings />
+                <LocalAgentSettings />
               </>
             ) : (
               <NeedsBackend what="使う機能の切り替え・外部サービスの連携・モデルの割り当て" />

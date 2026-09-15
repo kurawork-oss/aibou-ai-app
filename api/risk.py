@@ -68,7 +68,18 @@ LEVELS: Dict[str, int] = {
     "create_automation": 1,
     "create_mission": 1,
 
+    # 手元のパソコンの中を見る・書く。
+    #
+    # 一覧は1（名前しか出ない）。読むのは2——中身が**AIへ渡る**ので、
+    # このアプリの中で完結しない。書くのも2（元の内容は相棒が .bak に
+    # 残すので、取り返せないほどではない）。
+    "local_list": 1,
+
     # ── 2 外のサービスに残る ──────────────────────────────────────
+    "local_read": 2,
+    "local_write": 2,
+    "local_append": 2,
+    "obsidian_note": 2,
     "drive_upload": 2,
     "google_doc": 2,
     "google_sheet": 2,
@@ -93,6 +104,10 @@ LABELS: Dict[int, str] = {
 
 # 確認のときに添える一言（何が起きるのかを具体的に）
 WHY: Dict[str, str] = {
+    "local_read": "このファイルの中身がAIへ渡ります。",
+    "local_write": "手元のパソコンのファイルを書き換えます（元の内容は .bak に残ります）。",
+    "local_append": "手元のパソコンのファイルに書き足します。",
+    "obsidian_note": "今日の日誌に書き足します。",
     "send_email": "送ったメールは取り消せません。",
     "notify": "LINEやSlackに実際に届きます。",
     "enqueue_income": "副業の処理が動き出します。",
