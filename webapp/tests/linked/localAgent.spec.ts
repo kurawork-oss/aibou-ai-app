@@ -86,3 +86,20 @@ test("状態が取れなくても、「繋がっている」とは言わない",
   await expect(page.getByText("状態を取得できませんでした").first())
     .toBeVisible({ timeout: 10_000 });
 });
+
+test("ログインが要るサイトの話が、条件と一緒に出る", async ({ page }) => {
+  /* ここを書かないと、いちばん価値のある使い方に気づかれない。
+     同時にいちばん危ない使い方でもあるので、条件を離さずに出す。 */
+  const be = await mockBackend(page);
+  be.set("/local/status", () => ({ json: { ok: true, paired: true, online: true,
+    name: "しごと用" } }));
+  await enterApp(page);
+  await openConnect(page);
+
+  await page.getByText("ログインが要るサイトも見せる").click();
+  await expect(page.getByText(/誰にもログインしていません/)).toBeVisible();
+  await expect(page.getByText(/開いてよいサイトを先に決めます/)).toBeVisible();
+  await expect(page.getByText(/押すほうは設定に関わらず必ず確認します/)).toBeVisible();
+  // パスワードを渡す話にしない
+  await expect(page.getByText(/パスワードをAIbouに渡すことはありません/)).toBeVisible();
+});

@@ -170,6 +170,31 @@ export default function LocalAgentSettings() {
         サーバーからは指定できません。消す操作とコマンド実行は
         <b className="text-fg-strong">作っていません</b>。
       </p>
+
+      {/* ここを書かないと、いちばん価値のある使い方に気づかれない。
+          同時に、いちばん危ない使い方でもあるので、条件も一緒に出す。 */}
+      <details className="mt-2">
+        <summary className="cursor-pointer text-[11px] text-muted">
+          ログインが要るサイトも見せる（あなたのブラウザを動かす）
+        </summary>
+        <div className="mt-1.5 text-[11px] leading-relaxed text-muted">
+          <p>
+            サーバー側のブラウザは<b className="text-fg-strong">誰にもログインしていません</b>。
+            社内ツールや会員サイトの中は、そこからは見えません。
+            手元のブラウザを使うと、あなたがログインしたまま読めます。
+          </p>
+          <pre className="mt-1.5 overflow-x-auto rounded-forge bg-[var(--input-bg)] p-2 text-[10px] label-mono">
+{`--allow-browser --site 社内ツールのドメイン`}
+          </pre>
+          <p className="mt-1.5">
+            <b className="text-fg-strong">開いてよいサイトを先に決めます</b>
+            （「全部」は選べません）。読むだけの操作と、押す・打ち込む操作は
+            分けてあり、<b className="text-fg-strong">押すほうは設定に関わらず必ず確認します</b>。
+            パスワードをAIbouに渡すことはありません——ログインは一度、
+            ご自身の手で通します。
+          </p>
+        </div>
+      </details>
     </section>
   );
 }

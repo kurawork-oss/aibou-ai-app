@@ -54,7 +54,8 @@ import uuid
 from typing import Dict, List, Optional
 
 # 頼める仕事。手元の相棒（agent_local/aibou_local.py）と同じ顔ぶれにする。
-JOBS = ("list", "read", "write", "append", "open", "shot")
+JOBS = ("list", "read", "write", "append", "open", "shot",
+        "browse", "browse_act")
 
 # 仕事を預かっておく時間。手元の相棒が落ちていると、ここに溜まる。
 JOB_TTL = 600.0

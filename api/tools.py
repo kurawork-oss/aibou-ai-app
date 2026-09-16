@@ -108,6 +108,16 @@ TOOL_DOCS: Dict[str, str] = {
     "obsidian_note":
         'Obsidianの日誌（今日の日付のノート）に書き足す。vaultの場所は相棒側で'
         '決めてある / params: { "text": "書き足す内容" }',
+    "local_browse":
+        '**本人がログイン済みの**ブラウザで、手元のパソコン側からページを開いて読む。'
+        'ログインが要るページ（社内ツール・管理画面・会員サイト）に使う。'
+        'ログインの要らないページは browser_visit のほうが速い / '
+        'params: { "url": "https://example.com/dashboard" }',
+    "local_browse_act":
+        '**本人がログイン済みの**ブラウザで、押す・打ち込む。本人として操作するので、'
+        '実行の前に必ず確認が入る / params: { "url": "https://example.com", '
+        '"steps": [{"do": "fill", "target": "検索", "value": "東京"}, '
+        '{"do": "click", "target": "検索する"}] }',
     "browser_visit":
         '本物のブラウザでページを開いて読む。web_read が「内容がありませんでした」と'
         '返したページ（本文をJavaScriptで後から入れるページ）に使う。'
@@ -874,6 +884,46 @@ def _do_obsidian_note(params: dict) -> str:
     return _local_say(got, "今日の日誌に書き足しました。")
 
 
+def _browse_say(got: dict, params: dict) -> str:
+    if not got.get("ok"):
+        why = got.get("error") or "手元のパソコンから返事がありませんでした"
+        nxt = got.get("next") or ""
+        return f"{why}{'。' + nxt if nxt else ''}"
+    parts = []
+    if got.get("title"):
+        parts.append(f"【{got['title']}】{got.get('url', '')}")
+    for line in got.get("did") or []:
+        parts.append(f"（{line}）")
+    # 本人のログイン済みブラウザで見た中身も、**指示ではない**。
+    import untrusted
+    parts.append(untrusted.wrap(got.get("text") or "",
+                                source=got.get("url") or "", kind="ページ"))
+    links = got.get("links") or []
+    if links:
+        parts.append("押せるもの: " + " / ".join(
+            l["label"] for l in links[:12] if l.get("label")))
+    return "\n".join(parts)
+
+
+def _do_local_browse(params: dict) -> str:
+    url = (params.get("url") or "").strip()
+    if not url:
+        return "URLが空です。"
+    return _browse_say(_local("browse", {"url": url}, timeout=90.0), params)
+
+
+def _do_local_browse_act(params: dict) -> str:
+    url = (params.get("url") or "").strip()
+    if not url:
+        return "URLが空です。"
+    steps = params.get("steps")
+    if isinstance(steps, dict):
+        steps = [steps]
+    return _browse_say(_local("browse_act", {
+        "url": url, "steps": steps if isinstance(steps, list) else []},
+        timeout=120.0), params)
+
+
 def _do_browser_visit(params: dict) -> str:
     """本物のブラウザで開いて読む。押す手順があればそこまでやる。
 
@@ -1205,12 +1255,24 @@ _DISPATCH = {
     "obsidian_note":
         'Obsidianの日誌（今日の日付のノート）に書き足す。vaultの場所は相棒側で'
         '決めてある / params: { "text": "書き足す内容" }',
+    "local_browse":
+        '**本人がログイン済みの**ブラウザで、手元のパソコン側からページを開いて読む。'
+        'ログインが要るページ（社内ツール・管理画面・会員サイト）に使う。'
+        'ログインの要らないページは browser_visit のほうが速い / '
+        'params: { "url": "https://example.com/dashboard" }',
+    "local_browse_act":
+        '**本人がログイン済みの**ブラウザで、押す・打ち込む。本人として操作するので、'
+        '実行の前に必ず確認が入る / params: { "url": "https://example.com", '
+        '"steps": [{"do": "fill", "target": "検索", "value": "東京"}, '
+        '{"do": "click", "target": "検索する"}] }',
     "browser_visit": _do_browser_visit,
     "local_list": _do_local_list,
     "local_read": _do_local_read,
     "local_write": _do_local_write,
     "local_append": _do_local_append,
     "obsidian_note": _do_obsidian_note,
+    "local_browse": _do_local_browse,
+    "local_browse_act": _do_local_browse_act,
     "generate_image": _do_generate_image,
     "draw_diagram": _do_draw_diagram,
     "schedule_add": _do_schedule_add,

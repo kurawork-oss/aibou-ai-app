@@ -77,6 +77,8 @@ LEVELS: Dict[str, int] = {
 
     # ── 2 外のサービスに残る ──────────────────────────────────────
     "local_read": 2,
+    # 本人がログイン済みのブラウザで**読む**。中身がAIへ渡る。
+    "local_browse": 2,
     "local_write": 2,
     "local_append": 2,
     "obsidian_note": 2,
@@ -88,6 +90,12 @@ LEVELS: Dict[str, int] = {
     "notion_add": 2,
 
     # ── 3 取り返せない（必ず確認） ────────────────────────────────
+    # 本人がログイン済みのブラウザで**押す・打ち込む**。
+    #
+    # ここを2にしてはいけない。押した先が「送信」かもしれず、そのときは
+    # **本人として**送られる。何が起きるかはページ次第で、こちらからは
+    # 見分けられない。見分けられないなら、重いほうに倒す。
+    "local_browse_act": 3,
     "send_email": 3,
     "notify": 3,
     "enqueue_income": 3,
@@ -105,6 +113,9 @@ LABELS: Dict[int, str] = {
 # 確認のときに添える一言（何が起きるのかを具体的に）
 WHY: Dict[str, str] = {
     "local_read": "このファイルの中身がAIへ渡ります。",
+    "local_browse": "ログイン済みの画面の中身が、AIへ渡ります。",
+    "local_browse_act": ("あなたのブラウザで、あなたとして操作します。"
+                         "押した先が送信や購入だった場合、取り消せません。"),
     "local_write": "手元のパソコンのファイルを書き換えます（元の内容は .bak に残ります）。",
     "local_append": "手元のパソコンのファイルに書き足します。",
     "obsidian_note": "今日の日誌に書き足します。",
@@ -143,7 +154,7 @@ def level(tool: str) -> int:
 #: 1枚目は確認しない（「調べて」→検索→1枚読む、がいちばん普通の流れで、
 #: ここに確認を挟むと毎回止まる）。2枚目から聞く。聞く画面にはURLが出るので、
 #: 持ち出そうとしていれば、その場で見える。
-CHAIN_AFTER_EXTERNAL = {"web_read", "browser_visit"}
+CHAIN_AFTER_EXTERNAL = {"web_read", "browser_visit", "local_browse"}
 
 
 def may_always_allow(tool: str, external_reads: int = 0) -> bool:
@@ -155,7 +166,7 @@ def may_always_allow(tool: str, external_reads: int = 0) -> bool:
         毎回聞くことが、この段階の**中身そのもの**。1回押したら以後
         メールが黙って飛ぶなら、段階を分けた意味が無くなる。
 
-    連鎖（外のページを読んだ後の web_read）
+    連鎖（外のページを読んだ後の web_read / local_browse）
         聞いている理由が「危なさ」ではなく「**誰が決めたか**」。行き先を
         決めたのが本人ではなくページの本文かもしれない、という話なので、
         道具ごとに一度許してよい性質の物ではない。

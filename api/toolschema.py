@@ -100,6 +100,15 @@ SCHEMAS: Dict[str, Dict[str, Any]] = {
     "obsidian_note": {"fields": {
         "text": ("str", True, "今日の日誌に足す本文"),
     }},
+    "local_browse": {"fields": {
+        "url": ("str", True, "開くページのURL（相棒が許したサイトの中だけ）"),
+    }},
+    "local_browse_act": {"fields": {
+        "url": ("str", True, "開くページのURL（相棒が許したサイトの中だけ）"),
+        "steps": ("list", True,
+                  '押す・打ち込む手順。do は goto / click / fill / select / '
+                  'press / wait のどれか'),
+    }},
     "browser_visit": {"fields": {
         "url": ("str", True, "開くページのURL"),
         "steps": ("list", False,

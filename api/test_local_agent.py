@@ -402,3 +402,235 @@ def test_a_bad_token_is_turned_away_at_the_door():
     r = client.post("/local/result", json={"job_id": "x", "result": {}},
                     headers={"X-Local-Token": "nonsense-token"})
     assert r.status_code == 401
+
+
+# ── あなたのブラウザを動かす（いちばん危ない所） ────────────────────
+
+def _chrome_here() -> bool:
+    """この環境に本物のブラウザがあるか。無ければ、その分だけ飛ばす。"""
+    os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", "/opt/pw-browsers")
+    try:
+        import playwright.sync_api  # noqa: F401
+    except Exception:
+        return False
+    import browser
+    return bool(browser._find_chrome())
+
+
+def _browser_runner(root, **kw):
+    import aibou_local
+    guard = aibou_local.Guard([str(root)], sites=kw.pop("sites", []))
+    return aibou_local.Runner(guard, False, False, lambda *_: None,
+                              allow_browser=kw.pop("allow_browser", True),
+                              profile=kw.pop("profile", str(root / "prof")),
+                              headless=True)
+
+
+def test_browsing_is_off_unless_asked(workspace):
+    root, _ = workspace
+    r = _browser_runner(root, allow_browser=False, sites=["example.com"])
+    got = r.do({"kind": "browse", "params": {"url": "https://example.com"}})
+    assert got["ok"] is False and "--allow-browser" in got["error"]
+
+
+def test_without_a_site_list_nothing_can_be_opened(workspace):
+    """「全部」という書き方は用意していない。
+
+    開くのは**本人がログイン済みのブラウザ**。会話に紛れ込んだ一文が
+    どこかを開かせたら、その先は本人として操作されることになる。
+    「どこを開かれても構わないか」ではなく「この3つなら構う」を先に決める。
+    """
+    root, _ = workspace
+    got = _browser_runner(root, sites=[]).do(
+        {"kind": "browse", "params": {"url": "https://example.com"}})
+    assert got["ok"] is False and "--site" in got["error"]
+
+
+@pytest.mark.parametrize("url,ok", [
+    ("https://example.com/x", True),
+    ("https://www.example.com/x", True),        # 下のドメインは含む
+    ("https://notexample.com/x", False),        # 名前が似ているだけの別人
+    ("https://example.com.evil.jp/", False),    # 後ろに足しただけの別人
+    ("http://evil.example/", False),
+    ("file:///etc/passwd", False),
+    ("", False),
+])
+def test_only_the_listed_sites_open(workspace, url, ok):
+    import aibou_local
+    root, _ = workspace
+    g = aibou_local.Guard([str(root)], sites=["example.com"])
+    if ok:
+        assert g.site(url) == url
+    else:
+        with pytest.raises(PermissionError):
+            g.site(url)
+
+
+def test_touching_is_always_confirmed():
+    """押した先が「送信」かもしれない。そのときは**本人として**送られる。"""
+    import risk
+    assert risk.level("local_browse_act") == 3
+    assert risk.needs_confirmation("local_browse_act", False) is True
+    # 「いつも許可」も出さない
+    assert risk.may_always_allow("local_browse_act") is False
+    assert "取り消せません" in risk.WHY["local_browse_act"]
+
+
+def test_looking_is_lighter_than_touching():
+    import risk
+    assert risk.level("local_browse") == 2
+    # ただし1枚読んだ後は、行き先がページ由来かもしれないので聞く
+    assert risk.needs_confirmation("local_browse", False, external_reads=1) is True
+
+
+def test_no_way_to_run_javascript_in_your_own_browser():
+    import aibou_local
+    src = open(aibou_local.__file__).read()
+    assert ".evaluate(" not in src
+    assert "evaluate" not in aibou_local.BROWSE_ACTIONS
+
+
+def test_reading_does_not_accept_steps(workspace, monkeypatch):
+    """`browse` は読むだけ。手順を混ぜても押さない。"""
+    import aibou_local
+    root, _ = workspace
+    r = _browser_runner(root, sites=["example.com"])
+    seen = {}
+    monkeypatch.setattr(r, "_drive", lambda p, act: seen.update(act=act) or {"ok": True})
+    r.do({"kind": "browse", "params": {"url": "https://example.com",
+                                       "steps": [{"do": "click", "target": "送信"}]}})
+    assert seen["act"] is False
+    r.do({"kind": "browse_act", "params": {"url": "https://example.com"}})
+    assert seen["act"] is True
+
+
+def test_the_tools_are_registered():
+    import risk
+    import tools
+    import toolschema
+    for name in ("local_browse", "local_browse_act"):
+        assert name in tools.TOOL_DOCS, name
+        assert name in tools._DISPATCH, name
+        assert name in toolschema.SCHEMAS, name
+    assert "browse" in localagent.JOBS and "browse_act" in localagent.JOBS
+
+
+def test_what_you_read_is_not_an_instruction():
+    import inspect
+    import tools
+    assert "untrusted.wrap" in inspect.getsource(tools._browse_say)
+
+
+@pytest.mark.skipif(not _chrome_here(), reason="この環境にはブラウザが無い")
+def test_your_login_really_carries_over(tmp_path, monkeypatch):
+    """ここがこの機能の存在理由。
+
+    **1周目でログインし、2周目は素通りで入れる**ことを、本物のブラウザと
+    本物のCookieで確かめる。ここが通らなければ、サーバー側のブラウザ
+    （誰にもログインしていない）と何も変わらない。
+    """
+    import http.server
+    import socketserver
+    import threading
+
+    SESSION = "sid=honmono"
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def _send(self, body: bytes, cookie: str = ""):
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            if cookie:
+                self.send_header("Set-Cookie", cookie + "; Path=/")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_GET(self):
+            logged_in = SESSION in (self.headers.get("Cookie") or "")
+            if self.path.startswith("/login"):
+                self._send("<h1>ログインしました</h1>".encode(), SESSION)
+            elif logged_in:
+                self._send("<h1>社内ダッシュボード</h1><p>今月の売上 123万円</p>"
+                           .encode())
+            else:
+                self._send("<h1>ログインしてください</h1>".encode())
+
+        def log_message(self, *a):
+            pass
+
+    srv = socketserver.TCPServer(("127.0.0.1", 0), H)
+    port = srv.server_address[1]
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    profile = tmp_path / "prof"
+    try:
+        import aibou_local
+        guard = aibou_local.Guard([str(tmp_path)], sites=["127.0.0.1"])
+        runner = aibou_local.Runner(guard, False, False, lambda *_: None,
+                                    allow_browser=True, profile=str(profile),
+                                    headless=True)
+
+        # ① ログインしていない状態では、中身が見えない
+        before = runner.do({"kind": "browse",
+                            "params": {"url": f"http://127.0.0.1:{port}/"}})
+        assert before["ok"] is True, before
+        assert "ログインしてください" in before["text"]
+        assert "今月の売上" not in before["text"]
+
+        # ② ログインする（本人がやることを、ここでは手順で代用する）
+        runner.do({"kind": "browse",
+                   "params": {"url": f"http://127.0.0.1:{port}/login"}})
+
+        # ③ **別の呼び出し**で、ログイン済みとして入れる
+        after = runner.do({"kind": "browse",
+                           "params": {"url": f"http://127.0.0.1:{port}/"}})
+        assert after["ok"] is True, after
+        assert "社内ダッシュボード" in after["text"]
+        assert "今月の売上 123万円" in after["text"]
+    finally:
+        runner.close_browser()
+        srv.shutdown()
+
+
+@pytest.mark.skipif(not _chrome_here(), reason="この環境にはブラウザが無い")
+def test_clicking_in_your_browser_actually_works(tmp_path):
+    import http.server
+    import socketserver
+    import threading
+
+    html = ("<!doctype html><html><head><title>フォーム</title></head><body>"
+            "<label for=q>検索</label><input id=q name=q>"
+            "<button onclick=\"document.body.innerHTML+='<p>送りました: '"
+            "+document.getElementById('q').value+'</p>'\">検索する</button>"
+            "</body></html>").encode("utf-8")
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(html)))
+            self.end_headers()
+            self.wfile.write(html)
+
+        def log_message(self, *a):
+            pass
+
+    srv = socketserver.TCPServer(("127.0.0.1", 0), H)
+    port = srv.server_address[1]
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        import aibou_local
+        guard = aibou_local.Guard([str(tmp_path)], sites=["127.0.0.1"])
+        runner = aibou_local.Runner(guard, False, False, lambda *_: None,
+                                    allow_browser=True,
+                                    profile=str(tmp_path / "p"), headless=True)
+        got = runner.do({"kind": "browse_act", "params": {
+            "url": f"http://127.0.0.1:{port}/",
+            "steps": [{"do": "fill", "target": "検索", "value": "東京"},
+                      {"do": "click", "target": "検索する"}]}})
+        assert got["ok"] is True, got
+        assert "送りました: 東京" in got["text"], got["text"]
+        assert any("入力しました" in d for d in got["did"])
+        assert any("押しました" in d for d in got["did"])
+    finally:
+        runner.close_browser()
+        srv.shutdown()
