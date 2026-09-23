@@ -492,6 +492,11 @@ def loop(url: str, token: str, runner: Runner, log, once: bool = False) -> None:
     engines = runner.engines()
     if engines:
         headers["X-Local-Engines"] = ",".join(engines)
+        # 開いてよいサイト（--site）。サーバーが「このサイトはどの台で開くか」
+        # を決める手がかりにする。**許可そのものは、ここに残る**——サーバーが
+        # 何を覚えても、この相棒は自分の --site の外を開かない。
+        if runner.g.sites:
+            headers["X-Local-Sites"] = ",".join(runner.g.sites)
     miss = 0
     while True:
         try:

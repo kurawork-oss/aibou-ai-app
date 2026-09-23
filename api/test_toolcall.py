@@ -175,6 +175,24 @@ def test_every_tool_can_be_declared():
         assert d["parameters"]["type"] == "object"
 
 
+def test_every_field_type_is_one_we_know():
+    """知らない型は、黙って「文字列」として宣言される。
+
+    実際に browser_act の手順が "list" と書かれていて、AIには「手順は文字列」と
+    伝わっていた（受け取る側は配列しか読まないので、手順が丸ごと消える）。
+    """
+    known = set(toolschema._JSON_TYPE)
+    for name, spec in toolschema.SCHEMAS.items():
+        for key, (kind, _req, _desc) in spec["fields"].items():
+            assert kind in known or kind.startswith("enum:"), f"{name}.{key}: {kind}"
+
+
+def test_steps_are_declared_as_an_array_of_objects():
+    d = toolschema.declaration("browser_act", "説明")
+    steps = d["parameters"]["properties"]["steps"]
+    assert steps["type"] == "array" and steps["items"]["type"] == "object"
+
+
 # ── 会話が止まらないこと ─────────────────────────────────────────────
 def test_a_provider_failure_does_not_stop_the_conversation(monkeypatch):
     """正式な口が例外を投げても、落ちる先へ進むこと。"""

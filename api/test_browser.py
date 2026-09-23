@@ -54,7 +54,10 @@ def test_self_check_lists_it_honestly():
     assert len(row) == 1
     assert row[0]["kind"] == "off"
     assert row[0]["env"] == "ENABLE_BROWSER"
-    assert "browser_visit" in row[0]["tools"]
+    assert "browser_act" in row[0]["tools"]
+    # 切ってあっても、ログインが要るサイトは手元の相棒が開くと言う
+    # （「ブラウザは使えません」とだけ出すと、本当は使えるのに諦めさせる）
+    assert "手元のパソコン" in row[0]["next"]
 
 
 # ── 出て行ってよい先か ──────────────────────────────────────────────
@@ -126,31 +129,69 @@ def test_body_is_wrapped_as_untrusted():
 
 
 def test_chain_confirmation_covers_the_browser():
-    """1枚読んだ後の行き先は、ページ由来かもしれない。web_read と同じ扱い。"""
-    assert "browser_visit" in risk.CHAIN_AFTER_EXTERNAL
-    assert risk.needs_confirmation("browser_visit", False, external_reads=1) is True
-    assert risk.may_always_allow("browser_visit", external_reads=1) is False
+    """1枚読んだ後の行き先は、ページ由来かもしれない。web_read と同じ扱い。
+
+    公開ページ（段階0）でも、連鎖では聞く。段階ではなく「誰が決めたか」の話。
+    """
+    public = {"url": "https://example.com/"}
+    for tool in ("browser_open", "browser_act"):
+        assert tool in risk.CHAIN_AFTER_EXTERNAL
+        assert risk.needs_confirmation(tool, False, external_reads=1, params=public) is True
+        assert risk.may_always_allow(tool, external_reads=1, params=public) is False
 
 
 def test_it_is_registered_as_a_tool():
     import tools
     import toolschema
-    assert "browser_visit" in tools.TOOL_DOCS
-    assert "browser_visit" in tools._DISPATCH
-    assert "browser_visit" in toolschema.SCHEMAS
-    assert risk.level("browser_visit") == 0
+    for tool in ("browser_open", "browser_act"):
+        assert tool in tools.TOOL_DOCS, tool
+        assert tool in tools._DISPATCH, tool
+        assert tool in toolschema.SCHEMAS, tool
+    # 古い名前は、どこにも残っていない（AIに同じ事をする道具を2つ見せない）
+    for gone in ("browser_visit", "local_browse", "local_browse_act"):
+        assert gone not in tools.TOOL_DOCS and gone not in tools._DISPATCH, gone
 
 
-def test_the_tool_says_why_when_it_cannot_run(monkeypatch):
+def test_public_pages_are_as_light_as_before():
+    """誰にもログインしていない所で開く・押すのは、以前の browser_visit と同じ段階0。
+
+    ここを重くすると、公開ページを1枚開くたびに確認が出る（確認は、
+    読まずに押す癖を作る）。
+    """
+    public = {"url": "https://example.com/"}
+    assert risk.level("browser_open", public) == 0
+    assert risk.level("browser_act", public) == 0
+
+
+def test_acting_says_why_when_there_is_nowhere_to_run(monkeypatch):
+    """手元の台も、サーバーのブラウザも無い。押せないと言い、どうすればよいかも言う。"""
     monkeypatch.delenv("ENABLE_BROWSER", raising=False)
     import tools
-    out = tools.execute_tool("browser_visit", {"url": "https://example.com"})
-    assert "開けませんでした" in out or "ENABLE_BROWSER" in out
+    out = tools.execute_tool("browser_act", {"url": "https://example.com",
+                                             "steps": [{"do": "click", "target": "a"}]})
+    assert "操作できる場所がありません" in out
+    assert "--site" in out and "ENABLE_BROWSER" in out
+
+
+def test_opening_falls_back_to_plain_text_and_says_so(monkeypatch):
+    """読むだけなら、ブラウザが無くても文字は取れる。ただし、そう言う。
+
+    JavaScriptで後から出る中身は入らないので、「全部読んだ」顔をしない。
+    """
+    monkeypatch.delenv("ENABLE_BROWSER", raising=False)
+    import tools
+    monkeypatch.setattr(tools, "_do_web_read", lambda p: "本文だけ")
+    out = tools.execute_tool("browser_open", {"url": "https://example.com"})
+    assert "文字だけ読みました" in out and "本文だけ" in out
 
 
 def test_empty_url_is_refused():
     import tools
-    assert "URLが空" in tools.execute_tool("browser_visit", {"url": " "})
+    assert "URLが空" in tools.execute_tool("browser_open", {"url": " "})
+    # 押す方は手順が要る（無ければ、引数の形の段階で直し方を返す）
+    assert "URLが空" in tools.execute_tool(
+        "browser_act", {"url": " ", "steps": [{"do": "click", "target": "a"}]})
+    assert "steps" in tools.execute_tool("browser_act", {"url": "https://example.com"})
 
 
 # ── 本物のブラウザで（入っている置き場でだけ動く） ──────────────────

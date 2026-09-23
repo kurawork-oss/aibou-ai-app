@@ -349,7 +349,8 @@ function RingDial({ label, value, onClick }: { label: string; value: number; onC
 
 /* ── Agent console (手足となって動く自律エージェント) ─────────────── */
 
-type Pending = { tool: string; params: Record<string, unknown>; note?: string };
+/** level は確認カードに出ていた段階。押したあとでそれより重くなっていたら、サーバーが断る。 */
+type Pending = { tool: string; params: Record<string, unknown>; note?: string; level?: number };
 
 /** 経過表示の型と見た目は AgentTrace に集約した（CHATと揃えるため）。 */
 type Step = AgentStep;
@@ -431,7 +432,7 @@ function AgentConsole({
             break;
           case "approval":
             setSteps((s) => s.filter((x) => x.kind !== "thinking"));
-            setPending({ tool: ev.tool || "", params: ev.params || {}, note: ev.note });
+            setPending({ tool: ev.tool || "", params: ev.params || {}, note: ev.note, level: ev.level });
             break;
           case "error":
             setSteps((s) => [...s.filter((x) => x.kind !== "thinking"), { kind: "error", detail: ev.detail || "エラー" }]);
@@ -460,7 +461,7 @@ function AgentConsole({
     try {
       // HOMEのエージェント欄には隣のキャンバスが無い（会話は実行タブに
       // 1つ）。作った物は生成物として残るので、ここは文章のままでよい。
-      const { result } = await agentExecute(p.tool, p.params);
+      const { result } = await agentExecute(p.tool, p.params, p.level);
       setSteps((s) => [...s, { kind: "observation", result }]);
       actedRef.current = true;
       onDidAct();

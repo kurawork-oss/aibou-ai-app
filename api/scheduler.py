@@ -204,10 +204,15 @@ def tick_everyone() -> dict:
             if client is None:
                 continue
             token = config.bind_request_client(client)
+            # 「誰の」も差し替える。手元のパソコンの相棒（ブラウザ含む）は
+            # DBではなくこの名前で本人の台を引くので、DBだけ差し替えても
+            # その人の台には届かない。
+            who = config.bind_request_user(user_id)
             try:
                 _round(user_id)
                 out["users"] += 1
             finally:
+                config.reset_request_user(who)
                 config.reset_request_client(token)
         except Exception as e:
             # 1人ぶんの失敗で、他の人の予約まで止めない
@@ -230,6 +235,9 @@ def _park_for_approval(schedule: dict, ev: dict, user_id: str = "") -> str:
             note=f"定期実行「{schedule.get('instruction', '')}」の途中で確認が要ります",
             source="schedule", user_id=user_id, why=ev.get("why") or "",
             answer_url=_answer_url(),
+            # 止めたときの段階。答えるまでに実行の場所が変わって重くなって
+            # いたら、そのときは動かさない（approvals._apply）。
+            level=ev.get("level"),
         )
         return (f"確認待ちにしました（{ev.get('tool')}）。"
                 f"通知から実行するか、アプリの承認待ちから答えてください。[{row['id'][:8]}]")

@@ -248,6 +248,7 @@ def status(user_id: str) -> dict:
                 "waiting": len(dev["queue"]),
                 "last_seen_ago": int(idle) if idle is not None else None,
                 "engines": list(dev.get("engines") or []),
+                "sites": list(dev.get("sites") or []),
             })
     rows.sort(key=lambda r: (not r["online"], r["name"]))
     live = [r for r in rows if r["online"]]
@@ -342,6 +343,47 @@ def note_engines(user_id: str, device_id: str, engines) -> None:
         dev = _devices(user_id).get(device_id)
         if dev is not None:
             dev["engines"] = names
+
+
+_HOST = __import__("re").compile(r"^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$")
+
+
+def note_sites(user_id: str, device_id: str, sites) -> None:
+    """その台が開いてよいサイト（相棒の `--site`）を覚える。
+
+    **これはサーバーが「どの台で開くか」を決めるための手がかりで、許可では
+    ない。** 許すかどうかを決めるのは、いつも手元の相棒のほう（こちらが
+    何を覚えていても、相棒は自分の `--site` の外を開かない）。
+
+    ホスト名の形をしていない物は捨てる（画面にそのまま出すので）。
+    """
+    names = []
+    for raw in (sites or [])[:50]:
+        h = str(raw or "").strip().lower().lstrip(".")
+        if h and _HOST.match(h):
+            names.append(h)
+    with _store.lock:
+        dev = _devices(user_id).get(device_id)
+        if dev is not None:
+            dev["sites"] = names
+
+
+def _covers(sites, host: str) -> bool:
+    h = (host or "").strip().lower().rstrip(".")
+    return bool(h) and any(h == a or h.endswith("." + a) for a in (sites or []))
+
+
+def devices_for_host(user_id: str, host: str) -> List[dict]:
+    """そのサイトを開ける台（動いていて、ブラウザがあり、`--site` に入っている）。"""
+    out = []
+    with _store.lock:
+        for device_id, dev in _devices(user_id).items():
+            if not _online(dev) or not dev.get("engines"):
+                continue
+            if _covers(dev.get("sites"), host):
+                out.append({"device": device_id, "name": _label(dev, device_id),
+                            "engines": list(dev.get("engines") or [])})
+    return out
 
 
 def take(user_id: str, device_id: str, wait: float = 25.0) -> Optional[dict]:

@@ -46,6 +46,10 @@ COPY renderer.py /renderer.py
 
 # 自動マイグレーション（migrate.py）が読むスキーマを同梱する。
 COPY supabase_schema.sql /app/supabase_schema.sql
+# 土台のあとに流す移行（RLS・意味検索の土台・手順の表など）も同梱する。
+# 以前はここが無く、本番の /admin/migrate では土台しか流れていなかった
+# （手元とテストはリポジトリから探すので気づけなかった。test_deploy_bundle.py）。
+COPY supabase/migrations /app/supabase/migrations
 
 ENV PORT=8080
 EXPOSE 8080

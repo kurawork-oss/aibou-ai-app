@@ -428,6 +428,11 @@ class ChatRequest(BaseModel):
     # サーバー側の記憶は Supabase が要るので、繋いでいない人・圏外の人に
     # とってはこちらが唯一の記憶になる。両方あれば混ぜる。
     memory: Optional[str] = None
+    # 確認しながら進めるか（画面の設定）。**段階3はこれに関わらず必ず聞く。**
+    # 古い画面は送ってこないので、既定は「聞く」側に倒す。
+    approval: bool = True
+    # 本人が「いつも許可」を押した道具（段階3と連鎖には効かない）。
+    allow: List[str] = []
 
 
 class VisionRequest(BaseModel):
@@ -627,6 +632,10 @@ class AgentActRequest(BaseModel):
 class AgentExecuteRequest(BaseModel):
     tool: str
     params: dict = Field(default_factory=dict)
+    # 確認カードに出ていた段階（本人が「これなら」と押した重さ）。
+    # それより重くなっていたら動かさない（risk.ceiling）。古い画面は送らない
+    # ので、その場合は縛らない（これまでと同じ）。
+    level: Optional[int] = None
 
 
 class ScheduleRequest(BaseModel):
@@ -1282,6 +1291,32 @@ async def chat(req: ChatRequest, _auth: None = Depends(require_auth)):
                 call, preface = tools.extract_tool_call(buf)
                 if call:
                     name = call.get("tool", "")
+                    params = call.get("params", {}) or {}
+                    # ── 確認の門（仕様§8）──────────────────────────────
+                    #
+                    # **ここが長いあいだ抜けていた。** 会話は実行モードと同じ道具の
+                    # 一覧をAIに渡しているのに、AIが出した道具を確認なしで実行して
+                    # いた。「上司にメールを送って」で、メールが実際に飛ぶ。
+                    # 「段階3は設定に関わらず必ず聞く」が、ふだん使う会話の画面では
+                    # 守られていなかった。
+                    #
+                    # 実行モードと**同じ判定・同じ確認カード**を使う。承認されたら
+                    # 画面は /agent/execute で実行する（こちらも実行モードと同じ）。
+                    # 重さは1回だけ測り、聞くかどうかと、実行まで持っていく重さ
+                    # （ceiling）の両方に使う（実行モードと同じ）。
+                    lv = risk.level(name, params)
+                    if risk.needs_confirmation(name, req.approval, 0, req.allow or (),
+                                               params=params, lv=lv):
+                        info = risk.describe(name, 0, params=params, lv=lv)
+                        yield _sse({"approval": {
+                            "tool": name, "params": params,
+                            "note": (preface or "").strip(),
+                            "level": info["level"], "level_label": info["label"],
+                            "why": info["why"], "chained": info.get("chained", False),
+                            "may_always": info["may_always"],
+                            "always_confirm": info["always_confirm"]}})
+                        yield _sse({"done": True})
+                        return
                     # 何をしているのかを、先に出す。画像生成は10秒かかる
                     # ことがあり、その間ずっと無言だと止まって見える。
                     # 実行モードと同じ言葉で出す（画面側が同じ表を使う）。
@@ -1295,7 +1330,8 @@ async def chat(req: ChatRequest, _auth: None = Depends(require_auth)):
                         """
                         token = present.begin()
                         try:
-                            out = tools.execute_tool(name, call.get("params", {}) or {})
+                            with risk.ceiling(lv):
+                                out = tools.execute_tool(name, params)
                             return out, present.take()
                         finally:
                             present.end(token)
@@ -1407,7 +1443,11 @@ async def agent_execute(req: AgentExecuteRequest, _auth: None = Depends(require_
     def _work() -> dict:
         token = present.begin()
         try:
-            out = tools.execute_tool(req.tool, req.params or {})
+            # カードを出してから押されるまでは、人の時間が空く。その間に
+            # 手元の台がつながると、同じ操作が「あなたとして」に変わりうる。
+            # 押された重さを超えていたら動かさない。
+            with risk.ceiling(req.level):
+                out = tools.execute_tool(req.tool, req.params or {})
             # 承認して実行した物も、そのまま隣に出す。押したあとに
             # 「どこへ行けば見られるか」を探させない。
             return {"result": out, "show": present.take()}
@@ -1616,7 +1656,8 @@ async def local_status(_auth: None = Depends(require_auth),
 
 @app.get("/local/jobs")
 async def local_jobs(wait: float = 25.0, who=Depends(_local_caller),
-                     x_local_engines: Optional[str] = Header(default=None)):
+                     x_local_engines: Optional[str] = Header(default=None),
+                     x_local_sites: Optional[str] = Header(default=None)):
     """手元の相棒が「仕事ある？」と聞きに来る所。無ければ待つ。
 
     相棒は、その台で使えるブラウザのエンジンを一緒に知らせてくる
@@ -1627,6 +1668,11 @@ async def local_jobs(wait: float = 25.0, who=Depends(_local_caller),
     if x_local_engines is not None:
         localagent.note_engines(user_id, device_id,
                                 [e.strip() for e in x_local_engines.split(",")])
+    # その台が開いてよいサイト。「このサイトはどの台で開くか」を決める手がかり
+    # （許可ではない。許すかどうかは、いつも手元の相棒が決める）。
+    if x_local_sites is not None:
+        localagent.note_sites(user_id, device_id,
+                              [h.strip() for h in x_local_sites.split(",")])
     job = await asyncio.get_event_loop().run_in_executor(
         None, lambda: localagent.take(user_id, device_id, wait))
     return {"ok": True, "job": job}

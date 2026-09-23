@@ -300,8 +300,14 @@ def _run_stream(instruction: str, history=None, name: str = "AIbou", approval: b
         # 実行の前に人に聞くべきか。段階3（送る・投稿する・お金が動く）は
         # 承認モードを切っていても必ず聞く。設定の組み合わせで
         # 「黙ってメールが飛んだ」が起きないようにする。
-        if risk.needs_confirmation(tool, approval, external_reads, allowed or ()):
-            info = risk.describe(tool, external_reads)
+        # 引数まで渡す。ブラウザの道具は「どこで開くか」で重さが変わる
+        # （あなたとしてログイン済みの台か、誰にもログインしていない所か）。
+        # 重さは1回だけ測る。聞くかどうかも、実行まで持っていく重さ（ceiling）も
+        # この1回から出す（ブラウザの道具は、測るたびに場所を決め直すため）。
+        lv = risk.level(tool, params)
+        if risk.needs_confirmation(tool, approval, external_reads, allowed or (),
+                                   params=params, lv=lv):
+            info = risk.describe(tool, external_reads, params=params, lv=lv)
             yield stamp({"phase": "approval", "step": step, "tool": tool,
                          "params": params, "note": (preface or "").strip(),
                          "level": info["level"], "level_label": info["label"],
@@ -314,7 +320,9 @@ def _run_stream(instruction: str, history=None, name: str = "AIbou", approval: b
         yield stamp({"phase": "tool", "step": step, "tool": tool,
                      "params": params, "note": (preface or "").strip()})
 
-        result = tools.execute_tool(tool, params)
+        # 測ったときより重くなっていたら（その間に手元の台がつながった等）動かさない
+        with risk.ceiling(lv):
+            result = tools.execute_tool(tool, params)
         executed.append(tool)
         if tool in risk.CHAIN_AFTER_EXTERNAL:
             external_reads += 1

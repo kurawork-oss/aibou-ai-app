@@ -746,7 +746,9 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
       spokenUpTo.current = 0;          // このターンの読み上げ位置を初期化
       const handlers = streamChat(
         { message: text, history, persona: settings.persona || undefined,
-          name: settings.name || undefined, memory: localMemory },
+          name: settings.name || undefined, memory: localMemory,
+          // 会話でも道具は動く。確認の門は実行モードと同じ（段階3は必ず聞く）
+          approval, allow: alwaysAllow.allowed() },
         (token) => {
           acc += token;
           /* 返事が始まった＝道具は終わっている。同じ値なら React が
@@ -793,6 +795,21 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
               : m)));
           },
           onShow: (item) => made(item),
+          /* AIが選んだ道具が、確認の要る物だった（サーバーは実行していない）。
+             実行モードと同じ確認カードを出す。承認すれば approveAct が
+             同じ口（/agent/execute）で実行する。 */
+          onApproval: (ev) => {
+            setActing(false);
+            setMessages((prev) => prev.map((m) => (m.id === assistantId
+              ? { ...m, pending: false, await: {
+                  tool: ev.tool || "", params: ev.params || {}, note: ev.note,
+                  level: ev.level, levelLabel: ev.level_label, why: ev.why,
+                  alwaysConfirm: ev.always_confirm,
+                  chained: ev.chained,
+                  mayAlways: ev.may_always,
+                } }
+              : m)));
+          },
         },
       );
       cancelRef.current = handlers.cancel;
@@ -800,18 +817,25 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
     [settings, speakReply, feedSpeech, flushSpeech, agentMode, approval, made],
   );
 
-  /** 承認待ちの操作を実行する（メール送信など、取り消せないもの）。 */
-  const approveAct = useCallback(async (msgId: string) => {
-    let act: PendingAct | undefined;
-    setMessages((prev) => prev.map((m) => {
-      if (m.id !== msgId) return m;
-      act = m.await;
-      return { ...m, await: undefined,
-        steps: [...(m.steps ?? []), { kind: "tool" as const, tool: act?.tool ?? "", note: act?.note }] };
-    }));
-    if (!act) return;
+  /* 一度押した承認（二度押しで2回実行しない）。 */
+  const approvedRef = useRef<Set<string>>(new Set());
+
+  /** 承認待ちの操作を実行する（メール送信など、取り消せないもの）。
+
+      `act` は**押された時点で画面に出ていた物**をそのまま受け取る。
+      以前は setMessages の更新関数の中で拾っていたが、React は更新を後回しに
+      することがあり（別の更新が溜まっているとき）、そのときは拾う前に
+      「承認待ちは無い」と判断して抜けていた。画面には「→ メールを送信」が
+      出るのに、実行の依頼は1度も飛ばない——会話の確認カードを足したときに
+      テストで見つかった。見せた物を承認する、の意味でもこちらが正しい。 */
+  const approveAct = useCallback(async (msgId: string, act: PendingAct) => {
+    if (approvedRef.current.has(msgId)) return;
+    approvedRef.current.add(msgId);
+    setMessages((prev) => prev.map((m) => (m.id !== msgId ? m : {
+      ...m, await: undefined,
+      steps: [...(m.steps ?? []), { kind: "tool" as const, tool: act.tool, note: act.note }] })));
     try {
-      const { result, show } = await agentExecute(act.tool, act.params);
+      const { result, show } = await agentExecute(act.tool, act.params, act.level);
       setMessages((prev) => prev.map((m) => (m.id === msgId
         ? { ...m, steps: [...(m.steps ?? []), { kind: "observation" as const, result }] } : m)));
       for (const it of show) made(it);
@@ -1169,11 +1193,11 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
                   ? regenerate
                   : undefined
               }
-              onApprove={m.await ? () => void approveAct(m.id) : undefined}
+              onApprove={m.await ? () => void approveAct(m.id, m.await!) : undefined}
               onReject={m.await ? () => rejectAct(m.id) : undefined}
               onAlways={m.await ? () => {
                 alwaysAllow.allow(m.await!.tool, m.await!.levelLabel);
-                void approveAct(m.id);
+                void approveAct(m.id, m.await!);
               } : undefined}
             />
           ))}

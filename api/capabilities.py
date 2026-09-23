@@ -73,7 +73,7 @@ CAPABILITIES: List[dict] = [
     {"cmd": "読む", "yomi": "よむ read url", "label": "ページを読む", "pack": "core",
      "tool": "web_read", "arg": "URL", "icon": "📖"},
     {"cmd": "ブラウザ", "yomi": "ぶらうざ browser", "label": "ブラウザで開いて読む", "pack": "core",
-     "tool": "browser_visit", "arg": "URL", "icon": "🌐"},
+     "tool": "browser_open", "arg": "URL", "icon": "🌐"},
     {"cmd": "覚えて", "yomi": "おぼえて remember", "label": "覚えておく", "pack": "core",
      "tool": "remember", "arg": "覚える内容", "icon": "🧠"},
     {"cmd": "思い出して", "yomi": "おもいだして recall", "label": "思い出す", "pack": "core",
@@ -153,7 +153,18 @@ CAPABILITIES: List[dict] = [
 # list_state は watch_report と役目が重なるので、人には1つだけ見せる。
 # self_check は「何ができる？」と聞かれたときに**推測せず調べる**ための物で、
 # 人が # から打つ場面が無い（一覧は設定→つなぐに出ている）。
-_HIDDEN_TOOLS = {"list_state", "schedule_list", "complete_task", "self_check"}
+#
+# 手元のパソコンの道具（ファイル・Obsidian・ブラウザで押す）も、ここに入る。
+# **以前はどこにも入っておらず、AIに1度も渡っていなかった。** 道具を直に
+# 呼ぶテストは通るので気づけず、「日誌に書いておいて」は、道具を知らない
+# AIが推測で答えるだけだった。# の近道にしないのは、パスや手順を1行から
+# 機械的に割れないため（割れない物は AI に任せる、が # の決まり）。
+# 繋いでいない人にも渡す——渡さないと、AIは近い別の道具（AIbouの中に保存）
+# を選んで「書きました」と答える。渡しておけば「繋がっていません」と言える。
+_HIDDEN_TOOLS = {"list_state", "schedule_list", "complete_task", "self_check",
+                 "browser_act",
+                 "local_list", "local_read", "local_write", "local_append",
+                 "obsidian_note"}
 
 
 # ── どのパックが有効か ───────────────────────────────────────────────

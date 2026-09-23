@@ -50,6 +50,19 @@ export const TOOL_LABELS: Record<string, string> = {
   income_status: "副業の状況を確認",
   notify: "通知を送信",
   save_note: "ノートに保存",
+  complete_task: "タスクを完了",
+  board_add_note: "ボードに付箋を貼る",
+  draw_diagram: "図を描く",
+  watch_report: "見張りの結果を確認",
+  self_check: "できることを確認",
+  // ブラウザ。どこで開くか（手元の台か、サーバーか）はサーバーが決めて、結果に書く
+  browser_open: "ページを開いて読む",
+  browser_act: "ページを操作する",
+  local_list: "手元のフォルダを見る",
+  local_read: "手元のファイルを読む",
+  local_write: "手元のファイルに書く",
+  local_append: "手元のファイルに書き足す",
+  obsidian_note: "今日の日誌に書き足す",
 };
 
 export type AgentStep =

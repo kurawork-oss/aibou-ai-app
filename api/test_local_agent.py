@@ -611,21 +611,41 @@ def test_only_the_listed_sites_open(workspace, url, ok):
             g.site(url)
 
 
-def test_touching_is_always_confirmed():
-    """押した先が「送信」かもしれない。そのときは**本人として**送られる。"""
-    import risk
-    assert risk.level("local_browse_act") == 3
-    assert risk.needs_confirmation("local_browse_act", False) is True
-    # 「いつも許可」も出さない
-    assert risk.may_always_allow("local_browse_act") is False
-    assert "取り消せません" in risk.WHY["local_browse_act"]
+def _a_logged_in_site():
+    """「intra.example.co.jp を許している台が1台動いている」状態を作る。"""
+    got = localagent.pair("local", "ノート")
+    localagent.take("local", got["device"], wait=0.01)
+    localagent.note_engines("local", got["device"], ["playwright"])
+    localagent.note_sites("local", got["device"], ["intra.example.co.jp"])
+    return {"url": "https://intra.example.co.jp/cases"}
 
 
-def test_looking_is_lighter_than_touching():
+def test_touching_as_you_is_always_confirmed():
+    """押した先が「送信」かもしれない。そのときは**本人として**送られる。
+
+    手元の台で開く（＝あなたとしてログイン済み）ときは段階3。承認モードを
+    切っていても聞き、「いつも許可」も出さない。
+    """
     import risk
-    assert risk.level("local_browse") == 2
+    logged_in = _a_logged_in_site()
+    assert risk.level("browser_act", logged_in) == 3
+    assert risk.needs_confirmation("browser_act", False, params=logged_in) is True
+    assert risk.may_always_allow("browser_act", params=logged_in) is False
+    assert "取り消せません" in risk.describe("browser_act", params=logged_in)["why"]
+
+
+def test_looking_as_you_is_lighter_than_touching():
+    import risk
+    logged_in = _a_logged_in_site()
+    assert risk.level("browser_open", logged_in) == 2
     # ただし1枚読んだ後は、行き先がページ由来かもしれないので聞く
-    assert risk.needs_confirmation("local_browse", False, external_reads=1) is True
+    assert risk.needs_confirmation("browser_open", False, external_reads=1,
+                                   params=logged_in) is True
+
+
+# 「2台あって決まらない」ときの扱いは test_gate.py へ移した
+# （確認より先に、どちらの台かを聞き返す。測ってから動かすまでの間に
+#   状況が変わっても、通した重さを超えては動かない）。
 
 
 def test_no_way_to_run_javascript_in_your_own_browser():
@@ -650,13 +670,13 @@ def test_reading_does_not_accept_steps(workspace, monkeypatch):
 
 
 def test_the_tools_are_registered():
-    import risk
     import tools
     import toolschema
-    for name in ("local_browse", "local_browse_act"):
+    for name in ("browser_open", "browser_act"):
         assert name in tools.TOOL_DOCS, name
         assert name in tools._DISPATCH, name
         assert name in toolschema.SCHEMAS, name
+    # 台とのやりとりの名前は変えていない（手元の相棒は古いままでも動く）
     assert "browse" in localagent.JOBS and "browse_act" in localagent.JOBS
 
 

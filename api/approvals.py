@@ -59,6 +59,13 @@ MAX_PENDING = 50
 
 _mem = memstore.TenantList()
 
+#: 止めたときの段階を控えておく場所（params の中）。
+#:
+#: 表に列を足すと、移行を済ませていないDBでは書き込みが失敗し、控えが
+#: メモリにしか残らなくなる（再起動で消える）。params は jsonb なので、
+#: 列を足さずに持てる。実行する前に取り外すので、道具には渡らない。
+_LEVEL_KEY = "_approved_level"
+
 
 def _now() -> float:
     return time.time()
@@ -106,16 +113,24 @@ def _update(approval_id: str, patch: dict) -> None:
 
 
 def create(tool: str, params: dict, *, note: str = "", source: str = "",
-           user_id: str = "", why: str = "") -> dict:
+           user_id: str = "", why: str = "", level: Optional[int] = None) -> dict:
     """止まった用事を1件控える。
 
     返り値の `token` は**通知にだけ**載せる。一覧や画面には出さない
     （出すと、画面を覗ける人が誰でも実行できてしまう）。
+
+    `level` は止めたときの段階。答えるのは数分〜数時間あと（期限24時間）で、
+    その間に実行の場所が変わりうる（手元の台がつながる等）。実行するときに
+    この段階より重くなっていたら動かさない（risk.ceiling）。
     """
+    params = dict(params or {})
+    params.pop(_LEVEL_KEY, None)          # 外から紛れ込んだ物は使わない
+    if level is not None:
+        params[_LEVEL_KEY] = int(level)
     row = {
         "id": str(uuid.uuid4()),
         "tool": (tool or "").strip(),
-        "params": params or {},
+        "params": params,
         "note": (note or "")[:400],
         "why": (why or "")[:200],
         "source": (source or "")[:80],     # どこから来たか（定期実行など）
@@ -135,6 +150,17 @@ def get(approval_id: str) -> Optional[dict]:
     return None
 
 
+def _split_level(params) -> tuple:
+    """(道具に渡す引数, 止めたときの段階)。段階は控えの中だけの物。"""
+    p = dict(params or {})
+    lv = p.pop(_LEVEL_KEY, None)
+    try:
+        lv = int(lv) if lv is not None else None
+    except (TypeError, ValueError):
+        lv = None
+    return p, lv
+
+
 def list_pending() -> List[dict]:
     """待っている物。**合言葉は外して**返す（画面に出る）。"""
     now = _now()
@@ -144,7 +170,9 @@ def list_pending() -> List[dict]:
             continue
         if now - float(r.get("created_at") or 0) > TTL:
             continue
-        out.append({k: v for k, v in r.items() if k != "token"})
+        item = {k: v for k, v in r.items() if k != "token"}
+        item["params"], item["level"] = _split_level(r.get("params"))
+        out.append(item)
     return out
 
 
@@ -235,35 +263,47 @@ def _apply(row: dict, decision: str) -> dict:
 
     # 実行する。**作られたときと同じ人の保存先**に戻してから。
     # ここを忘れると、別の人のDBに対して実行してしまう。
+    # 「誰の」も戻す。手元のパソコンの相棒（ブラウザ含む）は、DBではなく
+    # この名前で本人の台を引く。
     bound = None
+    who = None
     try:
         uid = (row.get("user_id") or "").strip()
         if uid:
+            who = config.bind_request_user(uid)
             import tenancy
             client = tenancy.client_for(uid)
             if client is not None:
                 bound = config.bind_request_client(client)
+        import risk
         import tools
-        result = tools.execute_tool(row.get("tool") or "", row.get("params") or {})
+        params, level = _split_level(row.get("params"))
+        # 止めたときより重くなっていたら動かさない（その間に台がつながった等）
+        with risk.ceiling(level):
+            result = tools.execute_tool(row.get("tool") or "", params)
     except Exception as e:
         _update(approval_id, {"status": "failed", "result": str(e)[:400], "token": ""})
         return {"ok": False, "error": f"実行に失敗しました: {e}"}
     finally:
         if bound is not None:
             config.reset_request_client(bound)
+        if who is not None:
+            config.reset_request_user(who)
 
     _update(approval_id, {"status": "done", "result": str(result)[:800], "token": ""})
     return {"ok": True, "status": "done", "result": result}
 
 
 def ask(tool: str, params: dict, *, note: str = "", source: str = "",
-        user_id: str = "", why: str = "", answer_url: str = "") -> dict:
+        user_id: str = "", why: str = "", answer_url: str = "",
+        level: Optional[int] = None) -> dict:
     """控えて、通知する。止まった用事から呼ぶのはこれ1つ。
 
     通知が飛ばなくても控えは残す（アプリを開けば一覧に出る）。
     「通知が届かなかったから、待っていたことすら分からない」を作らない。
     """
-    row = create(tool, params, note=note, source=source, user_id=user_id, why=why)
+    row = create(tool, params, note=note, source=source, user_id=user_id, why=why,
+                 level=level)
     body = note or f"{tool} を実行してよいか確認しています"
     try:
         import webpush

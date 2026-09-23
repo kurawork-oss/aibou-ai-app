@@ -105,23 +105,20 @@ SCHEMAS: Dict[str, Dict[str, Any]] = {
         "device": ("str", False, "どのパソコンか（台の名前。繋いでいる台が1つならいらない）"),
         "text": ("str", True, "今日の日誌に足す本文"),
     }},
-    "local_browse": {"fields": {
-        "device": ("str", False, "どのパソコンか（台の名前。繋いでいる台が1つならいらない）"),
-        "url": ("str", True, "開くページのURL（相棒が許したサイトの中だけ）"),
-    }},
-    "local_browse_act": {"fields": {
-        "device": ("str", False, "どのパソコンか（台の名前。繋いでいる台が1つならいらない）"),
-        "url": ("str", True, "開くページのURL（相棒が許したサイトの中だけ）"),
-        "steps": ("list", True,
-                  '押す・打ち込む手順。do は goto / click / fill / select / '
-                  'press / wait のどれか'),
-    }},
-    "browser_visit": {"fields": {
+    "browser_open": {"fields": {
+        "device": ("str", False, "どのパソコンか（台の名前。ふつうは要らない）"),
         "url": ("str", True, "開くページのURL"),
-        "steps": ("list", False,
-                  '押す・打ち込む手順。例 [{"do":"click","target":"続きを読む"},'
-                  '{"do":"fill","target":"検索","value":"東京"}]。'
-                  'do は click / fill / select / press / wait のどれか'),
+    }},
+    "browser_act": {"fields": {
+        "device": ("str", False, "どのパソコンか（台の名前。ふつうは要らない）"),
+        "url": ("str", True, "開くページのURL"),
+        # 型は "steps"（オブジェクトの配列）。以前ここが "list" になっていて、
+        # 知らない型は文字列として宣言されるため、AIには「手順は文字列」と
+        # 伝わっていた（下の test で、知らない型を書けないようにした）。
+        "steps": ("steps", True,
+                  '押す・打ち込む手順。例 [{"do":"fill","target":"検索","value":"東京"},'
+                  '{"do":"click","target":"検索する"}]。do は goto / click / fill / '
+                  'select / press / wait のどれか'),
     }},
 
     # ── つくる（AIbouの中に保存） ─────────────────────────────────

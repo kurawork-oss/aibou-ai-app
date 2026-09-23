@@ -31,7 +31,9 @@ agent.py に SENSITIVE_TOOLS という平たい集合が1つあった。
 黙ってメールが飛んだ」を、設定の組み合わせで起こせないようにする。
 """
 
-from typing import Dict
+import contextvars
+from contextlib import contextmanager
+from typing import Dict, Optional
 
 # 0: 取得のみ / 1: 自分の中 / 2: 外を変更 / 3: 取り返せない
 LEVELS: Dict[str, int] = {
@@ -43,10 +45,12 @@ LEVELS: Dict[str, int] = {
     "recall": 0,
     "web_search": 0,
     "web_read": 0,
-    # 押す・打ち込むところまでやれるが、行き先は外のページの中だけ。
-    # このアプリの中も、外のサービスも変わらない。ただし**連鎖**では
-    # web_read と同じ扱いにする（下の CHAIN_AFTER_EXTERNAL）。
-    "browser_visit": 0,
+    # ブラウザで開く・押す。**どこで開くかで段階が変わる**（browser_router）:
+    #   手元の台（あなたとしてログイン済み）… 読む=2 / 押す=3
+    #   サーバー（誰にもログインしていない）… 0
+    # ここに書いてあるのは、場所が分からないとき（一覧表示など）の重いほう。
+    "browser_open": 2,
+    "browser_act": 3,
     "email_inbox": 0,
     "calendar_list": 0,
     "income_status": 0,
@@ -77,8 +81,6 @@ LEVELS: Dict[str, int] = {
 
     # ── 2 外のサービスに残る ──────────────────────────────────────
     "local_read": 2,
-    # 本人がログイン済みのブラウザで**読む**。中身がAIへ渡る。
-    "local_browse": 2,
     "local_write": 2,
     "local_append": 2,
     "obsidian_note": 2,
@@ -90,12 +92,6 @@ LEVELS: Dict[str, int] = {
     "notion_add": 2,
 
     # ── 3 取り返せない（必ず確認） ────────────────────────────────
-    # 本人がログイン済みのブラウザで**押す・打ち込む**。
-    #
-    # ここを2にしてはいけない。押した先が「送信」かもしれず、そのときは
-    # **本人として**送られる。何が起きるかはページ次第で、こちらからは
-    # 見分けられない。見分けられないなら、重いほうに倒す。
-    "local_browse_act": 3,
     "send_email": 3,
     "notify": 3,
     "enqueue_income": 3,
@@ -113,9 +109,9 @@ LABELS: Dict[int, str] = {
 # 確認のときに添える一言（何が起きるのかを具体的に）
 WHY: Dict[str, str] = {
     "local_read": "このファイルの中身がAIへ渡ります。",
-    "local_browse": "ログイン済みの画面の中身が、AIへ渡ります。",
-    "local_browse_act": ("あなたのブラウザで、あなたとして操作します。"
-                         "押した先が送信や購入だった場合、取り消せません。"),
+    "browser_open": "ログイン済みの画面の中身が、AIへ渡ります。",
+    "browser_act": ("あなたのブラウザで、あなたとして操作します。"
+                    "押した先が送信や購入だった場合、取り消せません。"),
     "local_write": "手元のパソコンのファイルを書き換えます（元の内容は .bak に残ります）。",
     "local_append": "手元のパソコンのファイルに書き足します。",
     "obsidian_note": "今日の日誌に書き足します。",
@@ -137,8 +133,23 @@ WHY: Dict[str, str] = {
 UNKNOWN = 3
 
 
-def level(tool: str) -> int:
-    return LEVELS.get((tool or "").strip(), UNKNOWN)
+def level(tool: str, params=None) -> int:
+    """その道具の危なさ。`params` があれば、**どこで動くか**まで見て決める。
+
+    ブラウザで押すのは、誰にもログインしていないブラウザなら公開ページを
+    触るだけだが、あなたのブラウザならあなたとして押すことになる。同じ道具
+    でも重さが違うので、場所を決める所（browser_router）に聞く。
+    """
+    name = (tool or "").strip()
+    if params is not None:
+        try:
+            import browser_router
+            hint = browser_router.level_hint(name, params)
+        except Exception:
+            hint = None
+        if hint is not None:
+            return hint
+    return LEVELS.get(name, UNKNOWN)
 
 
 #: 外のページを1枚読んだ**後**は、確認を挟む道具。
@@ -154,10 +165,11 @@ def level(tool: str) -> int:
 #: 1枚目は確認しない（「調べて」→検索→1枚読む、がいちばん普通の流れで、
 #: ここに確認を挟むと毎回止まる）。2枚目から聞く。聞く画面にはURLが出るので、
 #: 持ち出そうとしていれば、その場で見える。
-CHAIN_AFTER_EXTERNAL = {"web_read", "browser_visit", "local_browse"}
+CHAIN_AFTER_EXTERNAL = {"web_read", "browser_open", "browser_act"}
 
 
-def may_always_allow(tool: str, external_reads: int = 0) -> bool:
+def may_always_allow(tool: str, external_reads: int = 0, params=None,
+                     lv: Optional[int] = None) -> bool:
     """「この操作はいつも許可」を出してよい道具か。
 
     出してはいけないのが2種類ある。
@@ -166,13 +178,15 @@ def may_always_allow(tool: str, external_reads: int = 0) -> bool:
         毎回聞くことが、この段階の**中身そのもの**。1回押したら以後
         メールが黙って飛ぶなら、段階を分けた意味が無くなる。
 
-    連鎖（外のページを読んだ後の web_read / local_browse）
+    連鎖（外のページを読んだ後の web_read / browser_open / browser_act）
         聞いている理由が「危なさ」ではなく「**誰が決めたか**」。行き先を
         決めたのが本人ではなくページの本文かもしれない、という話なので、
         道具ごとに一度許してよい性質の物ではない。
         （`https://悪い所/?data=<会話の中身>` で持ち出せる）
+
+    `lv` は、呼ぶ側が測り済みの段階（needs_confirmation と同じ）。
     """
-    if level(tool) >= 3:
+    if (level(tool, params) if lv is None else lv) >= 3:
         return False
     if external_reads > 0 and (tool or "").strip() in CHAIN_AFTER_EXTERNAL:
         return False
@@ -180,7 +194,7 @@ def may_always_allow(tool: str, external_reads: int = 0) -> bool:
 
 
 def needs_confirmation(tool: str, approval_mode: bool, external_reads: int = 0,
-                       allowed=()) -> bool:
+                       allowed=(), params=None, lv: Optional[int] = None) -> bool:
     """実行の前に人に聞くべきか。
 
     approval_mode は「確認しながら進める」設定。切っていても、
@@ -195,8 +209,12 @@ def needs_confirmation(tool: str, approval_mode: bool, external_reads: int = 0,
     ここに入っていても効かない**——効かせてよい物だけを may_always_allow
     が決めていて、ここでも同じ関門をもう一度通す（画面側の作りが変わっても
     サーバー側が守る）。
+
+    lv は、呼ぶ側が先に測った段階。渡せば測り直さない——ブラウザの道具は
+    測るたびに場所を決め直すので、「聞くかどうか」と「実行まで持っていく
+    重さ」（ceiling）を**同じ1回の測定**から出すために使う。
     """
-    lv = level(tool)
+    lv = level(tool, params) if lv is None else lv
     if lv >= 3:
         return True
     name = (tool or "").strip()
@@ -217,10 +235,11 @@ def chain_reason(tool: str, external_reads: int) -> str:
     return ""
 
 
-def describe(tool: str, external_reads: int = 0) -> dict:
+def describe(tool: str, external_reads: int = 0, params=None,
+             lv: Optional[int] = None) -> dict:
     """画面に出すための1件ぶん。"""
-    lv = level(tool)
-    why = WHY.get(tool, "")
+    lv = level(tool, params) if lv is None else lv
+    why = WHY.get(tool, "") if lv >= 1 else ""
     chain = chain_reason(tool, external_reads)
     if chain:
         # 段階の説明だけだと「読むだけなのに、なぜ聞かれるのか」が分からない
@@ -230,7 +249,7 @@ def describe(tool: str, external_reads: int = 0) -> dict:
         "level": lv,
         "label": LABELS.get(lv, LABELS[UNKNOWN]),
         "always_confirm": lv >= 3,
-        "may_always": may_always_allow(tool, external_reads),
+        "may_always": may_always_allow(tool, external_reads, lv=lv),
         "why": why,
         "chained": bool(chain),
     }
@@ -239,3 +258,43 @@ def describe(tool: str, external_reads: int = 0) -> dict:
 def table() -> list:
     """全部の道具の段階（設定画面と、説明の突き合わせに使う）。"""
     return [describe(t) for t in sorted(LEVELS)]
+
+
+# ── 通した重さを、実行まで持っていく ─────────────────────────────────
+#
+# ブラウザの道具は「どこで開くか」で重さが変わる。ところが、重さを測る時と
+# 実際に動かす時は**同じ瞬間ではない**:
+#
+#   測る  … 手元の台がつながっていない → サーバーで開く → 0（聞かずに通す）
+#   動かす … その間に台がつながった     → あなたとして開く → 本当は 2 か 3
+#
+# 確認カードを出してから押されるまでは、人の時間（数秒〜数分）空く。
+# 「公開ページを読む」と見せて承認されたものが、押された時には「あなたと
+# して操作する」に変わっている——これを起こさないため、門を通したときの
+# 重さを実行まで持っていき、**それより重くなっていたら動かさない**。
+#
+# 縛りを置くのは確認の門（agent.py / main.py の /chat と /agent/execute /
+# approvals.py）。置かれていない呼び出し（# の近道のように、本人が道具と
+# 中身を自分で打った物）は縛らない。
+_ceiling: contextvars.ContextVar = contextvars.ContextVar("risk_ceiling", default=None)
+
+#: 縛りを超えたときに返す言葉（道具の結果としてAIと人に届く）。
+OVER_CEILING = ("実行の直前に、動かす場所が変わりました（手元の台がつながった等）。"
+                "確認したときより重い操作になるため、実行していません。"
+                "もう一度頼んでもらえれば、改めて確認してから動かします。")
+
+
+@contextmanager
+def ceiling(level: Optional[int]):
+    """この中で動く道具は `level` より重くならない。None なら縛らない。"""
+    token = _ceiling.set(level)
+    try:
+        yield
+    finally:
+        _ceiling.reset(token)
+
+
+def within_ceiling(actual: int) -> bool:
+    """いま動かそうとしている重さが、通した重さに収まっているか。"""
+    limit = _ceiling.get()
+    return limit is None or int(actual) <= int(limit)

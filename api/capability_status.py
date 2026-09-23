@@ -80,7 +80,7 @@ GROUPS: List[dict] = [
      "tools": ["remember", "recall"]},
 
     {"id": "web", "name": "Web検索・ページ取得", "kind": "local", "pack": "core",
-     "tools": ["web_search", "web_read"]},
+     "tools": ["web_search", "web_read", "browser_open"]},
 
     {"id": "tasks", "name": "タスク・予定", "kind": "local", "pack": "core",
      "tools": ["add_task", "add_agenda", "list_state"]},
@@ -134,17 +134,18 @@ GROUPS: List[dict] = [
      "next": "自分のサーバーで動かしていて、必要な場合だけ ENABLE_SHELL=1 を設定します",
      "action": {"kind": "env", "name": "ENABLE_SHELL"}},
 
-    {"id": "browser", "name": "ブラウザでページを開いて読む・押す", "kind": "off",
-     "env": "ENABLE_BROWSER", "pack": "core", "tools": ["browser_visit"],
+    {"id": "browser", "name": "サーバーのブラウザ（ログイン無しの公開ページ）", "kind": "off",
+     "env": "ENABLE_BROWSER", "pack": "core", "tools": ["browser_act"],
      "why_missing": "メモリを多く使うため、既定で切ってあります",
-     "next": ("無料のRender（512MB）では、開いたページ1枚でAPIごと落ちることが"
-              "あります。余裕のある置き場なら ENABLE_BROWSER=1 で入ります"),
+     "next": ("ログインが要るサイトは、手元のパソコンの相棒が開きます（こちらは要りません）。"
+              "公開ページも押して操作したいときだけ、余裕のある置き場で ENABLE_BROWSER=1 に。"
+              "無料のRender（512MB）では、開いたページ1枚でAPIごと落ちることがあります"),
      "action": {"kind": "env", "name": "ENABLE_BROWSER"}},
 
     {"id": "local_agent", "name": "パソコンの中を触る（手元の相棒）",
      "kind": "local_agent", "pack": "core",
      "tools": ["local_list", "local_read", "local_write", "local_append",
-               "obsidian_note", "local_browse", "local_browse_act"],
+               "obsidian_note", "browser_open", "browser_act"],
      "why_missing": "手元のパソコンで相棒を動かしていません",
      "next": ("設定 → つなぐ →「手元のパソコン」で合言葉を作り、"
               "パソコンで `python aibou_local.py` を動かします"),

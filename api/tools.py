@@ -108,21 +108,18 @@ TOOL_DOCS: Dict[str, str] = {
     "obsidian_note":
         'Obsidianの日誌（今日の日付のノート）に書き足す。vaultの場所は相棒側で'
         '決めてある / params: { "text": "書き足す内容" }',
-    "local_browse":
-        '**本人がログイン済みの**ブラウザで、手元のパソコン側からページを開いて読む。'
-        'ログインが要るページ（社内ツール・管理画面・会員サイト）に使う。'
-        'ログインの要らないページは browser_visit のほうが速い / '
-        'params: { "url": "https://example.com/dashboard" }',
-    "local_browse_act":
-        '**本人がログイン済みの**ブラウザで、押す・打ち込む。本人として操作するので、'
-        '実行の前に必ず確認が入る / params: { "url": "https://example.com", '
-        '"steps": [{"do": "fill", "target": "検索", "value": "東京"}, '
-        '{"do": "click", "target": "検索する"}] }',
-    "browser_visit":
-        '本物のブラウザでページを開いて読む。web_read が「内容がありませんでした」と'
-        '返したページ（本文をJavaScriptで後から入れるページ）に使う。'
-        'stepsを渡すと、押す・打ち込むところまでやってから読む / params: '
-        '{ "url": "https://example.com", "steps": [{"do": "click", "target": "続きを読む"}] }',
+    "browser_open":
+        'ブラウザでページを開いて読む。JavaScriptで中身が出るページや、ログインが要る'
+        'ページ（社内ツール・管理画面・会員サイト）に使う。**どこで開くかは自動で決まる**'
+        '（ログインが要るサイトは、そのサイトを許している手元のパソコンで、あなたとして開く）。'
+        '文字だけの公開ページなら web_read のほうが速い / params: '
+        '{ "url": "https://example.com/dashboard", "device": "（任意）台の名前" }',
+    "browser_act":
+        'ブラウザでページを開いて、押す・打ち込む・選ぶ。ログインが要るサイトでは'
+        '**あなたとして**操作するので、実行の前に必ず確認が入る。stepsの do は '
+        'goto / click / fill / select / press / wait / params: '
+        '{ "url": "https://example.com", "steps": [{"do": "fill", "target": "検索", '
+        '"value": "東京"}, {"do": "click", "target": "検索する"}] }',
     "generate_image":
         'プロンプトから画像を生成する（HOMEの生成物に保存される） / params: { "prompt": "夕焼けの富士山、油絵風" }',
     "draw_diagram":
@@ -927,49 +924,39 @@ def _browse_say(got: dict, params: dict) -> str:
     return "\n".join(parts)
 
 
-def _do_local_browse(params: dict) -> str:
-    url = (params.get("url") or "").strip()
-    if not url:
-        return "URLが空です。"
-    return _browse_say(_local("browse", {"url": url}, timeout=90.0,
-                              device=(params.get("device") or "").strip()), params)
-
-
-def _do_local_browse_act(params: dict) -> str:
-    url = (params.get("url") or "").strip()
-    if not url:
-        return "URLが空です。"
+def _steps_of(params: dict) -> list:
     steps = params.get("steps")
     if isinstance(steps, dict):
         steps = [steps]
-    return _browse_say(_local("browse_act", {
-        "url": url, "steps": steps if isinstance(steps, list) else []},
-        timeout=120.0, device=(params.get("device") or "").strip()), params)
+    return steps if isinstance(steps, list) else []
 
 
-def _do_browser_visit(params: dict) -> str:
-    """本物のブラウザで開いて読む。押す手順があればそこまでやる。
+def _route_say(plan: dict) -> str:
+    """場所を決められなかった理由を、人の言葉で。"""
+    why = plan.get("error") or "開く場所を決められませんでした"
+    nxt = plan.get("next") or ""
+    return f"{why}{'。' + nxt if nxt else ''}"
 
-    web_read との違いは「JavaScriptが走ったあとを見るか」だけ。重いので、
-    web_read で足りるページにはそちらを使わせる（catalog にそう書いてある）。
+
+def _route_heavier(tool: str, plan: dict) -> bool:
+    """決まった場所で動かすと、確認の門で通した重さを超えるか。
+
+    重さは場所で変わる（手元の台＝あなたとして）。門で測ってから
+    ここまでの間に台がつながると、確認していない重さで動くことになる。
     """
-    url = (params.get("url") or "").strip()
-    if not url:
-        return "URLが空です。"
-    steps = params.get("steps")
-    if isinstance(steps, dict):
-        steps = [steps]
-    try:
-        import browser as browser_mod
-        res = browser_mod.visit(url, steps if isinstance(steps, list) else None,
-                                int(params.get("max_chars") or browser_mod.MAX_CHARS))
-    except Exception as e:
-        return f"ブラウザを動かせませんでした：{e}"
+    import browser_router
+    import risk
+    return not risk.within_ceiling(browser_router.route_level(tool, plan["route"]))
+
+
+def _server_say(res: dict, label: str) -> str:
+    """サーバーのブラウザの結果（本文は browser.visit が包んである）。"""
     if not res.get("ok"):
         return f"開けませんでした：{res.get('error')}"
     parts = []
     if res.get("title"):
         parts.append(f"【{res['title']}】{res.get('url', '')}")
+    parts.append(f"（{label}で実行）")
     for line in res.get("did") or []:
         parts.append(f"（{line}）")
     parts.append(res.get("text", ""))
@@ -978,6 +965,67 @@ def _do_browser_visit(params: dict) -> str:
         parts.append("押せるもの: " + " / ".join(
             l["label"] for l in links[:12] if l.get("label")))
     return "\n".join(parts)
+
+
+def _do_browser_open(params: dict) -> str:
+    """ページを開いて読む。**どこで開くかは browser_router が決める。**
+
+      そのサイトを --site に入れている台がある → その台（あなたとしてログイン済み）
+      どの台にも無い → サーバーのブラウザ（誰にもログインしていない）
+      それも無い → ページの文字だけ（HTTP）。JavaScriptで出る中身は入らない
+    """
+    url = (params.get("url") or "").strip()
+    if not url:
+        return "URLが空です。"
+    import browser_router
+    plan = browser_router.plan(url, "open", (params.get("device") or "").strip())
+    if not plan.get("ok"):
+        return _route_say(plan)
+    if _route_heavier("browser_open", plan):
+        import risk
+        return risk.OVER_CEILING
+    if plan["route"] == "local":
+        return _browse_say(_local("browse", {"url": url}, timeout=90.0,
+                                  device=plan["device"]), params)
+    if plan["route"] == "server":
+        try:
+            import browser as browser_mod
+            res = browser_mod.visit(url, None)
+        except Exception as e:
+            return f"ブラウザを動かせませんでした：{e}"
+        return _server_say(res, plan["label"])
+    # ブラウザが使えないので、文字だけ読む（そう言う）
+    out = _do_web_read({"url": url})
+    return (f"（ブラウザを使える場所が無いので、ページの文字だけ読みました。"
+            f"JavaScriptで後から出る中身は入っていないかもしれません）\n{out}")
+
+
+def _do_browser_act(params: dict) -> str:
+    """ページを開いて、押す・打ち込む。場所は browser_router が決める。
+
+    手元の台で動くときは**あなたとして**押すことになるので、段階3
+    （risk.level が場所まで見て決める）——実行の前に必ず確認が入る。
+    """
+    url = (params.get("url") or "").strip()
+    if not url:
+        return "URLが空です。"
+    steps = _steps_of(params)
+    import browser_router
+    plan = browser_router.plan(url, "act", (params.get("device") or "").strip())
+    if not plan.get("ok"):
+        return _route_say(plan)
+    if _route_heavier("browser_act", plan):
+        import risk
+        return risk.OVER_CEILING
+    if plan["route"] == "local":
+        return _browse_say(_local("browse_act", {"url": url, "steps": steps},
+                                  timeout=120.0, device=plan["device"]), params)
+    try:
+        import browser as browser_mod
+        res = browser_mod.visit(url, steps)
+    except Exception as e:
+        return f"ブラウザを動かせませんでした：{e}"
+    return _server_say(res, plan["label"])
 
 
 def _do_web_read(params: dict) -> str:
@@ -1264,38 +1312,13 @@ _DISPATCH = {
     "email_inbox": _do_email_inbox,
     "web_search": _do_web_search,
     "web_read": _do_web_read,
-    "local_list":
-        '手元のパソコンの、決めたフォルダの中身を一覧する（相棒を動かしている場合） / '
-        'params: { "path": "メモ" }',
-    "local_read":
-        '手元のパソコンのテキストファイルを読む / params: { "path": "メモ/買い物.md" }',
-    "local_write":
-        '手元のパソコンにテキストファイルを書く（元の内容は .bak に残る） / '
-        'params: { "path": "メモ/下書き.md", "text": "本文" }',
-    "local_append":
-        '手元のパソコンのファイルの末尾に足す。Obsidianの日誌のように'
-        '「消さずに積む」物に使う / params: { "path": "日誌/2026-09-15.md", "text": "本文" }',
-    "obsidian_note":
-        'Obsidianの日誌（今日の日付のノート）に書き足す。vaultの場所は相棒側で'
-        '決めてある / params: { "text": "書き足す内容" }',
-    "local_browse":
-        '**本人がログイン済みの**ブラウザで、手元のパソコン側からページを開いて読む。'
-        'ログインが要るページ（社内ツール・管理画面・会員サイト）に使う。'
-        'ログインの要らないページは browser_visit のほうが速い / '
-        'params: { "url": "https://example.com/dashboard" }',
-    "local_browse_act":
-        '**本人がログイン済みの**ブラウザで、押す・打ち込む。本人として操作するので、'
-        '実行の前に必ず確認が入る / params: { "url": "https://example.com", '
-        '"steps": [{"do": "fill", "target": "検索", "value": "東京"}, '
-        '{"do": "click", "target": "検索する"}] }',
-    "browser_visit": _do_browser_visit,
+    "browser_open": _do_browser_open,
+    "browser_act": _do_browser_act,
     "local_list": _do_local_list,
     "local_read": _do_local_read,
     "local_write": _do_local_write,
     "local_append": _do_local_append,
     "obsidian_note": _do_obsidian_note,
-    "local_browse": _do_local_browse,
-    "local_browse_act": _do_local_browse_act,
     "generate_image": _do_generate_image,
     "draw_diagram": _do_draw_diagram,
     "schedule_add": _do_schedule_add,

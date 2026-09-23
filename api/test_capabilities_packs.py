@@ -97,6 +97,26 @@ def test_every_advertised_command_has_a_real_implementation():
             assert c["tool"] in tools.TOOL_DOCS, f"{c['cmd']} の説明がない"
 
 
+def test_every_tool_reaches_the_ai_through_some_pack():
+    """作った道具は、どれかのパックを通って必ずAIに渡ること。
+
+    手元のパソコンの道具（ファイル・Obsidian・ブラウザで押す）が、どの
+    パックにも入っておらず、**AIに1度も渡っていなかった**。道具を直に呼ぶ
+    テストは全部通るので、作った側からは動いているように見えていた。
+    """
+    reachable = {c["tool"] for c in cap.CAPABILITIES if c.get("tool")} | cap._HIDDEN_TOOLS
+    missing = sorted(set(tools._DISPATCH) - reachable)
+    assert not missing, f"どのパックからもAIに渡らない道具: {missing}"
+
+
+def test_the_local_tools_are_offered_by_default():
+    """既定のパックのままで、手元の道具とブラウザで押す道具が渡ること。"""
+    offered = cap.enabled_tools()
+    for name in ("browser_open", "browser_act", "local_read", "local_write",
+                 "local_list", "local_append", "obsidian_note"):
+        assert name in offered, name
+
+
 # ── ② # コマンド ────────────────────────────────────────────────────
 def test_a_command_goes_straight_to_the_tool():
     """AIに考えさせず、そのまま実行されること（これが速さの理由）。"""

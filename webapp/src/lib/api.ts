@@ -41,6 +41,13 @@ export interface StreamChatParams {
    * 送るのは**引き当てた数件だけ**。端末の記憶を丸ごと送りはしない。
    */
   memory?: string;
+  /**
+   * 確認しながら進めるか（画面の設定）。実行モードと同じ意味。
+   * 切っていても、段階3（送る・投稿する・お金が動く）はサーバーが必ず聞いてくる。
+   */
+  approval?: boolean;
+  /** 本人が「いつも許可」を押した道具。段階3と、外のページを読んだ後の連鎖には効かない。 */
+  allow?: string[];
 }
 
 export interface VisionParams {
@@ -207,7 +214,19 @@ export interface ChatSideChannel {
   onTool?: (tool: string) => void;
   /** その道具が作った物。キャンバスに出す。 */
   onShow?: (item: MadeItem) => void;
+  /**
+   * AIが選んだ道具が、実行の前に確認の要る物だった（まだ実行していない）。
+   *
+   * 会話はそこで止まる。形は実行モードの approval と同じなので、画面は
+   * 同じ確認カードを出し、承認されたら同じ口（/agent/execute）で実行する。
+   */
+  onApproval?: (ev: ChatApproval) => void;
 }
+
+/** 会話で届く「実行してよいか」。実行モードの approval から phase を除いた物。 */
+export type ChatApproval = Pick<AgentEvent,
+  "tool" | "params" | "note" | "level" | "level_label" | "why"
+  | "always_confirm" | "may_always" | "chained">;
 
 /**
  * POST /chat — read the SSE stream and surface tokens as they arrive.
@@ -250,6 +269,9 @@ export function streamChat(
           persona: params.persona ?? undefined,
           name: params.name ?? undefined,
           memory: params.memory || undefined,
+          // 送らなければサーバーは「聞く」側に倒す（古い画面と同じ振る舞い）
+          approval: params.approval,
+          allow: params.allow?.length ? params.allow : undefined,
         }),
         signal: controller.signal,
       });
@@ -293,6 +315,10 @@ export function streamChat(
           }
           if (payload.show && typeof payload.show === "object") {
             side.onShow?.(payload.show as MadeItem);
+          }
+          // 確認の要る道具だった。サーバーは実行せずに止めている。
+          if (payload.approval && typeof payload.approval === "object") {
+            side.onApproval?.(payload.approval);
           }
           if (typeof payload.error === "string") {
             serverError = payload.error;
@@ -341,6 +367,8 @@ interface SSEPayload {
   tool?: string;
   /** その道具が作った物。 */
   show?: MadeItem;
+  /** 確認の要る道具だった（サーバーは実行せずに止めている）。 */
+  approval?: ChatApproval;
 }
 
 /** Parse one SSE event's `data:` line(s) into an arbitrary JSON object. */
@@ -706,11 +734,16 @@ export function agentActStream(
 /** POST /agent/execute — run a single approved tool (approval-mode confirm). */
 export async function agentExecute(
   tool: string, params: Record<string, unknown>,
+  /**
+   * 確認カードに出ていた段階。押したあとで実行場所が変わり（手元の台が
+   * つながった等）、これより重くなっていたら、サーバーは動かさずに断る。
+   */
+  level?: number,
 ): Promise<{ result: string; show: MadeItem[] }> {
   const res = await fetch(`${requireApiUrl()}/agent/execute`, {
     method: "POST",
     headers: authHeaders({ "Content-Type": "application/json" }),
-    body: JSON.stringify({ tool, params }),
+    body: JSON.stringify({ tool, params, level }),
   });
   const data = (await res.json().catch(() => ({}))) as
     { result?: string; show?: MadeItem[] };
