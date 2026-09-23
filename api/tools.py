@@ -813,15 +813,22 @@ def _do_web_search(params: dict) -> str:
     return untrusted.wrap("\n".join(lines), source="Web検索", kind=f"「{query}」の検索結果")
 
 
-def _local(kind: str, params: dict, timeout: float = 60.0) -> dict:
+def _local(kind: str, params: dict, timeout: float = 60.0,
+           device: str = "") -> dict:
     """手元のパソコンの相棒に頼む。
 
-    誰の相棒かは**リクエストの文脈**から引く（config.current_user_id）。
+    **誰の**相棒かは、リクエストの文脈から引く（config.current_user_id）。
     道具の引数で渡させると、他人の相棒を名指しできることになる。
+
+    **どの台か**は逆に引数でよい（`device`）。ノートPCとデスクトップは
+    どちらも本人の物なので、本人が言い分けられればいい。言われなかった
+    ときは localagent.pick が決める——動いている台が1つならそこ、
+    2つ以上なら**勝手に選ばず聞き返す**。
     """
     import config as _config
     import localagent
-    return localagent.run(_config.current_user_id() or "local", kind, params, timeout)
+    return localagent.run(_config.current_user_id() or "local", kind, params,
+                          timeout, device)
 
 
 def _local_say(got: dict, done: str) -> str:
@@ -830,11 +837,15 @@ def _local_say(got: dict, done: str) -> str:
         why = got.get("error") or "手元のパソコンから返事がありませんでした"
         nxt = got.get("next") or ""
         return f"{why}{'。' + nxt if nxt else ''}"
-    return got.get("text") or got.get("message") or done
+    body = got.get("text") or got.get("message") or done
+    # どの台がやったのかを添える。2台あるとき、これが無いと分からない
+    where = got.get("device_name")
+    return f"{body}（{where}）" if where and not got.get("text") else body
 
 
 def _do_local_list(params: dict) -> str:
-    got = _local("list", {"path": (params.get("path") or "").strip()})
+    got = _local("list", {"path": (params.get("path") or "").strip()},
+                 device=(params.get("device") or "").strip())
     if not got.get("ok"):
         return _local_say(got, "")
     items = got.get("items") or []
@@ -847,7 +858,8 @@ def _do_local_read(params: dict) -> str:
     path = (params.get("path") or "").strip()
     if not path:
         return "どのファイルか分かりません。"
-    got = _local("read", {"path": path})
+    got = _local("read", {"path": path},
+                 device=(params.get("device") or "").strip())
     if not got.get("ok"):
         return _local_say(got, "")
     # 手元のファイルの中身も、**指示ではない**。包んでから渡す。
@@ -859,7 +871,8 @@ def _do_local_write(params: dict) -> str:
     path = (params.get("path") or "").strip()
     if not path:
         return "どこに書くのか分かりません。"
-    got = _local("write", {"path": path, "text": params.get("text") or ""})
+    got = _local("write", {"path": path, "text": params.get("text") or ""},
+                 device=(params.get("device") or "").strip())
     return _local_say(got, f"{path} に書きました。")
 
 
@@ -867,7 +880,8 @@ def _do_local_append(params: dict) -> str:
     path = (params.get("path") or "").strip()
     if not path:
         return "どこに書き足すのか分かりません。"
-    got = _local("append", {"path": path, "text": params.get("text") or ""})
+    got = _local("append", {"path": path, "text": params.get("text") or ""},
+                 device=(params.get("device") or "").strip())
     return _local_say(got, f"{path} に書き足しました。")
 
 
@@ -880,7 +894,8 @@ def _do_obsidian_note(params: dict) -> str:
     text = (params.get("text") or "").strip()
     if not text:
         return "書き足す内容がありません。"
-    got = _local("append", {"vault": "daily", "text": text})
+    got = _local("append", {"vault": "daily", "text": text},
+                 device=(params.get("device") or "").strip())
     return _local_say(got, "今日の日誌に書き足しました。")
 
 
@@ -909,7 +924,8 @@ def _do_local_browse(params: dict) -> str:
     url = (params.get("url") or "").strip()
     if not url:
         return "URLが空です。"
-    return _browse_say(_local("browse", {"url": url}, timeout=90.0), params)
+    return _browse_say(_local("browse", {"url": url}, timeout=90.0,
+                              device=(params.get("device") or "").strip()), params)
 
 
 def _do_local_browse_act(params: dict) -> str:
@@ -921,7 +937,7 @@ def _do_local_browse_act(params: dict) -> str:
         steps = [steps]
     return _browse_say(_local("browse_act", {
         "url": url, "steps": steps if isinstance(steps, list) else []},
-        timeout=120.0), params)
+        timeout=120.0, device=(params.get("device") or "").strip()), params)
 
 
 def _do_browser_visit(params: dict) -> str:

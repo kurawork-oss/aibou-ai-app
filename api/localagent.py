@@ -23,6 +23,29 @@ Webだけでは**どうやっても届かない**。
 外向きの通信だけなので、ルーターの設定は要らない。会社のネットワークでも
 たいてい通る。
 
+何台でも繋げる
+--------------
+最初は**1人1台**で作ってしまっていた。`devices[user_id]` が1件の辞書で、
+2台目を繋ぐと1台目の合言葉が死ぬ（テストでその挙動を固定してすらいた）。
+
+「スマホとノートPCとデスクトップで使いたい」で、そこが即詰まった。
+スマホにはそもそも相棒が要らない（ブラウザだけ）が、**ノートとデスクトップは
+両方繋いだままにしたい**——これは1台設計では表せない。
+
+いまは台ごとに、合言葉・名前・仕事の列を持つ。
+
+どの台に頼むか
+--------------
+ファイルは台ごとに違う。だから「読んで」だけでは足りない。
+
+    動いている台が0台 … 動いていないと言う
+    1台             … その台に頼む
+    2台以上         … **勝手に選ばず、名前を並べて聞く**
+
+2台以上のときに黙って選ぶと、「ノートのファイルを読んだつもりがデスク
+トップのを読んでいた」が起きる。読み違いは分かりにくく、書き違いは
+取り返しがつかない。ここは聞くほうを取る。
+
 鍵の持ち方
 ----------
 1台ごとに合言葉（トークン）を発行する。手元の相棒はそれを持って取りに来る。
@@ -46,12 +69,11 @@ Webだけでは**どうやっても届かない**。
 from __future__ import annotations
 
 import hashlib
-import os
 import secrets
 import threading
 import time
 import uuid
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 # 頼める仕事。手元の相棒（agent_local/aibou_local.py）と同じ顔ぶれにする。
 JOBS = ("list", "read", "write", "append", "open", "shot",
@@ -65,6 +87,8 @@ RESULT_TIMEOUT = 60.0
 MAX_WAIT = 30.0
 # これだけ音沙汰が無ければ「繋がっていない」と見なす。
 OFFLINE_AFTER = 90.0
+# 1人が繋げる台数の上限。増やしすぎても管理できないだけ。
+MAX_DEVICES = 8
 
 
 def _now() -> float:
@@ -86,10 +110,8 @@ class _Store:
     def __init__(self) -> None:
         self.lock = threading.Lock()
         self.wake = threading.Condition(self.lock)
-        # user_id → {"token_hash": str, "name": str, "at": float, "seen": float}
-        self.devices: Dict[str, dict] = {}
-        # user_id → [job, ...]（手元がまだ取りに来ていない物）
-        self.queue: Dict[str, List[dict]] = {}
+        # user_id → device_id → {"token_hash", "name", "at", "seen", "queue"}
+        self.users: Dict[str, Dict[str, dict]] = {}
         # job_id → 結果（取りに来た側が持って帰るまで）
         self.results: Dict[str, dict] = {}
 
@@ -103,105 +125,225 @@ def reset() -> None:
     _store = _Store()
 
 
+def _devices(user_id: str) -> Dict[str, dict]:
+    return _store.users.setdefault(user_id or "local", {})
+
+
+def _online(dev: dict) -> bool:
+    return dev["seen"] > 0 and (_now() - dev["seen"]) < OFFLINE_AFTER
+
+
+def _label(dev: dict, device_id: str) -> str:
+    return dev.get("name") or device_id[:8]
+
+
 # ── 1台つなぐ ───────────────────────────────────────────────────────
 
 def pair(user_id: str, name: str = "") -> dict:
-    """新しい合言葉を発行する。**返すのはこの1回だけ。**
+    """新しい台を足す。**合言葉を返すのはこの1回だけ。**
 
-    サーバーには照合用の形でしか残らないので、無くしたらもう一度発行する。
+    すでに繋いである台は**そのまま**。ノートPCを繋いだあとにデスクトップを
+    繋いでも、ノートは切れない。
+
+    サーバーには照合用の形でしか残らないので、無くしたらその台だけ作り直す。
     （見せられない物を「見せられます」と言わないため、ここで言い切る）
     """
     token = secrets.token_urlsafe(32)
+    device_id = uuid.uuid4().hex
+    label = (name or "パソコン").strip()[:40] or "パソコン"
     with _store.lock:
-        _store.devices[user_id or "local"] = {
+        devices = _devices(user_id)
+        if len(devices) >= MAX_DEVICES:
+            return {"ok": False,
+                    "error": f"繋げる台数の上限（{MAX_DEVICES}台）です",
+                    "next": "使っていない台の繋ぎを切ってください"}
+        # 同じ名前が並ぶと、どちらに頼んだか分からなくなる
+        if any(d.get("name") == label for d in devices.values()):
+            label = f"{label}2"
+        devices[device_id] = {
             "token_hash": _hash(token),
-            "name": (name or "パソコン")[:40],
+            "name": label,
             "at": _now(),
             "seen": 0.0,
+            "queue": [],
         }
-        _store.queue.pop(user_id or "local", None)
-    return {"ok": True, "token": token, "name": (name or "パソコン")[:40]}
+    return {"ok": True, "token": token, "device": device_id, "name": label}
 
 
-def unpair(user_id: str) -> dict:
+def unpair(user_id: str, device: str = "") -> dict:
+    """繋ぎを切る。`device` を渡さなければ**全部**。"""
     with _store.lock:
-        had = _store.devices.pop(user_id or "local", None)
-        _store.queue.pop(user_id or "local", None)
-    return {"ok": True, "was_paired": bool(had)}
+        devices = _devices(user_id)
+        if not device:
+            n = len(devices)
+            devices.clear()
+            return {"ok": True, "removed": n}
+        found = _resolve_locked(devices, device)
+        if not found:
+            return {"ok": False, "error": f"「{device}」という台はありません"}
+        devices.pop(found)
+        return {"ok": True, "removed": 1}
 
 
-def whoami(token: str) -> str:
-    """合言葉から、どの利用者の相棒かを引く。分からなければ空文字。"""
-    want = _hash(token or "")
+def rename(user_id: str, device: str, name: str) -> dict:
+    """台に名前を付ける。どちらに頼むかを言葉で指せるようにするため。"""
+    label = (name or "").strip()[:40]
+    if not label:
+        return {"ok": False, "error": "名前が空です"}
+    with _store.lock:
+        devices = _devices(user_id)
+        found = _resolve_locked(devices, device)
+        if not found:
+            return {"ok": False, "error": f"「{device}」という台はありません"}
+        devices[found]["name"] = label
+    return {"ok": True, "device": found, "name": label}
+
+
+def whoami(token: str) -> Tuple[str, str]:
+    """合言葉から (利用者, 台) を引く。分からなければ ("", "")。"""
     if not token:
-        return ""
+        return "", ""
+    want = _hash(token)
     with _store.lock:
-        for user_id, dev in _store.devices.items():
-            if secrets.compare_digest(dev["token_hash"], want):
-                return user_id
+        for user_id, devices in _store.users.items():
+            for device_id, dev in devices.items():
+                if secrets.compare_digest(dev["token_hash"], want):
+                    return user_id, device_id
+    return "", ""
+
+
+def _resolve_locked(devices: Dict[str, dict], name: str) -> str:
+    """名前でもIDでも引けるようにする（人は名前で言う）。"""
+    key = (name or "").strip()
+    if not key:
+        return ""
+    if key in devices:
+        return key
+    low = key.lower()
+    for device_id, dev in devices.items():
+        if (dev.get("name") or "").lower() == low:
+            return device_id
+    # 前方一致（IDの頭だけ言われたとき）
+    for device_id in devices:
+        if device_id.startswith(key):
+            return device_id
     return ""
 
 
 def status(user_id: str) -> dict:
-    """繋がっているか。**「たぶん繋がっている」とは言わない。**"""
-    uid = user_id or "local"
+    """何台繋がっていて、どれが動いているか。
+
+    **「たぶん繋がっている」とは言わない。** 合言葉を作っただけの台と、
+    いま動いている台を分けて出す。
+    """
     with _store.lock:
-        dev = _store.devices.get(uid)
-        waiting = len(_store.queue.get(uid) or [])
-    if not dev:
-        return {"ok": True, "paired": False, "online": False, "waiting": 0,
+        devices = dict(_devices(user_id))
+        rows = []
+        for device_id, dev in devices.items():
+            idle = _now() - dev["seen"] if dev["seen"] else None
+            rows.append({
+                "device": device_id,
+                "name": dev["name"],
+                "online": _online(dev),
+                "waiting": len(dev["queue"]),
+                "last_seen_ago": int(idle) if idle is not None else None,
+            })
+    rows.sort(key=lambda r: (not r["online"], r["name"]))
+    live = [r for r in rows if r["online"]]
+
+    if not rows:
+        return {"ok": True, "paired": False, "online": False, "devices": [],
                 "why": "まだ1台も繋いでいません",
                 "next": "設定 → つなぐ →「手元のパソコン」から合言葉を作ります"}
-    idle = _now() - (dev["seen"] or 0)
-    online = dev["seen"] > 0 and idle < OFFLINE_AFTER
+    if live:
+        return {"ok": True, "paired": True, "online": True, "devices": rows,
+                "why": "", "next": ""}
+    never = all(r["last_seen_ago"] is None for r in rows)
     return {
-        "ok": True,
-        "paired": True,
-        "online": online,
-        "name": dev["name"],
-        "waiting": waiting,
-        "last_seen_ago": int(idle) if dev["seen"] else None,
-        "why": "" if online else (
-            "合言葉は作ってありますが、手元の相棒が動いていません"
-            if dev["seen"] == 0 else
-            f"最後に来たのは{int(idle)}秒前です（動いていない可能性があります）"),
-        "next": "" if online else "パソコンで `python aibou_local.py` を動かしてください",
+        "ok": True, "paired": True, "online": False, "devices": rows,
+        "why": ("合言葉は作ってありますが、手元の相棒が動いていません" if never
+                else "どの台も、しばらく音沙汰がありません"),
+        "next": "パソコンで `python aibou_local.py` を動かしてください",
     }
+
+
+# ── どの台に頼むか ──────────────────────────────────────────────────
+
+def pick(user_id: str, device: str = "") -> dict:
+    """頼み先を1台に決める。決められなければ、理由と選択肢を返す。
+
+    **2台以上動いているときに勝手に選ばない。** ファイルは台ごとに違うので、
+    黙って選ぶと「ノートを読んだつもりがデスクトップだった」が起きる。
+    読み違いは気づきにくく、書き違いは取り返しがつかない。
+    """
+    with _store.lock:
+        devices = _devices(user_id)
+        if not devices:
+            return {"ok": False, "error": "手元のパソコンを繋いでいません",
+                    "next": "設定 → つなぐ →「手元のパソコン」"}
+        if device:
+            found = _resolve_locked(devices, device)
+            if not found:
+                names = ", ".join(_label(d, i) for i, d in devices.items())
+                return {"ok": False,
+                        "error": f"「{device}」という台はありません（あるのは: {names}）"}
+            if not _online(devices[found]):
+                return {"ok": False,
+                        "error": f"「{_label(devices[found], found)}」は動いていません",
+                        "next": "そのパソコンで相棒を動かしてください"}
+            return {"ok": True, "device": found,
+                    "name": _label(devices[found], found)}
+
+        live = [(i, d) for i, d in devices.items() if _online(d)]
+        if not live:
+            return {"ok": False, "error": "動いている台がありません",
+                    "next": "パソコンで `python aibou_local.py` を動かしてください"}
+        if len(live) == 1:
+            return {"ok": True, "device": live[0][0],
+                    "name": _label(live[0][1], live[0][0])}
+        names = " / ".join(_label(d, i) for i, d in live)
+        return {"ok": False, "choose": [_label(d, i) for i, d in live],
+                "error": f"どのパソコンに頼むか決めてください（{names}）",
+                "next": "台の名前を言ってもらえれば、そこへ頼みます"}
 
 
 # ── 仕事を頼む / 取りに来る ────────────────────────────────────────
 
-def submit(user_id: str, kind: str, params: Optional[dict] = None) -> dict:
-    """仕事を1つ預ける。job_id を返す。"""
-    uid = user_id or "local"
+def submit(user_id: str, kind: str, params: Optional[dict] = None,
+           device: str = "") -> dict:
+    """仕事を1つ、1台に預ける。job_id を返す。"""
     if kind not in JOBS:
         return {"ok": False, "error": f"「{kind}」は頼めません"}
+    chosen = pick(user_id, device)
+    if not chosen.get("ok"):
+        return chosen
+    job = {"id": uuid.uuid4().hex, "kind": kind,
+           "params": dict(params or {}), "at": _now()}
     with _store.lock:
-        if uid not in _store.devices:
-            return {"ok": False, "error": "手元のパソコンを繋いでいません",
-                    "next": "設定 → つなぐ →「手元のパソコン」"}
-        job = {"id": uuid.uuid4().hex, "kind": kind,
-               "params": dict(params or {}), "at": _now()}
-        _store.queue.setdefault(uid, []).append(job)
+        dev = _devices(user_id).get(chosen["device"])
+        if dev is None:                      # 選んだ直後に切られた
+            return {"ok": False, "error": "その台は繋ぎが切れました"}
+        dev["queue"].append(job)
         _store.wake.notify_all()
-    return {"ok": True, "job_id": job["id"]}
+    return {"ok": True, "job_id": job["id"], "device": chosen["device"],
+            "name": chosen["name"]}
 
 
-def take(user_id: str, wait: float = 25.0) -> Optional[dict]:
+def take(user_id: str, device_id: str, wait: float = 25.0) -> Optional[dict]:
     """手元の相棒が「仕事ある？」と聞きに来たとき。
 
     無ければ `wait` 秒まで待つ。ここで待つぶん、頼んでから動き出すまでが
     速くなる（1秒ごとに聞きに来させると、平均0.5秒遅れて、そのあいだ
     ずっと通信が走る）。
     """
-    uid = user_id or "local"
     until = _now() + min(max(wait, 0.0), MAX_WAIT)
     with _store.lock:
-        dev = _store.devices.get(uid)
-        if dev:
-            dev["seen"] = _now()
         while True:
-            q = _store.queue.get(uid) or []
+            dev = _devices(user_id).get(device_id)
+            if dev is None:
+                return None                  # 繋ぎを切られた
+            dev["seen"] = _now()
+            q = dev["queue"]
             # 古すぎる仕事は渡さない（頼んだ人はもう待っていない）
             while q and _now() - q[0]["at"] > JOB_TTL:
                 q.pop(0)
@@ -211,17 +353,13 @@ def take(user_id: str, wait: float = 25.0) -> Optional[dict]:
             if left <= 0:
                 return None
             _store.wake.wait(timeout=min(left, 1.0))
-            dev = _store.devices.get(uid)
-            if dev:
-                dev["seen"] = _now()
 
 
-def deliver(user_id: str, job_id: str, result: dict) -> dict:
+def deliver(user_id: str, device_id: str, job_id: str, result: dict) -> dict:
     """手元の相棒が結果を持ってきたとき。"""
-    uid = user_id or "local"
     with _store.lock:
-        dev = _store.devices.get(uid)
-        if dev:
+        dev = _devices(user_id).get(device_id)
+        if dev is not None:
             dev["seen"] = _now()
         _store.results[job_id] = {"at": _now(), "result": dict(result or {})}
         _store.wake.notify_all()
@@ -244,9 +382,13 @@ def collect(job_id: str, timeout: float = RESULT_TIMEOUT) -> dict:
 
 
 def run(user_id: str, kind: str, params: Optional[dict] = None,
-        timeout: float = RESULT_TIMEOUT) -> dict:
+        timeout: float = RESULT_TIMEOUT, device: str = "") -> dict:
     """頼んで、結果まで待つ（道具から使う形）。"""
-    sent = submit(user_id, kind, params)
+    sent = submit(user_id, kind, params, device)
     if not sent.get("ok"):
         return sent
-    return collect(sent["job_id"], timeout)
+    got = collect(sent["job_id"], timeout)
+    # どの台がやったのかを添える。2台あるときに、これが無いと分からない
+    if got.get("ok") and sent.get("name"):
+        got["device_name"] = sent["name"]
+    return got

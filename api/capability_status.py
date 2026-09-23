@@ -272,8 +272,11 @@ def _judge(g: dict, packs: Set[str]) -> dict:
     if g["kind"] == "local_agent":
         st = _local_agent_status()
         if st.get("online"):
+            # 何台動いているかを出す。1台のつもりが2台だったときに
+            # 「どちらに頼んだのか」を後から辿れるようにするため。
+            live = [d["name"] for d in (st.get("devices") or []) if d.get("online")]
             out.update(status="connected", connected=True,
-                       account=st.get("name") or "")
+                       account=" / ".join(live) if live else "")
             return out
         out.update(status="not_connected", connected=False,
                    why=st.get("why") or g.get("why_missing", ""),

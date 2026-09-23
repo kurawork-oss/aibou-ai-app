@@ -84,26 +84,33 @@ SCHEMAS: Dict[str, Dict[str, Any]] = {
         "url": ("str", True, "読み取るページのURL"),
     }},
     "local_list": {"fields": {
+        "device": ("str", False, "どのパソコンか（台の名前。繋いでいる台が1つならいらない）"),
         "path": ("str", False, "フォルダ（相棒が許したフォルダからの相対）"),
     }},
     "local_read": {"fields": {
+        "device": ("str", False, "どのパソコンか（台の名前。繋いでいる台が1つならいらない）"),
         "path": ("str", True, "ファイル（相棒が許したフォルダからの相対）"),
     }},
     "local_write": {"fields": {
+        "device": ("str", False, "どのパソコンか（台の名前。繋いでいる台が1つならいらない）"),
         "path": ("str", True, "書き先（相棒が許したフォルダからの相対）"),
         "text": ("str", True, "本文"),
     }},
     "local_append": {"fields": {
+        "device": ("str", False, "どのパソコンか（台の名前。繋いでいる台が1つならいらない）"),
         "path": ("str", True, "書き足す先"),
         "text": ("str", True, "足す本文"),
     }},
     "obsidian_note": {"fields": {
+        "device": ("str", False, "どのパソコンか（台の名前。繋いでいる台が1つならいらない）"),
         "text": ("str", True, "今日の日誌に足す本文"),
     }},
     "local_browse": {"fields": {
+        "device": ("str", False, "どのパソコンか（台の名前。繋いでいる台が1つならいらない）"),
         "url": ("str", True, "開くページのURL（相棒が許したサイトの中だけ）"),
     }},
     "local_browse_act": {"fields": {
+        "device": ("str", False, "どのパソコンか（台の名前。繋いでいる台が1つならいらない）"),
         "url": ("str", True, "開くページのURL（相棒が許したサイトの中だけ）"),
         "steps": ("list", True,
                   '押す・打ち込む手順。do は goto / click / fill / select / '

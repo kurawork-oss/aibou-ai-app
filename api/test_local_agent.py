@@ -36,48 +36,109 @@ def clean():
     localagent.reset()
 
 
-# ── つなぐ ──────────────────────────────────────────────────────────
+# ── つなぐ（何台でも） ──────────────────────────────────────────────
+
+def _one(user="u1", name="ノート"):
+    """1台繋いで (合言葉, 台のID) を返す。"""
+    got = localagent.pair(user, name)
+    assert got["ok"] is True
+    return got["token"], got["device"]
+
 
 def test_the_token_is_shown_once_and_not_stored_as_is():
     """漏れたらそのままパソコンの中を取りに行ける物なので、そのままは置かない。"""
-    got = localagent.pair("u1", "しごと用")
-    token = got["token"]
+    token, device = _one()
     assert len(token) > 20
-    # 保管してあるのは照合用の形だけ
-    stored = localagent._store.devices["u1"]["token_hash"]
+    stored = localagent._store.users["u1"][device]["token_hash"]
     assert token not in stored
-    assert localagent.whoami(token) == "u1"
+    assert localagent.whoami(token) == ("u1", device)
 
 
 def test_a_wrong_token_names_nobody():
-    localagent.pair("u1")
-    assert localagent.whoami("でたらめ") == ""
-    assert localagent.whoami("") == ""
+    _one()
+    assert localagent.whoami("でたらめ") == ("", "")
+    assert localagent.whoami("") == ("", "")
 
 
-def test_one_persons_token_cannot_reach_another(monkeypatch):
+def test_a_second_machine_does_not_kick_out_the_first():
+    """ここがこの回の本題。
+
+    前は `devices[user_id]` が1件の辞書で、2台目を繋ぐと1台目の合言葉が
+    死んだ（そう振る舞うことをテストで固定してすらいた）。
+    「スマホとノートPCとデスクトップで使いたい」は、それでは表せない。
+    """
+    note, note_id = _one(name="ノート")
+    desk, desk_id = _one(name="デスクトップ")
+    assert note_id != desk_id
+    # 両方とも、自分の台として通る
+    assert localagent.whoami(note) == ("u1", note_id)
+    assert localagent.whoami(desk) == ("u1", desk_id)
+    assert len(localagent.status("u1")["devices"]) == 2
+
+
+def test_the_same_name_twice_is_made_distinguishable():
+    """同じ名前が並ぶと、どちらに頼んだか言えなくなる。"""
+    localagent.pair("u1", "パソコン")
+    second = localagent.pair("u1", "パソコン")
+    assert second["name"] != "パソコン"
+
+
+def test_there_is_a_limit_on_how_many_machines():
+    for _ in range(localagent.MAX_DEVICES):
+        assert localagent.pair("u1", "")["ok"] is True
+    over = localagent.pair("u1", "")
+    assert over["ok"] is False and "上限" in over["error"]
+
+
+def test_one_persons_token_cannot_reach_another():
     """ここが抜けると、合言葉1つで他人のパソコンに仕事を頼める。"""
-    a = localagent.pair("u1")["token"]
-    localagent.pair("u2")
-    assert localagent.whoami(a) == "u1"
+    a, a_id = _one("u1")
+    b_token, b_id = _one("u2")
+    assert localagent.whoami(a) == ("u1", a_id)
     localagent.submit("u2", "read", {"path": "秘密.md"})
-    # u1 の相棒として取りに来ても、u2 の仕事は渡らない
-    assert localagent.take("u1", wait=0.05) is None
+    # u1 の台として取りに来ても、u2 の仕事は渡らない
+    assert localagent.take("u1", a_id, wait=0.05) is None
 
 
-def test_pairing_again_invalidates_the_old_token():
-    old = localagent.pair("u1")["token"]
-    new = localagent.pair("u1")["token"]
-    assert localagent.whoami(old) == ""
-    assert localagent.whoami(new) == "u1"
+def test_one_machine_cannot_take_another_machines_work():
+    """同じ人の中でも、台ごとの列は混ざらない。
+
+    ノートに頼んだ仕事をデスクトップが持って行くと、**別のパソコンの
+    ファイルを読んで返す**ことになる。
+    """
+    _note, note_id = _one(name="ノート")
+    _desk, desk_id = _one(name="デスクトップ")
+    localagent.take("u1", note_id, wait=0.01)     # 両方を「動いている」に
+    localagent.take("u1", desk_id, wait=0.01)
+    localagent.submit("u1", "read", {"path": "a.md"}, device="ノート")
+    assert localagent.take("u1", desk_id, wait=0.05) is None
+    job = localagent.take("u1", note_id, wait=0.05)
+    assert job and job["params"]["path"] == "a.md"
 
 
-def test_unpair_forgets_everything():
-    t = localagent.pair("u1")["token"]
-    localagent.submit("u1", "read", {"path": "a"})
-    localagent.unpair("u1")
-    assert localagent.whoami(t) == ""
+def test_unpairing_one_leaves_the_other():
+    note, note_id = _one(name="ノート")
+    desk, _desk_id = _one(name="デスクトップ")
+    got = localagent.unpair("u1", "ノート")
+    assert got["removed"] == 1
+    assert localagent.whoami(note) == ("", "")
+    assert localagent.whoami(desk)[0] == "u1"
+
+
+def test_unpairing_everything_leaves_nothing():
+    note, _ = _one(name="ノート")
+    localagent.pair("u1", "デスクトップ")
+    assert localagent.unpair("u1")["removed"] == 2
+    assert localagent.whoami(note) == ("", "")
     assert localagent.status("u1")["paired"] is False
+
+
+def test_a_machine_can_be_renamed():
+    """「ノートの資料を読んで」と言えるようにするため。"""
+    _t, device = _one(name="パソコン")
+    assert localagent.rename("u1", device, "しごとのノート")["ok"] is True
+    assert localagent.status("u1")["devices"][0]["name"] == "しごとのノート"
+    assert localagent.rename("u1", "無い台", "x")["ok"] is False
 
 
 # ── 繋がっているか、正直に言う ──────────────────────────────────────
@@ -85,12 +146,13 @@ def test_unpair_forgets_everything():
 def test_says_plainly_when_nothing_is_paired():
     st = localagent.status("u1")
     assert st["paired"] is False and st["online"] is False
+    assert st["devices"] == []
     assert st["why"] and st["next"]
 
 
 def test_paired_but_never_seen_is_not_called_online():
     """「合言葉を作った」と「動いている」は別のこと。"""
-    localagent.pair("u1")
+    _one()
     st = localagent.status("u1")
     assert st["paired"] is True
     assert st["online"] is False
@@ -98,15 +160,75 @@ def test_paired_but_never_seen_is_not_called_online():
 
 
 def test_coming_to_ask_counts_as_alive():
-    localagent.pair("u1")
-    localagent.take("u1", wait=0.01)
-    assert localagent.status("u1")["online"] is True
+    _t, device = _one()
+    localagent.take("u1", device, wait=0.01)
+    st = localagent.status("u1")
+    assert st["online"] is True
+    assert st["devices"][0]["online"] is True
+
+
+def test_one_machine_online_is_enough_to_be_connected():
+    _n, note_id = _one(name="ノート")
+    localagent.pair("u1", "デスクトップ")       # 繋いだが動いていない
+    localagent.take("u1", note_id, wait=0.01)
+    st = localagent.status("u1")
+    assert st["online"] is True
+    assert [d["online"] for d in st["devices"]] == [True, False]
+
+
+# ── どの台に頼むか ──────────────────────────────────────────────────
+
+def test_with_one_machine_running_it_just_goes_there():
+    _t, device = _one(name="ノート")
+    localagent.take("u1", device, wait=0.01)
+    got = localagent.pick("u1")
+    assert got["ok"] is True and got["device"] == device
+
+
+def test_with_two_machines_running_it_asks_instead_of_guessing():
+    """**勝手に選ばない。**
+
+    ファイルは台ごとに違う。黙って選ぶと「ノートを読んだつもりが
+    デスクトップだった」が起きる。読み違いは気づきにくく、書き違いは
+    取り返しがつかない。
+    """
+    _n, note_id = _one(name="ノート")
+    _d, desk_id = _one(name="デスクトップ")
+    localagent.take("u1", note_id, wait=0.01)
+    localagent.take("u1", desk_id, wait=0.01)
+    got = localagent.pick("u1")
+    assert got["ok"] is False
+    assert set(got["choose"]) == {"ノート", "デスクトップ"}
+    assert "ノート" in got["error"] and "デスクトップ" in got["error"]
+    # 名前を言えば、そこへ行く
+    assert localagent.pick("u1", "デスクトップ")["device"] == desk_id
+
+
+def test_naming_a_machine_that_is_not_running_says_so():
+    _n, note_id = _one(name="ノート")
+    localagent.pair("u1", "デスクトップ")       # 動いていない
+    localagent.take("u1", note_id, wait=0.01)
+    got = localagent.pick("u1", "デスクトップ")
+    assert got["ok"] is False and "動いていません" in got["error"]
+
+
+def test_naming_a_machine_that_does_not_exist_lists_the_real_ones():
+    _one(name="ノート")
+    got = localagent.pick("u1", "会社のiMac")
+    assert got["ok"] is False and "ノート" in got["error"]
+
+
+def test_nothing_running_is_reported_as_nothing_running():
+    _one()
+    got = localagent.pick("u1")
+    assert got["ok"] is False and "動いている台がありません" in got["error"]
 
 
 # ── 仕事を渡す ──────────────────────────────────────────────────────
 
 def test_cannot_ask_for_a_job_we_do_not_know():
-    localagent.pair("u1")
+    _t, device = _one()
+    localagent.take("u1", device, wait=0.01)
     got = localagent.submit("u1", "delete", {"path": "a"})
     assert got["ok"] is False
 
@@ -118,17 +240,19 @@ def test_cannot_ask_before_pairing():
 
 
 def test_a_job_waits_until_the_helper_comes():
-    localagent.pair("u1")
+    _t, device = _one()
+    localagent.take("u1", device, wait=0.01)
     localagent.submit("u1", "read", {"path": "a.md"})
-    job = localagent.take("u1", wait=0.1)
+    job = localagent.take("u1", device, wait=0.1)
     assert job and job["kind"] == "read" and job["params"]["path"] == "a.md"
     # 2回は渡らない
-    assert localagent.take("u1", wait=0.05) is None
+    assert localagent.take("u1", device, wait=0.05) is None
 
 
-def test_waiting_ends_when_a_job_arrives(monkeypatch):
+def test_waiting_ends_when_a_job_arrives():
     """1秒ごとに聞きに来させると、平均0.5秒遅れる。待たせて、来たら起こす。"""
-    localagent.pair("u1")
+    _t, device = _one()
+    localagent.take("u1", device, wait=0.01)
 
     def later():
         time.sleep(0.2)
@@ -136,30 +260,48 @@ def test_waiting_ends_when_a_job_arrives(monkeypatch):
 
     threading.Thread(target=later, daemon=True).start()
     start = time.time()
-    job = localagent.take("u1", wait=5.0)
+    job = localagent.take("u1", device, wait=5.0)
     assert job is not None
     assert time.time() - start < 2.0
 
 
 def test_stale_jobs_are_not_handed_over(monkeypatch):
     """相棒が止まっているあいだに溜まった物は、渡さない（もう誰も待っていない）。"""
-    localagent.pair("u1")
+    _t, device = _one()
+    localagent.take("u1", device, wait=0.01)
     localagent.submit("u1", "read", {"path": "a"})
     monkeypatch.setattr(localagent, "JOB_TTL", -1)
-    assert localagent.take("u1", wait=0.05) is None
+    assert localagent.take("u1", device, wait=0.05) is None
 
 
 def test_a_result_comes_back_to_the_one_who_asked():
-    localagent.pair("u1")
+    _t, device = _one()
+    localagent.take("u1", device, wait=0.01)
     sent = localagent.submit("u1", "read", {"path": "a"})
-    localagent.deliver("u1", sent["job_id"], {"ok": True, "text": "中身"})
+    localagent.deliver("u1", device, sent["job_id"], {"ok": True, "text": "中身"})
     got = localagent.collect(sent["job_id"], timeout=1.0)
     assert got["ok"] is True and got["text"] == "中身"
 
 
+def test_the_answer_says_which_machine_did_it():
+    """2台あるとき、これが無いとどちらを読んだのか分からない。"""
+    _t, device = _one(name="ノート")
+    localagent.take("u1", device, wait=0.01)
+
+    def answer():
+        time.sleep(0.1)
+        job = localagent.take("u1", device, wait=2.0)
+        localagent.deliver("u1", device, job["id"], {"ok": True, "message": "読んだ"})
+
+    threading.Thread(target=answer, daemon=True).start()
+    got = localagent.run("u1", "read", {"path": "a"}, timeout=3.0)
+    assert got["ok"] is True and got["device_name"] == "ノート"
+
+
 def test_no_answer_is_reported_as_no_answer():
     """ここで「書いておきました」と言うのが、この機能でいちばん困る嘘。"""
-    localagent.pair("u1")
+    _t, device = _one()
+    localagent.take("u1", device, wait=0.01)
     sent = localagent.submit("u1", "write", {"path": "a", "text": "x"})
     got = localagent.collect(sent["job_id"], timeout=0.2)
     assert got["ok"] is False
@@ -337,7 +479,7 @@ def test_the_tool_does_not_let_the_ai_name_someone_else(monkeypatch):
     import tools
     seen = {}
     monkeypatch.setattr(localagent, "run",
-                        lambda uid, kind, params, timeout: seen.update(
+                        lambda uid, kind, params, timeout, device="": seen.update(
                             uid=uid, kind=kind, params=params) or {"ok": True, "text": ""})
     token = config.bind_request_user("u1")
     try:
@@ -380,10 +522,13 @@ def test_the_real_helper_talks_to_the_real_server(tmp_path, monkeypatch):
 
     monkeypatch.setattr(aibou_local.requests, "Session", lambda: Session())
 
-    # 先に仕事を1つ預けておく（利用者を特定できないので "local" に入る）
-    sent = localagent.submit(localagent.whoami(token), "read",
-                             {"path": "メモ/買い物.md"})
-    assert sent["ok"] is True
+    user_id, device_id = localagent.whoami(token)
+    assert user_id and device_id
+    # 一度「仕事ある？」と来た台だけが、頼み先として選ばれる
+    # （繋いだだけの台に預けても、誰も取りに来ない）
+    localagent.take(user_id, device_id, wait=0.01)
+    sent = localagent.submit(user_id, "read", {"path": "メモ/買い物.md"})
+    assert sent["ok"] is True, sent
 
     runner = _runner(tmp_path)
     aibou_local.loop("http://server", token, runner, lambda *_: None, once=True)
