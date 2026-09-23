@@ -49,6 +49,7 @@ import forge
 import gh
 import gservice
 import hooks as hooks_mod
+import audit
 import present
 import risk
 import rules
@@ -1331,7 +1332,8 @@ async def chat(req: ChatRequest, _auth: None = Depends(require_auth)):
                         """
                         token = present.begin()
                         try:
-                            with risk.ceiling(lv):
+                            # ここまで来た＝確認カードを出さずに通した物
+                            with risk.ceiling(lv), audit.route("chat", req.message):
                                 out = tools.execute_tool(name, params)
                             return out, present.take()
                         finally:
@@ -1447,7 +1449,8 @@ async def agent_execute(req: AgentExecuteRequest, _auth: None = Depends(require_
             # カードを出してから押されるまでは、人の時間が空く。その間に
             # 手元の台がつながると、同じ操作が「あなたとして」に変わりうる。
             # 押された重さを超えていたら動かさない。
-            with risk.ceiling(req.level):
+            # 人が確認カードを見て「実行する」を押した物（記録に「確認して」で残る）
+            with risk.ceiling(req.level), audit.route("approve", approved=True):
                 out = tools.execute_tool(req.tool, req.params or {})
             # 承認して実行した物も、そのまま隣に出す。押したあとに
             # 「どこへ行けば見られるか」を探させない。
@@ -1689,6 +1692,16 @@ async def local_result(req: LocalResultRequest, who=Depends(_local_caller)):
     """手元の相棒が結果を持ってくる所。"""
     user_id, device_id = who
     return localagent.deliver(user_id, device_id, req.job_id, req.result)
+
+
+# ── 操作の記録（audit.py） ──────────────────────────────────────────
+
+@app.get("/audit")
+async def audit_list(limit: int = 50, _auth: None = Depends(require_auth)):
+    """AIbou があなたの代わりに外でしたこと（新しい順）。本文は入っていない。"""
+    rows = await asyncio.get_event_loop().run_in_executor(None, lambda: audit.recent(limit))
+    return {"items": [{**r, "source_label": audit.label_of(r.get("source") or "")}
+                      for r in rows]}
 
 
 # ── 決まった手順（recipes.py） ──────────────────────────────────────
@@ -4152,7 +4165,9 @@ async def run_command(req: CommandRequest, claims: dict = Depends(current_claims
         # 近道で作った物も、会話の隣に出す（AI経由と扱いを揃える）。
         token = present.begin()
         try:
-            out = tools.execute_tool(cap["tool"], params)
+            # 本人が道具と中身を自分で打った物（AIを挟んでいない）
+            with audit.route("command", req.text):
+                out = tools.execute_tool(cap["tool"], params)
             made = present.take()
         finally:
             present.end(token)

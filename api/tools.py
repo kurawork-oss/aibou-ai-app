@@ -841,8 +841,16 @@ def _local(kind: str, params: dict, timeout: float = 60.0,
                           timeout, device)
 
 
+def _audit_local(got: dict) -> None:
+    """手元の台でやった結果を、操作の記録に書き込む（どの台で・できたか）。"""
+    import audit
+    where = " / ".join(x for x in (got.get("device_name"), got.get("engine_label")) if x)
+    audit.note(ok=bool(got.get("ok")), where=where)
+
+
 def _local_say(got: dict, done: str) -> str:
     """結果を人の言葉にする。**できなかったときは、できたと言わない。**"""
+    _audit_local(got)
     if not got.get("ok"):
         why = got.get("error") or "手元のパソコンから返事がありませんでした"
         nxt = got.get("next") or ""
@@ -856,6 +864,7 @@ def _local_say(got: dict, done: str) -> str:
 def _do_local_list(params: dict) -> str:
     got = _local("list", {"path": (params.get("path") or "").strip()},
                  device=(params.get("device") or "").strip())
+    _audit_local(got)
     if not got.get("ok"):
         return _local_say(got, "")
     items = got.get("items") or []
@@ -870,6 +879,7 @@ def _do_local_read(params: dict) -> str:
         return "どのファイルか分かりません。"
     got = _local("read", {"path": path},
                  device=(params.get("device") or "").strip())
+    _audit_local(got)
     if not got.get("ok"):
         return _local_say(got, "")
     # 手元のファイルの中身も、**指示ではない**。包んでから渡す。
@@ -910,6 +920,7 @@ def _do_obsidian_note(params: dict) -> str:
 
 
 def _browse_say(got: dict, params: dict) -> str:
+    _audit_local(got)
     if not got.get("ok"):
         why = got.get("error") or "手元のパソコンから返事がありませんでした"
         nxt = got.get("next") or ""
@@ -946,9 +957,19 @@ def _steps_of(params: dict) -> list:
 
 def _route_say(plan: dict) -> str:
     """場所を決められなかった理由を、人の言葉で。"""
+    import audit
+    audit.note(ok=False)
     why = plan.get("error") or "開く場所を決められませんでした"
     nxt = plan.get("next") or ""
     return f"{why}{'。' + nxt if nxt else ''}"
+
+
+def _over_ceiling() -> str:
+    """確認した重さを超えたので動かさなかった（記録には「できなかった」で残す）。"""
+    import audit
+    import risk
+    audit.note(ok=False)
+    return risk.OVER_CEILING
 
 
 def _route_heavier(tool: str, plan: dict) -> bool:
@@ -964,6 +985,8 @@ def _route_heavier(tool: str, plan: dict) -> bool:
 
 def _server_say(res: dict, label: str) -> str:
     """サーバーのブラウザの結果（本文は browser.visit が包んである）。"""
+    import audit
+    audit.note(ok=bool(res.get("ok")), where=label)
     if not res.get("ok"):
         return f"開けませんでした：{res.get('error')}"
     parts = []
@@ -995,8 +1018,7 @@ def _do_browser_open(params: dict) -> str:
     if not plan.get("ok"):
         return _route_say(plan)
     if _route_heavier("browser_open", plan):
-        import risk
-        return risk.OVER_CEILING
+        return _over_ceiling()
     if plan["route"] == "local":
         return _browse_say(_local("browse", {"url": url}, timeout=90.0,
                                   device=plan["device"]), params)
@@ -1008,6 +1030,8 @@ def _do_browser_open(params: dict) -> str:
             return f"ブラウザを動かせませんでした：{e}"
         return _server_say(res, plan["label"])
     # ブラウザが使えないので、文字だけ読む（そう言う）
+    import audit
+    audit.note(where=plan["label"])
     out = _do_web_read({"url": url})
     return (f"（ブラウザを使える場所が無いので、ページの文字だけ読みました。"
             f"JavaScriptで後から出る中身は入っていないかもしれません）\n{out}")
@@ -1028,8 +1052,7 @@ def _do_browser_act(params: dict) -> str:
     if not plan.get("ok"):
         return _route_say(plan)
     if _route_heavier("browser_act", plan):
-        import risk
-        return risk.OVER_CEILING
+        return _over_ceiling()
     if plan["route"] == "local":
         return _browse_say(_local("browse_act", {"url": url, "steps": steps},
                                   timeout=120.0, device=plan["device"]), params)
@@ -1125,15 +1148,18 @@ def _do_recipe_run(params: dict) -> str:
     import browser_router
     import recipes
     import risk
+    import audit
     name = (params.get("name") or "").strip()
     r = recipes.get(name)
     if not r:
+        audit.note(ok=False)
         known = _recipe_names()
         return (f"「{name}」という手順はありません。"
                 + (f"保存してあるのは {known} です。" if known else
                    "まだ1つも保存していません。"))
     got = recipes.materialize(r, _values_of(params))
     if not got.get("ok"):
+        audit.note(ok=False)
         return got["error"]
     plan = browser_router.plan(got["url"], "recipe",
                                (params.get("device") or r.get("device") or "").strip())
@@ -1142,7 +1168,7 @@ def _do_recipe_run(params: dict) -> str:
     # 測ってから流すまでの間に台がつながって、確認した重さを超えていたら流さない
     if not risk.within_ceiling(browser_router.route_level(
             browser_router.recipe_weight(r), plan["route"])):
-        return risk.OVER_CEILING
+        return _over_ceiling()
     if plan["route"] == "local":
         res = _local("recipe", {"name": r["name"], "url": got["url"],
                                 "steps": got["steps"]},
@@ -1160,6 +1186,8 @@ def _do_recipe_run(params: dict) -> str:
     ok = bool(res.get("ok"))
     recipes.mark_run(r["id"], ok, (f"{len(res.get('did') or [])}手を流しました" if ok
                                    else str(res.get("error") or ""))[:160])
+    import audit
+    audit.note(ok=ok, where=where)
     return _recipe_say(r, res, where)
 
 
@@ -1527,8 +1555,24 @@ def execute_tool(name: str, params: dict) -> str:
     except Exception:
         pass          # 検証の仕組みが壊れても、道具そのものは動かす
 
+    # 操作の記録（audit.py）。あなたの代わりに外でしたことは、どの入口から
+    # 来ても必ずここを通るので、ここで1行残す。重さは動かす前に測る
+    # （ブラウザの道具は、どこで動いたかで重さが変わる）。
+    import audit
     try:
-        return handler(params)
+        import risk
+        level = risk.level(key, params)
+    except Exception:
+        level = None
+    rec = audit.begin(key, params)
+    try:
+        out = handler(params)
     except Exception as e:
         # どのツールでも、想定外の例外は結果文字列に丸めて返す（crash させない）。
-        return f"ツール実行エラー（{name}）：{e}"
+        out = f"ツール実行エラー（{name}）：{e}"
+        audit.note(ok=False)
+    try:
+        audit.end(rec, out, level)
+    except Exception:
+        pass          # 記録が壊れても、道具の結果は返す
+    return out

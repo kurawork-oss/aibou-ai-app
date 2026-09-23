@@ -282,7 +282,8 @@ def tick(user_id: str = "") -> dict:
                              + (f" / スキップ {skipped}" if skipped else "") + "\n" + final)
             else:
                 waiting = None
-                for ev in agent.run_stream(s.get("instruction", ""), approval=False):
+                for ev in agent.run_stream(s.get("instruction", ""), approval=False,
+                                           source="schedule"):
                     if ev.get("phase") == "final":
                         final = ev.get("text", "")
                     elif ev.get("phase") == "approval":

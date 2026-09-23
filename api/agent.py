@@ -31,6 +31,7 @@ import json
 import time
 from datetime import datetime, timezone, timedelta
 
+import audit
 import llm
 import present
 import risk
@@ -200,22 +201,25 @@ def _build_convo(system_prompt: str, history, instruction: str) -> str:
 
 
 def run_stream(instruction: str, history=None, name: str = "AIbou", approval: bool = False,
-               allowed=None):
+               allowed=None, source: str = "agent"):
     """エージェントを実行し、進捗イベントを逐次 yield するジェネレータ。
 
     「作った物の置き場」を、この実行のあいだだけ開ける。途中で読むのを
     やめられても閉じるよう finally に置く（開けっぱなしにすると、次の人の
     画面に前の人の物が出る）。
+
+    source は操作の記録（audit.py）に残す「どこから頼まれたか」。
+    実行モードは agent、定期実行は schedule。
     """
     token = present.begin()
     try:
-        yield from _run_stream(instruction, history, name, approval, allowed)
+        yield from _run_stream(instruction, history, name, approval, allowed, source)
     finally:
         present.end(token)
 
 
 def _run_stream(instruction: str, history=None, name: str = "AIbou", approval: bool = False,
-                allowed=None):
+                allowed=None, source: str = "agent"):
     """approval=True のとき、機微なツール（SENSITIVE_TOOLS）は実行せず 'approval'
     イベントを出して停止する（人間が承認したら /agent/execute で実行する）。"""
     instruction = (instruction or "").strip()
@@ -322,8 +326,9 @@ def _run_stream(instruction: str, history=None, name: str = "AIbou", approval: b
         yield stamp({"phase": "tool", "step": step, "tool": tool,
                      "params": params, "note": (preface or "").strip()})
 
-        # 測ったときより重くなっていたら（その間に手元の台がつながった等）動かさない
-        with risk.ceiling(lv):
+        # 測ったときより重くなっていたら（その間に手元の台がつながった等）動かさない。
+        # ここまで来た＝確認カードを出さずに通した物（記録には「確認なし」で残る）
+        with risk.ceiling(lv), audit.route(source, instruction, approved=False):
             result = tools.execute_tool(tool, params)
         executed.append(tool)
         if tool in risk.CHAIN_AFTER_EXTERNAL:

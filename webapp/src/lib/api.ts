@@ -820,6 +820,41 @@ export async function deleteRecipe(id: string): Promise<boolean> {
   }
 }
 
+/* ---------------- 操作の記録（api/audit.py） ---------------- */
+
+/** AIbou があなたの代わりに外でした1件。本文は入っていない。 */
+export interface AuditRow {
+  id: string;
+  at: number;
+  /** どこから頼まれたか（chat / agent / approve / push / schedule / command）。 */
+  source: string;
+  source_label?: string;
+  /** 頼まれた言葉（鍵は伏せてある）。 */
+  instruction?: string;
+  tool: string;
+  /** 宛先・URL・パス・手順の名前。 */
+  target?: string;
+  /** 手元の台・ブラウザ。 */
+  where?: string;
+  level: number;
+  /** 人が確認カードを見て押したか。 */
+  approved: boolean;
+  ok: boolean;
+  summary?: string;
+}
+
+/** GET /audit — 新しい順。取れなければ null（「0件」と区別する）。 */
+export async function auditRecent(limit = 50): Promise<AuditRow[] | null> {
+  try {
+    const res = await fetch(`${requireApiUrl()}/audit?limit=${limit}`,
+      { headers: authHeaders(), cache: "no-store" });
+    if (!res.ok) return null;
+    return asArray<AuditRow>(((await res.json()) as { items?: unknown }).items);
+  } catch {
+    return null;
+  }
+}
+
 /* ---------------- CAPTURE: 文字起こし / ナレーション ---------------- */
 export interface CaptureStatus {
   ffmpeg: boolean;

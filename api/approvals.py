@@ -275,11 +275,14 @@ def _apply(row: dict, decision: str) -> dict:
             client = tenancy.client_for(uid)
             if client is not None:
                 bound = config.bind_request_client(client)
+        import audit
         import risk
         import tools
         params, level = _split_level(row.get("params"))
-        # 止めたときより重くなっていたら動かさない（その間に台がつながった等）
-        with risk.ceiling(level):
+        # 止めたときより重くなっていたら動かさない（その間に台がつながった等）。
+        # 人が通知か画面で「実行する」を押した物（記録に「確認して」で残る）
+        with risk.ceiling(level), audit.route("push", row.get("note") or "",
+                                              approved=True):
             result = tools.execute_tool(row.get("tool") or "", params)
     except Exception as e:
         _update(approval_id, {"status": "failed", "result": str(e)[:400], "token": ""})

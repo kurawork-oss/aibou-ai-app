@@ -14,12 +14,13 @@
 
 | 何を | どこで | 本数 |
 |---|---|---|
-| サーバー側の機能ぜんぶ | `api/test_*.py` | 1,564 |
+| サーバー側の機能ぜんぶ | `api/test_*.py` | 1,585 |
 | 画面（接続なし・ふだんのUI） | `webapp/tests/*.spec.ts` | 609 |
-| 画面（接続あり・繋がっているときだけ動く所） | `webapp/tests/linked/` | 148 |
+| 画面（接続あり・繋がっているときだけ動く所） | `webapp/tests/linked/` | 151 |
 | 確認の門（会話・実行・承認ボタン・通知。通した重さを超えない） | `api/test_gate.py` ＋ `webapp/tests/linked/chatGate.spec.ts` | 16 + 6 |
 | 本番の置き場に、流すSQLが全部入っているか | `api/test_deploy_bundle.py` | 3 |
 | 決まった手順（保存・流す・止める・パスワードを入れない） | `api/test_recipes.py` ほか2つ ＋ `webapp/tests/linked/recipes.spec.ts` | 72 + 8 |
+| 操作の記録（入口ごとに残る・確認の有無・本文を残さない） | `api/test_audit_log.py` ＋ `webapp/tests/linked/auditLog.spec.ts` | 21 + 3 |
 | 守ると決めた線（秘密・承認・保存先・連携の戻り） | `api/test_guardrails.py` | 14 |
 | 外へ出ていく取得と、外から来た文章の扱い | `api/test_netguard.py` | 54 |
 | 端末への通知（暗号・署名・購読） | `api/test_webpush.py` | 20 |
@@ -45,9 +46,9 @@
 実行:
 
 ```bash
-cd api    && python -m pytest -q      # 1,564
+cd api    && python -m pytest -q      # 1,585
 cd webapp && npx playwright test --project=chromium          # 609（接続なし）
-cd webapp && npx playwright test --project=chromium-linked   # 148（接続あり。上と同時に流さない）
+cd webapp && npx playwright test --project=chromium-linked   # 151（接続あり。上と同時に流さない）
 cd webapp && npx tsc --noEmit && npm run lint
 ```
 
@@ -894,6 +895,26 @@ AIに画面を見せて判断させる仕事ではない。一度うまくいっ
 パスワード欄には打ち込まない。
 
 **確かめていないこと**: あなたのPCの、あなたの社内サイトで流れるか（§3）。
+
+### AIbou が外でしたことを残す（操作の記録）
+
+身に覚えのない送信があったとき、AIbou がやったのか、確認して押したのか、
+確認なしで動いたのかを辿れるようにした（`api/audit.py`、設定 →「しらべる」）。
+
+**実行したら必ず1行残す**のは、外に何かが残る・起きる道具（段階2以上）と、
+手元の相棒・ブラウザ・手順の道具（段階に関わらず）。読むだけの道具は残さない。
+
+    いつ / どこから頼まれたか（会話・実行モード・承認ボタン・通知から承認・
+    定期実行・#コマンド） / 何を / 何に（宛先・URL・パス・手順の名前）
+    / どこで（手元の台・ブラウザ） / 確認して実行か、確認なしか / できたか
+
+道具はどの入口から来ても1か所（`tools.execute_tool`）を通るので、そこで残す。
+「どこで動いたか」「できたか」は、文から推し量らず道具が書き込む
+（場所が無くて動かなかった物・確認した重さを超えて止めた物は「できなかった」）。
+
+**本文は残さない**（メールの中身・ファイルの中身・ページの本文）。残すと、
+ここがいちばん漏れて困る場所になる。宛先やURLに鍵らしい物があれば伏せる。
+表（`audit_log`）にもRLSを入れてある。
 
 ### 設定を7枚から5枚に割り直した（全画面を測ってから）
 

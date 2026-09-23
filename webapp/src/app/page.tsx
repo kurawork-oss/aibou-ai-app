@@ -59,6 +59,7 @@ const IntegrationsSettings = lazy(() => import("@/components/IntegrationsSetting
 const CapabilityPanel = lazy(() => import("@/components/CapabilityPanel"));
 const LocalAgentSettings = lazy(() => import("@/components/LocalAgentSettings"));
 const RecipeSettings = lazy(() => import("@/components/RecipeSettings"));
+const AuditLog = lazy(() => import("@/components/AuditLog"));
 const AppArchive = lazy(() => import("@/components/AppArchive"));
 const Autopilot = lazy(() => import("@/components/Autopilot"));
 const CodeMode = lazy(() => import("@/components/CodeMode"));
@@ -110,6 +111,7 @@ function usePrefetchScreens(ready: boolean): void {
       import("@/components/CapabilityPanel"),
       import("@/components/LocalAgentSettings"),
       import("@/components/RecipeSettings"),
+      import("@/components/AuditLog"),
       import("@/components/AppArchive"),
       import("@/components/Autopilot"),
       import("@/components/CodeMode"),
@@ -1342,6 +1344,8 @@ function SettingsPanel({
               <CapabilityPanel />
               {/* 困ったときに最初に押すもの。下の技術情報より前に置く */}
               <SelfCheck />
+              {/* 身に覚えのない送信があったときに見る所（あなたの代わりに外でしたこと） */}
+              <AuditLog />
 
               {(() => {
                 const repo = process.env.NEXT_PUBLIC_GIT_REPO || "";
