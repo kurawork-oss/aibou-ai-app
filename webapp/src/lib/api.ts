@@ -226,7 +226,7 @@ export interface ChatSideChannel {
 /** 会話で届く「実行してよいか」。実行モードの approval から phase を除いた物。 */
 export type ChatApproval = Pick<AgentEvent,
   "tool" | "params" | "note" | "level" | "level_label" | "why"
-  | "always_confirm" | "may_always" | "chained">;
+  | "always_confirm" | "may_always" | "chained" | "detail">;
 
 /**
  * POST /chat — read the SSE stream and surface tokens as they arrive.
@@ -649,6 +649,9 @@ export interface AgentEvent {
    * ものかもしれない。読むだけの操作なのに確認が出る理由がこれ。
    */
   chained?: boolean;
+  /* detail（上で宣言済み）は approval のときも使う: 実際に何が起きるか
+     （保存した手順なら、流す手順そのもの）。手順を流す道具の引数は名前
+     だけなので、名前だけ見せて承認させないよう、サーバーが中身を添える。 */
 
   /* ── setup_required のとき ── */
   /** 足りない連携（google / slack / notion / github）。 */
@@ -749,6 +752,72 @@ export async function agentExecute(
     { result?: string; show?: MadeItem[] };
   // 承認して実行した物も、そのまま隣に出す（押したあとに行き先を探させない）
   return { result: data.result ?? "", show: asArray<MadeItem>(data.show) };
+}
+
+/* ---------------- 決まった手順（api/recipes.py） ---------------- */
+
+/** ブラウザで押す・打ち込む1手。browser_act と同じ形。 */
+export interface RecipeStep { do: string; target?: string; value?: string }
+
+export interface Recipe {
+  id: string;
+  name: string;
+  description?: string;
+  url: string;
+  steps: RecipeStep[];
+  /** 流すときに入れる値の名前（`{顧客名}` の空け所）。 */
+  params: string[];
+  device?: string;
+  last_run_at?: number | null;
+  /** 最後に流した結果（✓ / ✗ で始まる1行）。 */
+  last_result?: string;
+  /** 押す・打ち込む手があるか（あれば、流す前に必ず確認が出る）。 */
+  touches?: boolean;
+  summary?: string;
+}
+
+/** GET /recipes — 保存した手順。取れなければ null（「0件」と区別する）。 */
+export async function listRecipes(): Promise<Recipe[] | null> {
+  try {
+    const res = await fetch(`${requireApiUrl()}/recipes`, { headers: authHeaders(), cache: "no-store" });
+    if (!res.ok) return null;
+    return asArray<Recipe>(((await res.json()) as { items?: unknown }).items);
+  } catch {
+    return null;
+  }
+}
+
+/** POST /recipes — 名前を付けて残す。断られたら理由を返す。 */
+export async function saveRecipe(r: { name: string; url: string; steps: RecipeStep[];
+  description?: string }): Promise<{ ok: boolean; error?: string; stored?: string;
+  replaced?: boolean }> {
+  try {
+    const res = await fetch(`${requireApiUrl()}/recipes`, {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(r),
+    });
+    const data = (await res.json().catch(() => ({}))) as
+      { ok?: boolean; error?: string; detail?: string; stored?: string; replaced?: boolean };
+    if (!res.ok || !data.ok) {
+      return { ok: false, error: data.error || data.detail || `保存できませんでした（${res.status}）` };
+    }
+    return { ok: true, stored: data.stored, replaced: data.replaced };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "保存できませんでした" };
+  }
+}
+
+/** DELETE /recipes/{id} */
+export async function deleteRecipe(id: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${requireApiUrl()}/recipes/${encodeURIComponent(id)}`, {
+      method: "DELETE", headers: authHeaders(),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
 }
 
 /* ---------------- CAPTURE: 文字起こし / ナレーション ---------------- */

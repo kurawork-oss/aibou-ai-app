@@ -28,7 +28,7 @@ import AgentTrace, { type AgentStep as TraceStep } from "@/components/AgentTrace
 import Markdown from "@/components/Markdown";
 import {
   API_URL,
-  streamChat, vision, agentActStream, agentExecute,
+  streamChat, vision, agentActStream, agentExecute, saveRecipe, type RecipeStep,
   conversationsList, conversationGet, conversationSave, conversationDelete,
   capabilitiesShared, runCommand, setupPending, setupResume,
   type ChatTurn, type AgentEvent, type CommandItem, type CommandResult,
@@ -89,6 +89,17 @@ interface PendingAct {
    * 中身そのものだから。
    */
   mayAlways?: boolean;
+  /** 実際に何が起きるか（保存した手順なら、流す手順そのもの）。 */
+  detail?: string;
+}
+
+/** 押し終えたブラウザ操作。「この手順を保存」で、名前を付けて残せる。 */
+interface Savable {
+  url: string;
+  steps: RecipeStep[];
+  /** 保存したあとの一言（保存した・断られた理由）。 */
+  said?: string;
+  saved?: boolean;
 }
 
 /**
@@ -121,6 +132,8 @@ interface Message {
   totalMs?: number;
   /** このターンで承認を待っている操作。 */
   await?: PendingAct;
+  /** 承認して押したブラウザ操作（手順として残せる）。 */
+  savable?: Savable;
 }
 
 export interface ChatProps {
@@ -648,6 +661,7 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
                       alwaysConfirm: ev.always_confirm,
                       chained: ev.chained,
                       mayAlways: ev.may_always,
+                      detail: ev.detail,
                     } }
                   : m)));
                 break;
@@ -807,6 +821,7 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
                   alwaysConfirm: ev.always_confirm,
                   chained: ev.chained,
                   mayAlways: ev.may_always,
+                  detail: ev.detail,
                 } }
               : m)));
           },
@@ -836,8 +851,16 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
       steps: [...(m.steps ?? []), { kind: "tool" as const, tool: act.tool, note: act.note }] })));
     try {
       const { result, show } = await agentExecute(act.tool, act.params, act.level);
+      /* 押し終えたブラウザ操作は、手順として残せるようにする。うまくいった
+         ときだけ（結果に「…で実行）」が付くのは、実際にブラウザが動いたとき）。
+         失敗した操作を残しても、次に流したとき同じ所で止まるだけなので。 */
+      const url = typeof act.params.url === "string" ? act.params.url : "";
+      const steps = Array.isArray(act.params.steps) ? act.params.steps as RecipeStep[] : [];
+      const savable = act.tool === "browser_act" && url && steps.length && /で実行）/.test(result)
+        ? { url, steps } : undefined;
       setMessages((prev) => prev.map((m) => (m.id === msgId
-        ? { ...m, steps: [...(m.steps ?? []), { kind: "observation" as const, result }] } : m)));
+        ? { ...m, savable: savable ?? m.savable,
+            steps: [...(m.steps ?? []), { kind: "observation" as const, result }] } : m)));
       for (const it of show) made(it);
       actedRef.current = true;
     } catch {
@@ -845,6 +868,18 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
         ? { ...m, steps: [...(m.steps ?? []), { kind: "error" as const, detail: "実行に失敗しました" }] } : m)));
     }
   }, [made]);
+
+  /** 押し終えた操作に名前を付けて、手順として残す。 */
+  const saveAsRecipe = useCallback(async (msgId: string, s: Savable, name: string) => {
+    const got = await saveRecipe({ name, url: s.url, steps: s.steps });
+    const said = got.ok
+      ? (got.stored === "db"
+        ? `手順「${name}」を${got.replaced ? "上書き" : "保存"}しました。「${name}を流して」で同じように流せます。`
+        : `手順「${name}」を残しましたが、保存先に書けなかったため、サーバーが再起動すると消えます。`)
+      : `保存できませんでした：${got.error ?? ""}`;
+    setMessages((prev) => prev.map((m) => (m.id === msgId && m.savable
+      ? { ...m, savable: { ...m.savable, said, saved: got.ok } } : m)));
+  }, []);
 
   /** 承認待ちの操作をやめる（実行しない）。 */
   const rejectAct = useCallback((msgId: string) => {
@@ -1199,6 +1234,8 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
                 alwaysAllow.allow(m.await!.tool, m.await!.levelLabel);
                 void approveAct(m.id, m.await!);
               } : undefined}
+              onSaveRecipe={m.savable && !m.savable.saved
+                ? (name) => void saveAsRecipe(m.id, m.savable!, name) : undefined}
             />
           ))}
         </AnimatePresence>
@@ -1783,13 +1820,15 @@ function MicIcon() {
   );
 }
 
-function MessageBubble({ message, onRegenerate, onApprove, onReject, onAlways }: {
+function MessageBubble({ message, onRegenerate, onApprove, onReject, onAlways, onSaveRecipe }: {
   message: Message;
   onRegenerate?: () => void;
   onApprove?: () => void;
   onReject?: () => void;
   /** 「いつも許可」して、そのまま実行する。 */
   onAlways?: () => void;
+  /** 押し終えたブラウザ操作に名前を付けて、手順として残す。 */
+  onSaveRecipe?: (name: string) => void;
 }) {
   const isUser = message.role === "user";
   const settled = !isUser && !message.pending && (message.content.trim().length > 0 || message.error);
@@ -1893,6 +1932,14 @@ function MessageBubble({ message, onRegenerate, onApprove, onReject, onAlways }:
             <div className="mt-0.5 text-[11px] text-fg-strong">
               {message.await.tool}{message.await.note ? ` — ${message.await.note}` : ""}
             </div>
+            {/* 実際に流す中身。手順を流す道具の引数は名前だけなので、名前だけ
+                見せて承認させない（中身が書き換えられていても気づけない）。 */}
+            {message.await.detail && (
+              <pre aria-label="流す手順"
+                className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all rounded-forge bg-[rgba(0,0,0,0.25)] p-1.5 text-[10px] leading-relaxed text-fg">
+                {message.await.detail}
+              </pre>
+            )}
             {message.await.chained && (
               <p className="mt-1 text-[11px] leading-relaxed text-muted">
                 下のURLをよく見てください。会話の内容がURLに書き込まれていたら、
@@ -1931,6 +1978,12 @@ function MessageBubble({ message, onRegenerate, onApprove, onReject, onAlways }:
           </div>
         )}
 
+        {/* 押し終えたブラウザ操作は、名前を付けて残せる。次からは
+            「○○を流して」で、AIが1手ずつ考えずに同じ通りに流す。 */}
+        {message.savable && (
+          <SaveRecipeRow savable={message.savable} onSave={onSaveRecipe} />
+        )}
+
         {message.pending && !message.content ? (
           <TypingDots />
         ) : isUser || message.error ? (
@@ -1961,6 +2014,44 @@ function MessageBubble({ message, onRegenerate, onApprove, onReject, onAlways }:
       )}
       </div>
     </motion.div>
+  );
+}
+
+function SaveRecipeRow({ savable, onSave }: {
+  savable: Savable;
+  onSave?: (name: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  if (savable.said) {
+    return (
+      <p className="mb-2 text-[11px] leading-relaxed"
+         style={{ color: savable.saved ? "var(--accent)" : "#ffb4b4" }}>
+        {savable.said}
+      </p>
+    );
+  }
+  if (!onSave) return null;
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)}
+        className="mb-2 rounded-forge border border-panel px-3 py-1 text-[10px] text-muted transition hover:text-fg-strong label-mono">
+        この手順を保存
+      </button>
+    );
+  }
+  const submit = () => { if (name.trim()) onSave(name.trim()); };
+  return (
+    <div className="mb-2 flex gap-1.5">
+      <input value={name} onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
+        placeholder="手順の名前（例：朝のケース確認）" aria-label="手順の名前" autoFocus
+        className="min-w-0 flex-1 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-2 py-1 text-[12px] text-fg-strong placeholder:text-muted focus:border-[var(--line)] focus:outline-none" />
+      <button type="button" onClick={submit} disabled={!name.trim()}
+        className="shrink-0 rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] px-3 py-1 text-[10px] text-fg-strong label-mono disabled:opacity-40">
+        保存
+      </button>
+    </div>
   );
 }
 

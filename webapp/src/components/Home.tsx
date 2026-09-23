@@ -350,7 +350,9 @@ function RingDial({ label, value, onClick }: { label: string; value: number; onC
 /* ── Agent console (手足となって動く自律エージェント) ─────────────── */
 
 /** level は確認カードに出ていた段階。押したあとでそれより重くなっていたら、サーバーが断る。 */
-type Pending = { tool: string; params: Record<string, unknown>; note?: string; level?: number };
+type Pending = { tool: string; params: Record<string, unknown>; note?: string; level?: number;
+  /** 実際に何が起きるか（保存した手順なら、流す手順そのもの）。 */
+  detail?: string };
 
 /** 経過表示の型と見た目は AgentTrace に集約した（CHATと揃えるため）。 */
 type Step = AgentStep;
@@ -432,7 +434,8 @@ function AgentConsole({
             break;
           case "approval":
             setSteps((s) => s.filter((x) => x.kind !== "thinking"));
-            setPending({ tool: ev.tool || "", params: ev.params || {}, note: ev.note, level: ev.level });
+            setPending({ tool: ev.tool || "", params: ev.params || {}, note: ev.note, level: ev.level,
+                         detail: ev.detail });
             break;
           case "error":
             setSteps((s) => [...s.filter((x) => x.kind !== "thinking"), { kind: "error", detail: ev.detail || "エラー" }]);
@@ -592,6 +595,13 @@ function AgentConsole({
                   </p>
                   {summarizeParams(pending.params) && (
                     <p className="mt-0.5 break-all text-[10px] text-muted">{summarizeParams(pending.params)}</p>
+                  )}
+                  {/* 流す手順そのもの（名前だけで承認させない） */}
+                  {pending.detail && (
+                    <pre aria-label="流す手順"
+                      className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all rounded-forge bg-[rgba(0,0,0,0.25)] p-1.5 text-[10px] leading-relaxed text-fg">
+                      {pending.detail}
+                    </pre>
                   )}
                   <div className="mt-2 flex gap-2">
                     <button type="button" onClick={() => void approve()} disabled={approving}

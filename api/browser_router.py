@@ -94,7 +94,10 @@ def plan(url: str, kind: str = "open", device: str = "",
     if not host:
         return {"ok": False, "error": "http(s) のURLを渡してください"}
 
-    candidates = localagent.devices_for_host(uid, host)
+    # 決まった手順は、専用ブラウザ（Playwright）があり、手順を知っている
+    # 相棒の台でだけ流す（あなたのChromeでは流さない。recipes.py 参照）
+    need = "recipe" if kind == "recipe" else ""
+    candidates = localagent.devices_for_host(uid, host, need=need)
 
     # ① 名指し
     if device:
@@ -102,6 +105,10 @@ def plan(url: str, kind: str = "open", device: str = "",
         if not chosen.get("ok"):
             return chosen
         if chosen["device"] not in {c["device"] for c in candidates}:
+            if need and chosen["device"] in {c["device"] for c in
+                                             localagent.devices_for_host(uid, host)}:
+                return {"ok": False, "error": _stale(chosen["name"]),
+                        "next": _STALE_NEXT}
             return {"ok": False,
                     "error": (f"「{chosen['name']}」では {host} を開けません"
                               f"（その台の --site に入っていないか、ブラウザが入っていません）")}
@@ -120,16 +127,35 @@ def plan(url: str, kind: str = "open", device: str = "",
                           f"（{' / '.join(names)}）。どちらで開くか決めてください"),
                 "next": "台の名前を言ってもらえれば、そこで開きます"}
 
+    # 手順のとき: そのサイトを開ける台はあるが、手順を流せない（相棒が古い・
+    # 専用ブラウザが無い）。ここで黙ってサーバーへ回すと、ログインの要る
+    # サイトをログイン無しで流すことになる。理由を言って止める
+    if need:
+        stale = localagent.devices_for_host(uid, host)
+        if stale:
+            return {"ok": False, "error": _stale(" / ".join(c["name"] for c in stale)),
+                    "next": _STALE_NEXT}
+
     # ③ どの台も許していない → ログインの要らないサイトとして
     if _server_browser():
         return {"ok": True, "route": "server", "host": host, "label": LABELS["server"]}
     if kind == "open":
         return {"ok": True, "route": "http", "host": host, "label": LABELS["http"]}
+    what = "手順を流せる" if need else "操作できる"
     return {"ok": False,
-            "error": (f"{host} を操作できる場所がありません。"
+            "error": (f"{host} を{what}場所がありません。"
                       f"ログインが要るサイトなら、手元の相棒の --site に {host} を足して"
                       f"ください。ログインの要らないサイトなら、サーバーのブラウザ"
-                      f"（ENABLE_BROWSER=1）で操作できます")}
+                      f"（ENABLE_BROWSER=1）で{'流せます' if need else '操作できます'}")}
+
+
+_STALE_NEXT = ("手元で aibou_local.py を新しくし、pip install playwright と "
+               "playwright install chromium を済ませてから、相棒を動かし直してください")
+
+
+def _stale(names: str) -> str:
+    return (f"「{names}」では手順を流せません"
+            f"（手元の相棒が古いか、専用ブラウザ（Playwright）が入っていません）")
 
 
 def route_level(tool: str, route: str) -> int:
@@ -148,6 +174,8 @@ def route_level(tool: str, route: str) -> int:
 
 def level_hint(tool: str, params: Optional[dict]) -> Optional[int]:
     """risk.py 用。場所によって危なさが変わる道具の段階。分からなければ None。"""
+    if tool == "recipe_run":
+        return _recipe_level(params)
     if tool not in ("browser_open", "browser_act"):
         return None
     url = str((params or {}).get("url") or "")
@@ -169,3 +197,31 @@ def level_hint(tool: str, params: Optional[dict]) -> Optional[int]:
         # 「通した重さ（0）」を超えるので止める（risk.within_ceiling）。
         return 0
     return route_level(tool, got["route"])
+
+
+def recipe_weight(recipe: dict) -> str:
+    """手順の重さを、どちらの道具と同じに数えるか（押す手があれば browser_act）。"""
+    import recipes
+    return "browser_act" if recipes.touches(recipe) else "browser_open"
+
+
+def _recipe_level(params: Optional[dict]) -> Optional[int]:
+    """保存した手順を流すときの段階。**中身と場所**で決まる。
+
+      押す・打ち込む手がある … 手元（あなたとして）なら3
+      読むだけの手順        … 手元なら2
+      サーバーで流す        … 0（誰にもログインしていない）
+      手順が無い・流せない  … 0（何も起きない。理由を返すだけ）
+    """
+    try:
+        import recipes
+        r = recipes.get(str((params or {}).get("name") or ""))
+        if not r:
+            return 0
+        got = plan(r.get("url", ""), "recipe",
+                   str((params or {}).get("device") or r.get("device") or ""))
+    except Exception:
+        return None
+    if not got.get("ok"):
+        return 0
+    return route_level(recipe_weight(r), got["route"])

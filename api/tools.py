@@ -120,6 +120,19 @@ TOOL_DOCS: Dict[str, str] = {
         'goto / click / fill / select / press / wait / params: '
         '{ "url": "https://example.com", "steps": [{"do": "fill", "target": "検索", '
         '"value": "東京"}, {"do": "click", "target": "検索する"}] }',
+    "recipe_run":
+        '保存した手順（決まった操作）を名前で呼んで、その通りに流す。「朝のケース確認を'
+        '流して」のように頼まれたら使う。{…} の空け所があれば values で値を渡す / params: '
+        '{ "name": "朝のケース確認", "values": {"顧客名": "山田商事"} }',
+    "recipe_save":
+        'うまくいったブラウザ操作を、名前を付けて手順として残す。変わる所は {名前} で'
+        '空けておける。パスワードの欄は入れられない / params: { "name": "朝のケース確認", '
+        '"url": "https://example.com/cases", "steps": [{"do": "fill", "target": "検索", '
+        '"value": "{顧客名}"}, {"do": "click", "target": "検索する"}] }',
+    "recipe_list":
+        '保存してある手順の一覧（名前・サイト・空け所） / params: { }',
+    "recipe_delete":
+        '保存した手順を消す / params: { "name": "朝のケース確認" }',
     "generate_image":
         'プロンプトから画像を生成する（HOMEの生成物に保存される） / params: { "prompt": "夕焼けの富士山、油絵風" }',
     "draw_diagram":
@@ -1028,6 +1041,128 @@ def _do_browser_act(params: dict) -> str:
     return _server_say(res, plan["label"])
 
 
+# ── 決まった手順（保存して、毎回同じに流す。recipes.py） ─────────────
+
+def _values_of(params: dict) -> dict:
+    """流すときに入れる値。AIは JSON の文字列で渡してくることもある。"""
+    raw = params.get("values")
+    if isinstance(raw, str) and raw.strip():
+        try:
+            raw = json.loads(raw)
+        except Exception:
+            raw = {}
+    return {str(k): str(v) for k, v in raw.items()} if isinstance(raw, dict) else {}
+
+
+def _recipe_names() -> str:
+    import recipes
+    names = [r.get("name", "") for r in recipes.list_all()]
+    return "、".join(f"「{n}」" for n in names[:12]) if names else ""
+
+
+def _do_recipe_save(params: dict) -> str:
+    import recipes
+    got = recipes.save(params.get("name") or "", params.get("url") or "",
+                       params.get("steps"), params.get("description") or "",
+                       params.get("device") or "")
+    if not got.get("ok"):
+        return f"手順を保存できませんでした：{got.get('error')}"
+    r = got["recipe"]
+    blanks = f"・流すときに入れる値: {'、'.join(r['params'])}" if r["params"] else ""
+    said = (f"手順「{r['name']}」を{'上書き' if got['replaced'] else '保存'}しました"
+            f"（{len(r['steps'])}手{blanks}）。「{r['name']}を流して」で、"
+            f"同じ手順をそのまま流せます。")
+    if got.get("stored") != "db":
+        # 保存先が無い・表がまだ無い。黙っていると、再起動で消えてから気づく
+        said += ("ただし、保存先（データベース）に書けなかったため、サーバーが"
+                 "再起動すると消えます。設定 →「つなぐ」→ DB で表を作ってください。")
+    return said
+
+
+def _do_recipe_list(params: dict) -> str:
+    import recipes
+    rows = recipes.list_all()
+    if not rows:
+        return ("保存した手順はまだありません。うまくいった操作のあとに"
+                "「この手順を保存して」と言えば残せます。")
+    return "保存した手順:\n" + "\n".join(f"・{recipes.summary_line(r)}" for r in rows)
+
+
+def _do_recipe_delete(params: dict) -> str:
+    import recipes
+    got = recipes.delete(params.get("name") or "")
+    if not got.get("ok"):
+        return got.get("error") or "消せませんでした"
+    return f"手順「{got['name']}」を消しました。"
+
+
+def _recipe_say(r: dict, got: dict, where: str) -> str:
+    """流した結果。**止めたときは、どこで止めて、何を押していないか**を言う。"""
+    did = got.get("did") or []
+    lines = []
+    if got.get("ok"):
+        lines.append(f"手順「{r['name']}」を最後まで流しました（{len(did)}手・{where}）。")
+    else:
+        why = got.get("error") or "手元のパソコンから返事がありませんでした"
+        if "知りません" in why:
+            # この仕組みより前の相棒は、recipe という仕事を知らない
+            why = ("手元の相棒が古く、手順を流せません。aibou_local.py を"
+                   "新しくしてから、動かし直してください")
+        lines.append(f"手順「{r['name']}」は流しきれませんでした：{why}")
+    for i, line in enumerate(did, 1):
+        lines.append(f"  {i}. {line}")
+    if got.get("ok"):
+        import untrusted
+        if got.get("title"):
+            lines.append(f"【{got['title']}】{got.get('url', '')}")
+        lines.append(untrusted.wrap(got.get("text") or "", source=got.get("url") or "",
+                                    kind="ページ"))
+    return "\n".join(lines)
+
+
+def _do_recipe_run(params: dict) -> str:
+    """保存した手順を流す。場所は browser_router が決める（手元なら専用ブラウザ）。"""
+    import browser_router
+    import recipes
+    import risk
+    name = (params.get("name") or "").strip()
+    r = recipes.get(name)
+    if not r:
+        known = _recipe_names()
+        return (f"「{name}」という手順はありません。"
+                + (f"保存してあるのは {known} です。" if known else
+                   "まだ1つも保存していません。"))
+    got = recipes.materialize(r, _values_of(params))
+    if not got.get("ok"):
+        return got["error"]
+    plan = browser_router.plan(got["url"], "recipe",
+                               (params.get("device") or r.get("device") or "").strip())
+    if not plan.get("ok"):
+        return _route_say(plan)
+    # 測ってから流すまでの間に台がつながって、確認した重さを超えていたら流さない
+    if not risk.within_ceiling(browser_router.route_level(
+            browser_router.recipe_weight(r), plan["route"])):
+        return risk.OVER_CEILING
+    if plan["route"] == "local":
+        res = _local("recipe", {"name": r["name"], "url": got["url"],
+                                "steps": got["steps"]},
+                     timeout=180.0, device=plan["device"])
+        where = " / ".join(x for x in (res.get("device_name") or plan.get("name"),
+                                       res.get("engine_label")) if x)
+    else:
+        try:
+            import browser as browser_mod
+            res = browser_mod.visit(got["url"], got["steps"], strict=True,
+                                    max_steps=recipes.MAX_STEPS)
+        except Exception as e:
+            res = {"ok": False, "error": f"ブラウザを動かせませんでした：{e}"}
+        where = plan["label"]
+    ok = bool(res.get("ok"))
+    recipes.mark_run(r["id"], ok, (f"{len(res.get('did') or [])}手を流しました" if ok
+                                   else str(res.get("error") or ""))[:160])
+    return _recipe_say(r, res, where)
+
+
 def _do_web_read(params: dict) -> str:
     """URLのページ本文を取得して返す。"""
     url = (params.get("url") or "").strip()
@@ -1314,6 +1449,10 @@ _DISPATCH = {
     "web_read": _do_web_read,
     "browser_open": _do_browser_open,
     "browser_act": _do_browser_act,
+    "recipe_run": _do_recipe_run,
+    "recipe_save": _do_recipe_save,
+    "recipe_list": _do_recipe_list,
+    "recipe_delete": _do_recipe_delete,
     "local_list": _do_local_list,
     "local_read": _do_local_read,
     "local_write": _do_local_write,

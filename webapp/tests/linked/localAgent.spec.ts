@@ -198,6 +198,20 @@ test("台ごとに、どのブラウザで動くかを出す", async ({ page }) 
   await expect(page.getByText(/ブラウザ操作: 専用ブラウザ/)).toBeVisible();
 });
 
+test("手順を流せない（相棒が古い）台は、先にそう言う", async ({ page }) => {
+  /* 頼んでから「知りません」で断られるより、繋ぐ画面で先に言うほうが早い。 */
+  const be = await mockBackend(page);
+  withDevices(be, [
+    { device: "d1", name: "ノート", online: true, last_seen_ago: 1,
+      engines: ["playwright"], recipes: false },
+    { device: "d2", name: "デスクトップ", online: true, last_seen_ago: 2,
+      engines: ["playwright"], recipes: true },
+  ]);
+  await enterApp(page);
+  await openConnect(page);
+  await expect(page.getByText(/aibou_local\.py を新しくしてください/)).toHaveCount(1);
+});
+
 test("ブラウザを入れていない台には、ブラウザの話を出さない", async ({ page }) => {
   // 要らない行を足すと、読む物が増えるだけ
   const be = await mockBackend(page);

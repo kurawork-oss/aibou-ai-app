@@ -55,12 +55,34 @@ import re
 import shutil
 import subprocess
 import sys
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Optional, Tuple
 
 # 1回の読み取りで返す本文の上限（AIへ渡る物なので）
 MAX_CHARS = 6000
 # 押す・打つときに使ってよい筋（Runner と同じ顔ぶれ）
 ACTIONS = ("goto", "click", "fill", "select", "press", "wait")
+
+# 鍵を入れる欄に見える名前。**ここへは打ち込まない**（どのエンジンでも）。
+#
+# ログインは本人が手元で一度だけ通す（`--login`）。AIbouの側でパスワードを
+# 扱うと、会話・手順・記録のどこかに残り、クラウドを通ることになる。
+# サーバー側（api/recipes.py の _SECRET_FIELD）と同じ線にしてある
+# （同じであることはテストで見ている）。
+SECRET_FIELD = re.compile(
+    r"(パスワード|ぱすわーど|password|passwd|passcode|パスコード|暗証|"
+    r"(?<![a-z])pin(?![a-z])|ワンタイム|one.?time|(?<![a-z])otp(?![a-z])|"
+    r"認証コード|確認コード|セキュリティコード|security.?code|"
+    r"カード番号|card.?number|(?<![a-z])cv[vc]2?(?![a-z])|秘密の質問|"
+    r"secret|token|トークン)", re.I)
+
+# 名前は普通でも、欄そのものが鍵用のとき（Playwright だけが見分けられる）。
+# autocomplete はブラウザにパスワードやカードを入れさせるための印なので、
+# これが付いた欄は、名前が何であれ鍵の欄として扱う。
+_SECRET_AUTOCOMPLETE = ("current-password", "new-password", "one-time-code",
+                        "cc-number", "cc-csc", "cc-exp")
+
+REFUSE_SECRET = ("パスワードなど鍵を入れる欄には、入力しません"
+                 "（ログインは手元で一度だけ --login で通してください）")
 
 
 class EngineError(Exception):
@@ -94,6 +116,14 @@ class BrowserEngine:
 
     def step(self, kind: str, target: str, value: str) -> str:
         """1手ぶん。何をしたかを文で返す（できなければ理由を返す）。"""
+        return self.try_step(kind, target, value)[1]
+
+    def try_step(self, kind: str, target: str, value: str) -> Tuple[bool, str]:
+        """1手ぶん。(できたか, 何をしたか／できなかった理由)。
+
+        決まった手順（recipe）は「1手でも失敗したら止める」ので、文だけでは
+        足りない——文から成否を読み取るのは、言い回しが変わった途端に壊れる。
+        """
         raise NotImplementedError
 
     def read(self) -> Dict[str, object]:
@@ -191,33 +221,43 @@ class PlaywrightEngine(BrowserEngine):
         except Exception:
             return ""
 
-    def step(self, kind: str, target: str, value: str) -> str:
+    def try_step(self, kind: str, target: str, value: str) -> Tuple[bool, str]:
+        if kind not in ACTIONS:
+            return False, f"（{kind or '空'}）は使えません"
         page = self._page()
         try:
             if kind == "wait":
                 page.wait_for_timeout(min(int(value or 1000), 5000))
-                return "待ちました"
+                return True, "待ちました"
             if kind == "press":
                 page.keyboard.press(target or "Enter")
-                return f"{target or 'Enter'} を押しました"
+                return True, f"{target or 'Enter'} を押しました"
             if kind == "goto":
                 page.goto(value or target, wait_until="domcontentloaded",
                           timeout=self.timeout_ms)
-                return f"{value or target} を開きました"
+                return True, f"{value or target} を開きました"
             if not target:
-                return "どこを触るのか分かりません"
+                return False, "どこを触るのか分かりません"
             if kind == "click":
                 page.get_by_text(target, exact=False).first.click(timeout=5000)
-                return f"「{target}」を押しました"
+                return True, f"「{target}」を押しました"
             if kind == "fill":
-                page.get_by_label(target).first.fill(value, timeout=5000)
-                return f"「{target}」に入力しました"
+                if SECRET_FIELD.search(target):
+                    return False, REFUSE_SECRET
+                box = page.get_by_label(target).first
+                # 名前が普通でも、欄そのものが鍵用なら打ち込まない
+                kind_of = (box.get_attribute("type", timeout=5000) or "").lower()
+                auto = (box.get_attribute("autocomplete", timeout=5000) or "").lower()
+                if kind_of == "password" or any(a in auto for a in _SECRET_AUTOCOMPLETE):
+                    return False, REFUSE_SECRET
+                box.fill(value, timeout=5000)
+                return True, f"「{target}」に入力しました"
             if kind == "select":
                 page.get_by_label(target).first.select_option(value, timeout=5000)
-                return f"「{target}」で{value}を選びました"
+                return True, f"「{target}」で{value}を選びました"
         except Exception as e:
-            return f"できませんでした（{type(e).__name__}）"
-        return "何もしませんでした"
+            return False, f"できませんでした（{type(e).__name__}）"
+        return False, "何もしませんでした"
 
     def read(self) -> Dict[str, object]:
         page = self._page()
@@ -390,41 +430,46 @@ class OpenCLIEngine(BrowserEngine):
             return ""
         return out.splitlines()[-1].strip() if code == 0 and out else ""
 
-    def step(self, kind: str, target: str, value: str) -> str:
+    def try_step(self, kind: str, target: str, value: str) -> Tuple[bool, str]:
         if kind not in ACTIONS:
-            return f"（{kind or '空'}）は使えません"
+            return False, f"（{kind or '空'}）は使えません"
         try:
             if kind == "wait":
                 secs = min(max(int(value or 1000), 0), 5000) / 1000
-                self._run(["wait", "time", f"{secs:g}"])
-                return "待ちました"
+                code, _ = self._run(["wait", "time", f"{secs:g}"])
+                return (True, "待ちました") if code == 0 else (False, "待てませんでした")
             if kind == "press":
                 code, _ = self._run(["keys", target or "Enter"])
-                return f"{target or 'Enter'} を押しました" if code == 0 else "押せませんでした"
+                return (True, f"{target or 'Enter'} を押しました") if code == 0 \
+                    else (False, "押せませんでした")
             if kind == "goto":
                 self.open(value or target)
-                return f"{value or target} を開きました"
+                return True, f"{value or target} を開きました"
             if not target:
-                return "どこを触るのか分かりません"
+                return False, "どこを触るのか分かりません"
             if kind == "click":
                 # 名前（aria-label・ラベル・見えている文字）で探す。AIが CSS を
                 # 書くより、人が読む言葉のほうが当たる
                 code, out = self._run(["click", "--name", target])
-                return f"「{target}」を押しました" if code == 0 else \
-                    self._error_text(out, f"「{target}」を押すことが")
+                return (True, f"「{target}」を押しました") if code == 0 else \
+                    (False, self._error_text(out, f"「{target}」を押すことが"))
             if kind == "fill":
+                # OpenCLI では欄の種類（type=password）を先に見られないので、
+                # 名前で断る。あなたのChromeの中なので、なおさら打ち込まない
+                if SECRET_FIELD.search(target):
+                    return False, REFUSE_SECRET
                 code, out = self._run(["fill", "--label", target, value])
                 data = self._json(out) or {}
                 if code == 0 and data.get("verified", True):
-                    return f"「{target}」に入力しました"
-                return self._error_text(out, f"「{target}」に入力することが")
+                    return True, f"「{target}」に入力しました"
+                return False, self._error_text(out, f"「{target}」に入力することが")
             if kind == "select":
                 code, out = self._run(["select", "--label", target, value])
-                return f"「{target}」で{value}を選びました" if code == 0 else \
-                    self._error_text(out, f"「{target}」を選ぶことが")
+                return (True, f"「{target}」で{value}を選びました") if code == 0 else \
+                    (False, self._error_text(out, f"「{target}」を選ぶことが"))
         except EngineError as e:
-            return f"できませんでした（{e}）"
-        return "何もしませんでした"
+            return False, f"できませんでした（{e}）"
+        return False, "何もしませんでした"
 
     def read(self) -> Dict[str, object]:
         _c, title = self._run(["get", "title"], timeout=10)

@@ -121,6 +121,26 @@ SCHEMAS: Dict[str, Dict[str, Any]] = {
                   'select / press / wait のどれか'),
     }},
 
+    # ── 決まった手順（recipes.py） ─────────────────────────────────
+    "recipe_run": {"fields": {
+        "name": ("str", True, "保存した手順の名前"),
+        "values": ("json", False,
+                   '手順の空け所 {名前} に入れる値。JSONで {"顧客名": "山田商事"}'),
+        "device": ("str", False, "どのパソコンか（台の名前。ふつうは要らない）"),
+    }},
+    "recipe_save": {"fields": {
+        "name": ("str", True, "手順の名前（あとで「○○を流して」と呼ぶ名前）"),
+        "url": ("str", True, "最初に開くページのURL"),
+        "steps": ("steps", True,
+                  '手順。browser_act と同じ形。変わる所は {名前} で空けておける'),
+        "description": ("str", False, "何をする手順か（一覧に出す）"),
+        "device": ("str", False, "決まった台で流すなら、その名前"),
+    }},
+    "recipe_list": {"fields": {}},
+    "recipe_delete": {"fields": {
+        "name": ("str", True, "消す手順の名前"),
+    }},
+
     # ── つくる（AIbouの中に保存） ─────────────────────────────────
     "create_document": {"fields": {
         "title": ("str", True, "見出し"),
@@ -219,6 +239,10 @@ _JSON_TYPE = {
     "bool": {"type": "boolean"},
     "rows": {"type": "array", "items": {"type": "array", "items": {"type": "string"}}},
     "steps": {"type": "array", "items": {"type": "object"}},
+    # 名前と値の組。中身の決まっていないオブジェクトは、提供元によって宣言で
+    # 断られることがある（中の項目を列挙しろと言われる）。文字列のJSONとして
+    # 宣言し、受け取るときはオブジェクトでも文字列でも受ける（_coerce）。
+    "json": {"type": "string"},
 }
 
 
@@ -304,6 +328,18 @@ def _coerce(kind: str, value: Any) -> Tuple[Any, Optional[str]]:
         if not isinstance(value, list):
             return None, "配列で渡してください"
         return [x for x in value if isinstance(x, dict)], None
+    if kind == "json":
+        if isinstance(value, str):
+            s = value.strip()
+            if not s:
+                return {}, None
+            try:
+                value = __import__("json").loads(s)
+            except Exception:
+                return None, '{"名前": "値"} の形（JSON）で渡してください'
+        if not isinstance(value, dict):
+            return None, '{"名前": "値"} の形（JSON）で渡してください'
+        return {str(k): str(v) for k, v in value.items()}, None
     if kind.startswith("enum:"):
         allowed = kind[5:].split(",")
         s = str(value).strip()

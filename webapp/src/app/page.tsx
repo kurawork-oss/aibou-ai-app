@@ -58,6 +58,7 @@ const FeaturePacks = lazy(() => import("@/components/FeaturePacks"));
 const IntegrationsSettings = lazy(() => import("@/components/IntegrationsSettings"));
 const CapabilityPanel = lazy(() => import("@/components/CapabilityPanel"));
 const LocalAgentSettings = lazy(() => import("@/components/LocalAgentSettings"));
+const RecipeSettings = lazy(() => import("@/components/RecipeSettings"));
 const AppArchive = lazy(() => import("@/components/AppArchive"));
 const Autopilot = lazy(() => import("@/components/Autopilot"));
 const CodeMode = lazy(() => import("@/components/CodeMode"));
@@ -108,6 +109,7 @@ function usePrefetchScreens(ready: boolean): void {
       import("@/components/IntegrationsSettings"),
       import("@/components/CapabilityPanel"),
       import("@/components/LocalAgentSettings"),
+      import("@/components/RecipeSettings"),
       import("@/components/AppArchive"),
       import("@/components/Autopilot"),
       import("@/components/CodeMode"),
@@ -1079,6 +1081,8 @@ function SettingsPanel({
                 <FeaturePacks />
                 <IntegrationsSettings />
                 <LocalAgentSettings />
+                {/* 手元の専用ブラウザで流す、決まった手順（相棒の下に置く） */}
+                <RecipeSettings />
               </>
             ) : (
               <NeedsBackend what="使う機能の切り替え・外部サービスの連携・モデルの割り当て" />

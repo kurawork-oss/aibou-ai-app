@@ -164,7 +164,9 @@ CAPABILITIES: List[dict] = [
 _HIDDEN_TOOLS = {"list_state", "schedule_list", "complete_task", "self_check",
                  "browser_act",
                  "local_list", "local_read", "local_write", "local_append",
-                 "obsidian_note"}
+                 "obsidian_note",
+                 # 決まった手順。流す前に中身を見せて確認するので、# の直行は作らない
+                 "recipe_run", "recipe_save", "recipe_list", "recipe_delete"}
 
 
 # ── どのパックが有効か ───────────────────────────────────────────────

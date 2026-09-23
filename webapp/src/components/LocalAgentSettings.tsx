@@ -37,6 +37,8 @@ interface Device {
   last_seen_ago?: number | null;
   /** その台で使えるブラウザ（opencli / playwright）。 */
   engines?: string[];
+  /** 決まった手順を流せるか（専用ブラウザがあり、相棒が手順を知っている）。 */
+  recipes?: boolean;
 }
 
 /** どのブラウザで動くかを、人の言葉で。
@@ -186,6 +188,13 @@ export default function LocalAgentSettings() {
                       : `最後に来たのは${d.last_seen_ago}秒前`}
                   {d.online && engineWords(d.engines) && ` · ${engineWords(d.engines)}`}
                 </div>
+                {/* 専用ブラウザはあるのに手順を流せない＝相棒が古い。頼んでから
+                    断られるより先に、ここで言っておく */}
+                {d.online && d.engines?.includes("playwright") && d.recipes === false && (
+                  <div className="text-[10px]" style={{ color: "#ffd060" }}>
+                    決まった手順を流すには、この台の aibou_local.py を新しくしてください
+                  </div>
+                )}
               </div>
               <button type="button" disabled={busy}
                 aria-label={`${d.name} の名前を変える`}

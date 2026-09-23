@@ -145,7 +145,8 @@ GROUPS: List[dict] = [
     {"id": "local_agent", "name": "パソコンの中を触る（手元の相棒）",
      "kind": "local_agent", "pack": "core",
      "tools": ["local_list", "local_read", "local_write", "local_append",
-               "obsidian_note", "browser_open", "browser_act"],
+               "obsidian_note", "browser_open", "browser_act",
+               "recipe_run", "recipe_save", "recipe_list", "recipe_delete"],
      "why_missing": "手元のパソコンで相棒を動かしていません",
      "next": ("設定 → つなぐ →「手元のパソコン」で合言葉を作り、"
               "パソコンで `python aibou_local.py` を動かします"),

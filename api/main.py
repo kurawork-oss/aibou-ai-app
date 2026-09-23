@@ -1314,7 +1314,8 @@ async def chat(req: ChatRequest, _auth: None = Depends(require_auth)):
                             "level": info["level"], "level_label": info["label"],
                             "why": info["why"], "chained": info.get("chained", False),
                             "may_always": info["may_always"],
-                            "always_confirm": info["always_confirm"]}})
+                            "always_confirm": info["always_confirm"],
+                            "detail": info.get("detail", "")}})
                         yield _sse({"done": True})
                         return
                     # 何をしているのかを、先に出す。画像生成は10秒かかる
@@ -1657,7 +1658,8 @@ async def local_status(_auth: None = Depends(require_auth),
 @app.get("/local/jobs")
 async def local_jobs(wait: float = 25.0, who=Depends(_local_caller),
                      x_local_engines: Optional[str] = Header(default=None),
-                     x_local_sites: Optional[str] = Header(default=None)):
+                     x_local_sites: Optional[str] = Header(default=None),
+                     x_local_jobs: Optional[str] = Header(default=None)):
     """手元の相棒が「仕事ある？」と聞きに来る所。無ければ待つ。
 
     相棒は、その台で使えるブラウザのエンジンを一緒に知らせてくる
@@ -1673,6 +1675,10 @@ async def local_jobs(wait: float = 25.0, who=Depends(_local_caller),
     if x_local_sites is not None:
         localagent.note_sites(user_id, device_id,
                               [h.strip() for h in x_local_sites.split(",")])
+    # その台の相棒が引き受けられる仕事。古い相棒は送ってこない（手順は流せない）
+    if x_local_jobs is not None:
+        localagent.note_jobs(user_id, device_id,
+                             [j.strip() for j in x_local_jobs.split(",")])
     job = await asyncio.get_event_loop().run_in_executor(
         None, lambda: localagent.take(user_id, device_id, wait))
     return {"ok": True, "job": job}
@@ -1683,6 +1689,49 @@ async def local_result(req: LocalResultRequest, who=Depends(_local_caller)):
     """手元の相棒が結果を持ってくる所。"""
     user_id, device_id = who
     return localagent.deliver(user_id, device_id, req.job_id, req.result)
+
+
+# ── 決まった手順（recipes.py） ──────────────────────────────────────
+#
+# 一覧・保存・削除だけ。**流す口はここに作らない**——流すのは確認の門を
+# 通る道（AIの道具 recipe_run、画面からは /agent/execute）だけにする。
+# 門の外に「押せば流れる口」を1つ作ると、段階も縛り（ceiling）も効かない。
+
+class RecipeSaveRequest(BaseModel):
+    name: str
+    url: str
+    steps: List[dict] = []
+    description: str = ""
+    device: str = ""
+
+
+@app.get("/recipes")
+async def recipes_list(_auth: None = Depends(require_auth)):
+    import recipes
+    rows = await asyncio.get_event_loop().run_in_executor(None, recipes.list_all)
+    return {"items": [{**r, "touches": recipes.touches(r),
+                       "summary": recipes.summary_line(r)} for r in rows]}
+
+
+@app.post("/recipes")
+async def recipes_save(req: RecipeSaveRequest, _auth: None = Depends(require_auth),
+                       _store: None = Depends(require_storage)):
+    import recipes
+    got = await asyncio.get_event_loop().run_in_executor(
+        None, lambda: recipes.save(req.name, req.url, req.steps, req.description, req.device))
+    if not got.get("ok"):
+        return JSONResponse(status_code=400, content=got)
+    return got
+
+
+@app.delete("/recipes/{recipe_id}")
+async def recipes_delete(recipe_id: str, _auth: None = Depends(require_auth)):
+    import recipes
+    got = await asyncio.get_event_loop().run_in_executor(
+        None, lambda: recipes.delete(recipe_id))
+    if not got.get("ok"):
+        return JSONResponse(status_code=404, content=got)
+    return got
 
 
 @app.get("/income/summary")

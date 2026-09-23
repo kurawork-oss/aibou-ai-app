@@ -313,7 +313,9 @@ def _run_stream(instruction: str, history=None, name: str = "AIbou", approval: b
                          "level": info["level"], "level_label": info["label"],
                          "why": info["why"], "chained": info.get("chained", False),
                          "may_always": info["may_always"],
-                         "always_confirm": info["always_confirm"]})
+                         "always_confirm": info["always_confirm"],
+                         # 実際に何が起きるか（保存した手順なら、流す手順そのもの）
+                         "detail": info.get("detail", "")})
             yield stamp({"phase": "done", "steps": step - 1, "awaiting_approval": True})
             return
 

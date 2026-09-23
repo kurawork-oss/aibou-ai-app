@@ -230,9 +230,12 @@ def _park_for_approval(schedule: dict, ev: dict, user_id: str = "") -> str:
     """
     try:
         import approvals
+        # 保存した手順なら、流す手順そのものを添える（名前だけで承認させない）
+        detail = (ev.get("detail") or "").strip()
         row = approvals.ask(
             ev.get("tool") or "", ev.get("params") or {},
-            note=f"定期実行「{schedule.get('instruction', '')}」の途中で確認が要ります",
+            note=(f"定期実行「{schedule.get('instruction', '')}」の途中で確認が要ります"
+                  + (f"\n{detail}" if detail else "")),
             source="schedule", user_id=user_id, why=ev.get("why") or "",
             answer_url=_answer_url(),
             # 止めたときの段階。答えるまでに実行の場所が変わって重くなって

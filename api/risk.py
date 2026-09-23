@@ -51,6 +51,10 @@ LEVELS: Dict[str, int] = {
     # ここに書いてあるのは、場所が分からないとき（一覧表示など）の重いほう。
     "browser_open": 2,
     "browser_act": 3,
+    # 保存した手順を流す。中身（押す手があるか）と場所で決まる（browser_router）。
+    # ここは場所が分からないときの重いほう
+    "recipe_run": 3,
+    "recipe_list": 0,
     "email_inbox": 0,
     "calendar_list": 0,
     "income_status": 0,
@@ -71,6 +75,9 @@ LEVELS: Dict[str, int] = {
     "schedule_add": 1,
     "create_automation": 1,
     "create_mission": 1,
+    # 手順を残す・消すのは、このアプリの中だけ（流すときに、中身を見せて確認する）
+    "recipe_save": 1,
+    "recipe_delete": 1,
 
     # 手元のパソコンの中を見る・書く。
     #
@@ -112,6 +119,8 @@ WHY: Dict[str, str] = {
     "browser_open": "ログイン済みの画面の中身が、AIへ渡ります。",
     "browser_act": ("あなたのブラウザで、あなたとして操作します。"
                     "押した先が送信や購入だった場合、取り消せません。"),
+    "recipe_run": ("保存した手順を、手元の専用ブラウザで流します。押す手順があれば"
+                   "あなたとして押すので、送信や購入なら取り消せません。"),
     "local_write": "手元のパソコンのファイルを書き換えます（元の内容は .bak に残ります）。",
     "local_append": "手元のパソコンのファイルに書き足します。",
     "obsidian_note": "今日の日誌に書き足します。",
@@ -165,7 +174,13 @@ def level(tool: str, params=None) -> int:
 #: 1枚目は確認しない（「調べて」→検索→1枚読む、がいちばん普通の流れで、
 #: ここに確認を挟むと毎回止まる）。2枚目から聞く。聞く画面にはURLが出るので、
 #: 持ち出そうとしていれば、その場で見える。
-CHAIN_AFTER_EXTERNAL = {"web_read", "browser_open", "browser_act"}
+#:
+#: 手順も入れる。流すほう（recipe_run）は、ページに書いてあった名前や値で
+#: 流させられうる。残すほう（recipe_save）は、ページに書いてあった手順を
+#: **いつもの名前で上書き**させられうる——次に本人が安心して流したときに、
+#: 中身が差し替わっている。どちらも「誰が決めたか」の話なので、ここで聞く。
+CHAIN_AFTER_EXTERNAL = {"web_read", "browser_open", "browser_act",
+                        "recipe_run", "recipe_save"}
 
 
 def may_always_allow(tool: str, external_reads: int = 0, params=None,
@@ -235,6 +250,24 @@ def chain_reason(tool: str, external_reads: int) -> str:
     return ""
 
 
+def detail(tool: str, params=None) -> str:
+    """確認カードに添える「実際に何が起きるか」。見せた物を承認してもらうため。
+
+    recipe_run の引数は**名前だけ**。名前だけ見せて承認させると、中身が
+    （別の会話や、ページに唆されたAIに）書き換えられていても気づけない。
+    流す手順そのものを出す。
+    """
+    if (tool or "").strip() != "recipe_run":
+        return ""
+    try:
+        import recipes
+        p = params or {}
+        values = p.get("values") if isinstance(p.get("values"), dict) else {}
+        return recipes.preview(str(p.get("name") or ""), values)
+    except Exception:
+        return ""
+
+
 def describe(tool: str, external_reads: int = 0, params=None,
              lv: Optional[int] = None) -> dict:
     """画面に出すための1件ぶん。"""
@@ -252,6 +285,7 @@ def describe(tool: str, external_reads: int = 0, params=None,
         "may_always": may_always_allow(tool, external_reads, lv=lv),
         "why": why,
         "chained": bool(chain),
+        "detail": detail(tool, params),
     }
 
 

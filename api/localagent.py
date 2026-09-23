@@ -76,8 +76,9 @@ import uuid
 from typing import Dict, List, Optional, Tuple
 
 # 頼める仕事。手元の相棒（agent_local/aibou_local.py）と同じ顔ぶれにする。
+# recipe … 保存した手順を、専用ブラウザで決まった通りに流す（recipes.py）
 JOBS = ("list", "read", "write", "append", "open", "shot",
-        "browse", "browse_act")
+        "browse", "browse_act", "recipe")
 
 # 仕事を預かっておく時間。手元の相棒が落ちていると、ここに溜まる。
 JOB_TTL = 600.0
@@ -249,6 +250,8 @@ def status(user_id: str) -> dict:
                 "last_seen_ago": int(idle) if idle is not None else None,
                 "engines": list(dev.get("engines") or []),
                 "sites": list(dev.get("sites") or []),
+                # 手順を流せるか（相棒が新しく、専用ブラウザが入っている）
+                "recipes": _can_run_recipes(dev),
             })
     rows.sort(key=lambda r: (not r["online"], r["name"]))
     live = [r for r in rows if r["online"]]
@@ -368,17 +371,43 @@ def note_sites(user_id: str, device_id: str, sites) -> None:
             dev["sites"] = names
 
 
+def note_jobs(user_id: str, device_id: str, jobs) -> None:
+    """その台の相棒が引き受けられる仕事（`X-Local-Jobs`）を覚える。
+
+    相棒は手元で動いている物なので、サーバーより古いことがある。古い相棒に
+    知らない仕事を渡すと「知りません」で返ってくるだけだが、それだと
+    **頼んでから**分かる。先に知っていれば、頼む前に「新しくしてください」と
+    言える。知らせてこない相棒（この仕組みより前の物）は、何も覚えない。
+    """
+    names = [j for j in (jobs or []) if j in JOBS]
+    with _store.lock:
+        dev = _devices(user_id).get(device_id)
+        if dev is not None:
+            dev["jobs"] = names
+
+
+def _can_run_recipes(dev: dict) -> bool:
+    """手順を流せる台か。専用ブラウザ（Playwright）と、recipe を知っている相棒が要る。"""
+    return "playwright" in (dev.get("engines") or []) and "recipe" in (dev.get("jobs") or [])
+
+
 def _covers(sites, host: str) -> bool:
     h = (host or "").strip().lower().rstrip(".")
     return bool(h) and any(h == a or h.endswith("." + a) for a in (sites or []))
 
 
-def devices_for_host(user_id: str, host: str) -> List[dict]:
-    """そのサイトを開ける台（動いていて、ブラウザがあり、`--site` に入っている）。"""
+def devices_for_host(user_id: str, host: str, need: str = "") -> List[dict]:
+    """そのサイトを開ける台（動いていて、ブラウザがあり、`--site` に入っている）。
+
+    need="recipe" なら、そのうち手順を流せる台だけ（専用ブラウザがあり、
+    相棒が recipe を知っている）。
+    """
     out = []
     with _store.lock:
         for device_id, dev in _devices(user_id).items():
             if not _online(dev) or not dev.get("engines"):
+                continue
+            if need == "recipe" and not _can_run_recipes(dev):
                 continue
             if _covers(dev.get("sites"), host):
                 out.append({"device": device_id, "name": _label(dev, device_id),

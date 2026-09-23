@@ -58,6 +58,10 @@ export const TOOL_LABELS: Record<string, string> = {
   // ブラウザ。どこで開くか（手元の台か、サーバーか）はサーバーが決めて、結果に書く
   browser_open: "ページを開いて読む",
   browser_act: "ページを操作する",
+  recipe_run: "保存した手順を流す",
+  recipe_save: "手順を保存",
+  recipe_list: "保存した手順を確認",
+  recipe_delete: "手順を消す",
   local_list: "手元のフォルダを見る",
   local_read: "手元のファイルを読む",
   local_write: "手元のファイルに書く",

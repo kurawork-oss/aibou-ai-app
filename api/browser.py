@@ -50,7 +50,7 @@ Playwright とブラウザ本体は大きい。入っていない置き場もあ
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import netguard
 import untrusted
@@ -187,39 +187,58 @@ def _links(page, limit: int = 30) -> List[dict]:
 
 def _do(page, step: dict) -> str:
     """1手ぶん。何をしたかを文で返す（できなければ理由を返す）。"""
+    return _try(page, step)[1]
+
+
+def _try(page, step: dict) -> Tuple[bool, str]:
+    """1手ぶん。(できたか, 何をしたか／できなかった理由)。
+
+    決まった手順（recipes.py）は1手でも失敗したら止めるので、成否が要る。
+    文から読み取ると、言い回しが変わった途端に壊れる。
+    """
     kind = str(step.get("do") or "").strip().lower()
     target = str(step.get("target") or "").strip()
     value = str(step.get("value") or "")
     if kind not in ACTIONS:
-        return f"（{kind or '空'}）は使えません"
+        return False, f"（{kind or '空'}）は使えません"
     try:
         if kind == "wait":
             page.wait_for_timeout(min(int(value or 1000), 5000))
-            return "待ちました"
+            return True, "待ちました"
         if kind == "press":
             page.keyboard.press(target or "Enter")
-            return f"{target or 'Enter'} を押しました"
+            return True, f"{target or 'Enter'} を押しました"
         # 文字で探す（AIが CSS を書くより、人が読む言葉のほうが当たる）
         el = page.get_by_text(target, exact=False).first if target else None
         if el is None:
-            return "どこを触るのか分かりません"
+            return False, "どこを触るのか分かりません"
         if kind == "click":
             el.click(timeout=5000)
-            return f"「{target}」を押しました"
+            return True, f"「{target}」を押しました"
         if kind == "fill":
+            import recipes
+            # 誰にもログインしていないブラウザでも、鍵の欄には打ち込まない
+            # （打ち込む値は会話か手順から来る＝クラウドを通っている）
+            if recipes.secret_field(target):
+                return False, "パスワードなど鍵を入れる欄には、入力しません"
             page.get_by_label(target).first.fill(value, timeout=5000)
-            return f"「{target}」に入力しました"
+            return True, f"「{target}」に入力しました"
         if kind == "select":
             page.get_by_label(target).first.select_option(value, timeout=5000)
-            return f"「{target}」で{value}を選びました"
+            return True, f"「{target}」で{value}を選びました"
     except Exception as e:
-        return f"できませんでした（{type(e).__name__}）"
-    return "何もしませんでした"
+        return False, f"できませんでした（{type(e).__name__}）"
+    return False, "何もしませんでした"
 
 
 def visit(url: str, steps: Optional[List[dict]] = None,
-          max_chars: int = MAX_CHARS) -> Dict[str, Any]:
+          max_chars: int = MAX_CHARS, strict: bool = False,
+          max_steps: int = MAX_STEPS) -> Dict[str, Any]:
     """ページを開いて、（あれば）手順を順に行い、見えている本文を返す。
+
+    strict: 1手でも失敗したら、そこで止める（決まった手順を流すとき）。
+            AIが見ながら進めるときは止めない——できなかった手も結果に書いて
+            返し、AIが次の手を考える。
 
     **例外は出さない。** 読めなかったら、読めなかったと書いて返す。
     """
@@ -231,8 +250,9 @@ def visit(url: str, steps: Optional[List[dict]] = None,
     if not ok:
         return {"ok": False, "error": reason, "text": "", "title": "", "url": url}
 
-    plan = [s for s in (steps or []) if isinstance(s, dict)][:MAX_STEPS]
+    plan = [s for s in (steps or []) if isinstance(s, dict)][:max_steps]
     did: List[str] = []
+    stopped: Optional[Tuple[int, str]] = None
     from playwright.sync_api import sync_playwright
 
     try:
@@ -253,8 +273,12 @@ def visit(url: str, steps: Optional[List[dict]] = None,
                 # 外側に出る（route を張り直すまでの間が空く）。
                 ctx.on("page", lambda p: p.close())
                 page.goto(url, wait_until="domcontentloaded", timeout=TIMEOUT_MS)
-                for step in plan:
-                    did.append(_do(page, step))
+                for i, step in enumerate(plan, 1):
+                    done, said = _try(page, step)
+                    did.append(said)
+                    if strict and not done:
+                        stopped = (i, said)   # 続きは押さない
+                        break
                 try:
                     page.wait_for_load_state("networkidle", timeout=3000)
                 except Exception:
@@ -268,6 +292,12 @@ def visit(url: str, steps: Optional[List[dict]] = None,
     except Exception as e:
         return {"ok": False, "error": f"開けませんでした（{type(e).__name__}）",
                 "text": "", "title": "", "url": url, "did": did}
+
+    if stopped:
+        i, said = stopped
+        return {"ok": False, "stopped_at": i,
+                "error": f"{i}手目で止めました（{said}）。続きは押していません",
+                "text": "", "title": title, "url": final, "did": did}
 
     if not body.strip():
         return {"ok": False, "error": "ページは開けましたが、本文が空でした",

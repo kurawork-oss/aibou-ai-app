@@ -65,8 +65,8 @@ import time
 from pathlib import Path
 from typing import List, Optional
 
-from engines import (BrowserEngine, EngineError, OpenCLIEngine,  # noqa: E402
-                     PlaywrightEngine)
+from engines import (REFUSE_SECRET, SECRET_FIELD, BrowserEngine,  # noqa: E402
+                     EngineError, OpenCLIEngine, PlaywrightEngine)
 
 try:
     import requests
@@ -82,6 +82,11 @@ MAX_LIST = 200
 BROWSE_TIMEOUT_MS = 20000
 BROWSE_MAX_CHARS = 6000
 MAX_STEPS = 8
+# 決まった手順（recipe）の上限。AIが1手ずつ考えるわけではないので、長めに持てる
+MAX_RECIPE_STEPS = 20
+# この相棒が引き受ける仕事（サーバーへ知らせる。古い相棒との見分けに使う）
+JOBS = ("list", "read", "write", "append", "open", "shot",
+        "browse", "browse_act", "recipe")
 # 押す・打つときに使ってよい筋。ここに無い物は動かさない。
 # `evaluate`（中のJavaScriptを走らせる）は**入れない**——開けると
 # 「AIが書いた任意のコードを、あなたのログイン済みブラウザで走らせる口」
@@ -408,6 +413,10 @@ class Runner:
             if kind not in BROWSE_ACTIONS:
                 did.append(f"（{kind or '空'}）は使えません")
                 continue
+            # パスワードの欄には打ち込まない（AIが見ながら進めるときも同じ）
+            if kind == "fill" and SECRET_FIELD.search(target):
+                did.append(REFUSE_SECRET)
+                continue
             if kind == "goto":
                 try:
                     value = self.g.site(value or target)   # 途中の移動も許可リストに通す
@@ -458,6 +467,75 @@ class Runner:
                 f"許したサイトの外（{host}）へ移ったので、そこで止めました。"
                 f"続けるなら --site {host} を足してください")
 
+    # ── 決まった手順を流す（Playwright の役割） ────────────────────────
+
+    def _recipe(self, p: dict) -> dict:
+        """保存した手順を、**決まった通りに**流す。
+
+        AIが画面を見ながら判断する browse_act とは、ここが違う:
+
+          ・エンジンは専用ブラウザ（Playwright）に決め打ち。あなたのChrome
+            （OpenCLI）では流さない——開いているタブの状態に左右されず、
+            毎回同じ所から始めるため。OpenCLIへの切り替えもしない
+          ・1手でも失敗したら、そこで止める。続きは押さない（途中がずれた
+            まま押し進めると、違う物を送りうる）。何手目で止めたかを返す
+          ・許可リスト（--site）は、開く前・途中の移動・動いたあと、の全部で見る
+        """
+        if not self.allow_browser:
+            return {"ok": False,
+                    "error": "ブラウザ操作は切ってあります（--allow-browser で入ります）"}
+        url = self.g.site(str(p.get("url") or ""))       # 許したサイトだけ
+        steps = [x for x in (p.get("steps") or []) if isinstance(x, dict)]
+        if len(steps) > MAX_RECIPE_STEPS:
+            return {"ok": False, "error": f"手順は{MAX_RECIPE_STEPS}手までです"}
+        engine = self.playwright
+        why = engine.why_unavailable()
+        if why:
+            return {"ok": False, "error": f"手順は専用ブラウザで流します。{why}"}
+
+        did: List[str] = []
+
+        def stop(i: int, reason: str) -> dict:
+            self.log(f"  ✗ 手順を{i}手目で止めました: {reason}")
+            return {"ok": False, "stopped_at": i, "did": did,
+                    "error": f"{i}手目で止めました（{reason}）。続きは押していません",
+                    "url": engine.current_url(), "engine": engine.name,
+                    "engine_label": engine.label}
+
+        engine.open(url)
+        try:
+            self._still_inside(engine)
+        except PermissionError as e:
+            return stop(0, str(e))
+        for i, step in enumerate(steps, 1):
+            kind = str(step.get("do") or "").strip().lower()
+            target = str(step.get("target") or "").strip()
+            value = str(step.get("value") or "")
+            if kind not in BROWSE_ACTIONS:
+                return stop(i, f"（{kind or '空'}）は使えません")
+            if kind == "fill" and SECRET_FIELD.search(target):
+                return stop(i, REFUSE_SECRET)
+            if kind == "goto":
+                try:
+                    value = self.g.site(value or target)   # 途中の移動も許可リストに通す
+                except PermissionError as e:
+                    return stop(i, str(e))
+            ok, said = engine.try_step(kind, target, value)
+            did.append(said)
+            if not ok:
+                return stop(i, said)
+            try:
+                self._still_inside(engine)
+            except PermissionError as e:
+                return stop(i, str(e))
+        info = engine.read()
+        final = str(info.get("url") or "")
+        self.log(f"  手順[{p.get('name') or ''}] {len(steps)}手 → {final}")
+        return {"ok": True, "title": str(info.get("title") or ""), "url": final,
+                "text": info.get("text") or "", "links": info.get("links") or [],
+                "did": did, "engine": engine.name, "engine_label": engine.label,
+                "message": f"{len(steps)}手を最後まで流しました"}
+
     def close_browser(self) -> None:
         """開いていたら閉じる（止めるとき）。"""
         self.playwright.close()
@@ -486,7 +564,9 @@ class Runner:
 def loop(url: str, token: str, runner: Runner, log, once: bool = False) -> None:
     """仕事を取りに行き続ける。落ちているあいだは間を空けて掛け直す。"""
     session = requests.Session()
-    headers = {"X-Local-Token": token}
+    # 引き受けられる仕事も知らせる。サーバーは、知らせてこない相棒（古い物）に
+    # 手順を頼まない——頼んでから「知りません」で返るより、頼む前に言える
+    headers = {"X-Local-Token": token, "X-Local-Jobs": ",".join(JOBS)}
     # この台で使えるブラウザのエンジン。サーバーの自己診断が
     # 「このPCはあなたのChromeで動く／専用ブラウザで動く」を言えるように。
     engines = runner.engines()
