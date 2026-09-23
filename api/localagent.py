@@ -247,6 +247,7 @@ def status(user_id: str) -> dict:
                 "online": _online(dev),
                 "waiting": len(dev["queue"]),
                 "last_seen_ago": int(idle) if idle is not None else None,
+                "engines": list(dev.get("engines") or []),
             })
     rows.sort(key=lambda r: (not r["online"], r["name"]))
     live = [r for r in rows if r["online"]]
@@ -327,6 +328,20 @@ def submit(user_id: str, kind: str, params: Optional[dict] = None,
         _store.wake.notify_all()
     return {"ok": True, "job_id": job["id"], "device": chosen["device"],
             "name": chosen["name"]}
+
+
+# 相棒が知らせてくるブラウザのエンジン名。知らない名前は捨てる
+# （画面にそのまま出すので、何でも受け取ると表示が汚される）。
+ENGINES = ("opencli", "playwright")
+
+
+def note_engines(user_id: str, device_id: str, engines) -> None:
+    """その台で使えるブラウザのエンジンを覚える（自己診断で出す）。"""
+    names = [e for e in (engines or []) if e in ENGINES]
+    with _store.lock:
+        dev = _devices(user_id).get(device_id)
+        if dev is not None:
+            dev["engines"] = names
 
 
 def take(user_id: str, device_id: str, wait: float = 25.0) -> Optional[dict]:

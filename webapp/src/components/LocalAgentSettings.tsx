@@ -35,6 +35,18 @@ interface Device {
   online: boolean;
   waiting?: number;
   last_seen_ago?: number | null;
+  /** その台で使えるブラウザ（opencli / playwright）。 */
+  engines?: string[];
+}
+
+/** どのブラウザで動くかを、人の言葉で。
+ *  あなたのChromeか専用ブラウザかで「ログインしているか」が変わるので、
+ *  ここが分からないと、結果の読み方を間違える。 */
+function engineWords(engines?: string[]): string {
+  if (!engines || !engines.length) return "";
+  if (engines.includes("opencli")) return "ブラウザ操作: あなたのChrome（OpenCLI）";
+  if (engines.includes("playwright")) return "ブラウザ操作: 専用ブラウザ";
+  return "";
 }
 
 interface Status {
@@ -172,6 +184,7 @@ export default function LocalAgentSettings() {
                     : d.last_seen_ago === null || d.last_seen_ago === undefined
                       ? "まだ一度も動いていません"
                       : `最後に来たのは${d.last_seen_ago}秒前`}
+                  {d.online && engineWords(d.engines) && ` · ${engineWords(d.engines)}`}
                 </div>
               </div>
               <button type="button" disabled={busy}
@@ -263,7 +276,7 @@ export default function LocalAgentSettings() {
 
       <p className="mt-1.5 text-[11px] leading-relaxed text-muted">
         触ってよいフォルダは、パソコン側で決めます（<span className="label-mono">--dir</span>）。
-        サーバーからは指定できません。消す操作とコマンド実行は
+        サーバーからは指定できません。消す操作と、好きなコマンドを実行する口は
         <b className="text-fg-strong">作っていません</b>。
       </p>
 
@@ -288,6 +301,13 @@ export default function LocalAgentSettings() {
             分けてあり、<b className="text-fg-strong">押すほうは設定に関わらず必ず確認します</b>。
             パスワードをAIbouに渡すことはありません——ログインは一度、
             ご自身の手で通します。
+          </p>
+          <p className="mt-1.5">
+            ブラウザは2つを<b className="text-fg-strong">役割で使い分けます</b>。
+            AIが見ながら判断して動かす仕事は<b className="text-fg-strong">あなたのChrome</b>
+            （OpenCLIを入れた場合。ログインはふだんのまま）、決まった手順は
+            <b className="text-fg-strong">専用ブラウザ</b>で流します。OpenCLIが無いときは
+            専用ブラウザで代わりに動き、そう伝えます。
           </p>
         </div>
       </details>

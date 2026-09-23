@@ -1615,9 +1615,18 @@ async def local_status(_auth: None = Depends(require_auth),
 
 
 @app.get("/local/jobs")
-async def local_jobs(wait: float = 25.0, who=Depends(_local_caller)):
-    """手元の相棒が「仕事ある？」と聞きに来る所。無ければ待つ。"""
+async def local_jobs(wait: float = 25.0, who=Depends(_local_caller),
+                     x_local_engines: Optional[str] = Header(default=None)):
+    """手元の相棒が「仕事ある？」と聞きに来る所。無ければ待つ。
+
+    相棒は、その台で使えるブラウザのエンジンを一緒に知らせてくる
+    （`X-Local-Engines: opencli,playwright`）。自己診断が「このPCは
+    あなたのChromeで動く／専用ブラウザで動く」を言えるように覚えておく。
+    """
     user_id, device_id = who
+    if x_local_engines is not None:
+        localagent.note_engines(user_id, device_id,
+                                [e.strip() for e in x_local_engines.split(",")])
     job = await asyncio.get_event_loop().run_in_executor(
         None, lambda: localagent.take(user_id, device_id, wait))
     return {"ok": True, "job": job}

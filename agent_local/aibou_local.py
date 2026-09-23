@@ -36,6 +36,8 @@ AIbou 側が「どちらに頼むか」を名前で聞いてくる。
    消す仕事は最初から用意していない。
 3. **勝手に開かない・撮らない。** アプリを起動する（open）と画面を撮る
    （shot）は、明示的に `--allow-open` / `--allow-screen` を付けたときだけ。
+   **好きなコマンドを実行する口は無い。** ブラウザ操作で OpenCLI を使うとき
+   だけ `opencli` を呼ぶが、渡す命令は決まった物だけ（engines.py）。
 4. **何をしたか全部書き出す。** 画面にも、`--log` を付ければファイルにも。
 5. **大きいファイルは読まない。** 1ファイル1MBまで（AIへ渡る物なので）。
 
@@ -61,7 +63,10 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
+
+from engines import (BrowserEngine, EngineError, OpenCLIEngine,  # noqa: E402
+                     PlaywrightEngine)
 
 try:
     import requests
@@ -148,12 +153,18 @@ class Guard:
         host = (p.hostname or "").lower()
         if not host:
             raise PermissionError("URLにホスト名がありません")
-        for allowed in self.sites:
-            # `example.com` は `www.example.com` も含む。
-            # ただし `notexample.com` は含まない（点を見る）。
-            if host == allowed or host.endswith("." + allowed):
-                return u
+        if self.allowed_host(host):
+            return u
         raise PermissionError(f"許したサイトの外です: {host}")
+
+    def allowed_host(self, host: str) -> bool:
+        """そのホストは許したサイトの中か。
+
+        `example.com` は `www.example.com` も含む。ただし `notexample.com` と
+        `example.com.evil.jp` は含まない（点で区切って見る）。
+        """
+        h = (host or "").strip().lower().rstrip(".")
+        return bool(h) and any(h == a or h.endswith("." + a) for a in self.sites)
 
     def resolve(self, rel: str) -> Path:
         """相対の指定を、実際の道に直す。外に出ていたら断る。
@@ -190,23 +201,36 @@ class Guard:
 class Runner:
     def __init__(self, guard: Guard, allow_open: bool, allow_screen: bool,
                  log, allow_browser: bool = False, profile: str = "",
-                 headless: Optional[bool] = None) -> None:
+                 headless: Optional[bool] = None, engine: str = "auto",
+                 opencli: Optional[OpenCLIEngine] = None) -> None:
         self.g = guard
         self.allow_open = allow_open
         self.allow_screen = allow_screen
         self.allow_browser = allow_browser
         self.profile = Path(profile or "~/.aibou-browser").expanduser()
-        """画面を出すか。
-
-        既定は**出す**。自分のパソコンで、自分のログイン済みブラウザが
-        動くので、**何をしているかが見えること自体が安全装置**になる。
-        画面の無い所（サーバー・CI）では出せないので、そこだけ伏せる。"""
-        self._ctx = None
-        self._pw = None
+        # 画面を出すか。既定は**出す**。自分のログイン済みブラウザが動くので、
+        # 何をしているかが見えること自体が安全装置になる。画面の無い所
+        # （サーバー・CI）では出せないので、そこだけ伏せる。
         self.headless = (not os.environ.get("DISPLAY")
                          and sys.platform not in ("darwin", "win32")) \
             if headless is None else bool(headless)
         self.log = log
+        # どのエンジンを使うか: auto（OpenCLIが使えればそちら）/ opencli / playwright
+        self.engine_pref = engine if engine in ("auto", "opencli", "playwright") else "auto"
+        self.playwright = PlaywrightEngine(self.profile, self.headless, find_chrome,
+                                           self.g.allowed_host, BROWSE_TIMEOUT_MS)
+        self.opencli = opencli or OpenCLIEngine()
+
+    def engines(self) -> List[str]:
+        """この台で使えるエンジン（サーバーへ知らせる）。"""
+        if not self.allow_browser:
+            return []
+        out = []
+        if not self.opencli.why_unavailable():
+            out.append("opencli")
+        if not self.playwright.why_unavailable():
+            out.append("playwright")
+        return out
 
     # ── 仕事ひとつぶん ──────────────────────────────────────────────
 
@@ -314,159 +338,129 @@ class Runner:
         """開いて、押す・打ち込む。"""
         return self._drive(p, act=True)
 
+    def _pick(self) -> BrowserEngine:
+        """AIが判断しながら操作する仕事に、どのエンジンを使うか。
+
+        役割分担:
+          OpenCLI    … あなたのChrome。ログインがもう済んでいる。**AIが見ながら
+                       判断して操作する**のに向く → 使えるなら、こちら
+          Playwright … 専用ブラウザ。決まった手順を毎回同じに流すのに向く。
+                       OpenCLIが無いときの代わりもする
+        """
+        if self.engine_pref == "playwright":
+            return self.playwright
+        if self.engine_pref == "opencli":
+            return self.opencli
+        return self.opencli if not self.opencli.why_unavailable() else self.playwright
+
     def _drive(self, p: dict, act: bool) -> dict:
-        """あなたがログイン済みのブラウザで、ページを開く。
+        """ブラウザでページを開く（エンジンはここで選ぶ）。
 
         サーバー側のブラウザ（api/browser.py）との違いは1つだけ、
         **ログインしているかどうか**。そしてそれが、危なさの全部でもある。
         こちらは「あなたとして」操作するので、
 
           ・開いてよいサイトは、先に決めてもらう（--site）
+          ・**動いたあとも**いまどこにいるかを見て、許可の外なら止める
           ・押す・打ち込むほうは、AIbou側で必ず確認してから来る
-          ・中のJavaScriptを走らせる口は出さない（サーバー側と同じ）
-          ・ダウンロードは受け取らない
+          ・中のJavaScriptを走らせる口は出さない（どのエンジンでも）
           ・何をしたかは全部書き出す
 
-        プロフィール（Cookie等）は `--browser-profile` のフォルダに残る。
-        一度 `--login` でログインしておけば、次からはそのまま入れる。
+        OpenCLI が入っていない・Chromeに繋がっていないときは、止まらずに
+        Playwright で続ける——ただし `--browser-engine opencli` と名指し
+        されていたら、替えずに理由を返す（名指しを黙って無視しない）。
         """
         if not self.allow_browser:
             return {"ok": False,
                     "error": "ブラウザ操作は切ってあります（--allow-browser で入ります）"}
-        try:
-            import playwright.sync_api  # noqa: F401
-        except ImportError:
-            return {"ok": False,
-                    "error": "playwright が要ります（pip install playwright && playwright install chromium）"}
-
         url = self.g.site(str(p.get("url") or ""))       # 許したサイトだけ
         steps = [x for x in (p.get("steps") or []) if isinstance(x, dict)][:MAX_STEPS] \
             if act else []
-        did: List[str] = []
 
-        page = self._page()
-        page.goto(url, wait_until="domcontentloaded", timeout=BROWSE_TIMEOUT_MS)
-        for step in steps:
-            did.append(self._step(page, step))
+        engine = self._pick()
+        why = engine.why_unavailable()
+        if why:
+            return {"ok": False, "error": why}
+        note = ""
         try:
-            page.wait_for_load_state("networkidle", timeout=3000)
-        except Exception:
-            pass
-        title = (page.title() or "")[:200]
-        body = self._visible(page)
-        links = self._clickable(page)
-        final = page.url
+            return self._drive_with(engine, url, steps, act)
+        except EngineError as e:
+            if not (e.fallback and engine is self.opencli and self.engine_pref == "auto"):
+                return {"ok": False, "error": str(e), "engine": engine.name}
+            if self.playwright.why_unavailable():
+                return {"ok": False, "error": f"{e}。専用ブラウザ（Playwright）も"
+                                              f"入っていないので、開けませんでした"}
+            note = f"{e}。専用ブラウザで開きました（そちらのログイン状態で動いています）"
+            self.log(f"  ↪ {note}")
+        got = self._drive_with(self.playwright, url, steps, act)
+        got["note"] = note
+        return got
 
-        self.log(f"  ブラウザ: {final}" + (f" / {' → '.join(did)}" if did else ""))
-        return {"ok": True, "title": title, "url": final, "text": body,
-                "links": links, "did": did,
+    def _drive_with(self, engine: BrowserEngine, url: str, steps: List[dict],
+                    act: bool) -> dict:
+        did: List[str] = []
+        engine.open(url)
+        self._still_inside(engine)
+        for step in steps:
+            kind = str(step.get("do") or "").strip().lower()
+            target = str(step.get("target") or "").strip()
+            value = str(step.get("value") or "")
+            if kind not in BROWSE_ACTIONS:
+                did.append(f"（{kind or '空'}）は使えません")
+                continue
+            if kind == "goto":
+                try:
+                    value = self.g.site(value or target)   # 途中の移動も許可リストに通す
+                except PermissionError as e:
+                    did.append(f"断りました（{e}）")
+                    break
+            did.append(engine.step(kind, target, value))
+            # 押した結果、別のサイトへ移っていたら、そこで止める
+            self._still_inside(engine)
+        info = engine.read()
+        final = str(info.get("url") or "")
+        self.log(f"  ブラウザ[{engine.name}]: {final}"
+                 + (f" / {' → '.join(did)}" if did else ""))
+        title = str(info.get("title") or "")
+        return {"ok": True, "title": title, "url": final,
+                "text": info.get("text") or "", "links": info.get("links") or [],
+                "did": did, "engine": engine.name, "engine_label": engine.label,
                 "message": f"{title or final} を{'操作' if act else '読み'}ました"}
 
-    def _page(self):
-        """開いているブラウザを使い回す。無ければ開く。
+    def _still_inside(self, engine: BrowserEngine) -> None:
+        """いま開いているページが、許したサイトの中か。外なら止める。
 
-        **1回ごとに開き直さない。** 理由が2つある。
-
-          ① 立ち上げに数秒かかる。頼むたびに払うと、待てない長さになる
-          ② 閉じるとセッションのCookieが消える。「ログインする」と
-             「その先を見る」が別の頼みになった瞬間に、ログインが無かった
-             ことになる（実際そうなった）
-
-        画面が出ていれば、何をしているかは見えている。見えていることが、
-        この機能の安全装置そのものなので、開いたままでよい。
+        開く前にURLを見るだけでは足りない。押したボタンの先が別のサイトかも
+        しれないし、ログインの途中で別のドメインへ飛ばされることもある。
+        OpenCLI の拡張は拡張の層でどこへでも届くので、この確認が「このサイト
+        だけ」を守る**唯一の**所になる（Playwright のほうは、読み込む前にも
+        止めている）。
         """
-        if self._ctx is not None:
-            try:
-                return self._ctx.pages[0] if self._ctx.pages else self._ctx.new_page()
-            except Exception:
-                self.close_browser()          # 人が閉じた等。開き直す
-        from playwright.sync_api import sync_playwright
-        self._pw = sync_playwright().start()
-        self._ctx = self._pw.chromium.launch_persistent_context(
-            user_data_dir=str(self.profile),
-            executable_path=find_chrome() or None,
-            headless=self.headless,
-            accept_downloads=False,
-            locale="ja-JP",
-            args=["--no-sandbox", "--disable-dev-shm-usage"],
-        )
-        self._ctx.set_default_timeout(BROWSE_TIMEOUT_MS)
-        # 新しいタブは開かせない（許可の網の外へ出る）
-        self._ctx.on("page", lambda q: q.close())
-        return self._ctx.pages[0] if self._ctx.pages else self._ctx.new_page()
+        now = engine.current_url()
+        # 専用ブラウザが読み込む前に止めたときは、Chrome が自前のエラー画面を
+        # 出す。そのURL（chrome-error://chromewebdata/）をそのまま言うと
+        # 「chromewebdata へ移った」という意味の無い文になる（実際そうなった）。
+        # 止めた先を覚えてあるので、そちらを言う。**エラー画面を中身として
+        # 読んで返すこともしない**。
+        blocked = getattr(engine, "blocked", "")
+        if now.startswith("chrome-error:") or (blocked and not now):
+            engine.blocked = ""
+            where = blocked or "許したサイトの外"
+            raise PermissionError(
+                f"許したサイトの外（{where}）へ移ろうとしたので、読み込む前に止めました。"
+                f"続けるなら --site {where} を足してください")
+        if not now or now.startswith(("about:", "chrome:", "data:")):
+            return
+        from urllib.parse import urlparse
+        host = (urlparse(now).hostname or "").lower()
+        if host and not self.g.allowed_host(host):
+            raise PermissionError(
+                f"許したサイトの外（{host}）へ移ったので、そこで止めました。"
+                f"続けるなら --site {host} を足してください")
 
     def close_browser(self) -> None:
-        """開いていたら閉じる（止めるとき・開き直すとき）。"""
-        for obj, stop in ((self._ctx, "close"), (self._pw, "stop")):
-            try:
-                if obj is not None:
-                    getattr(obj, stop)()
-            except Exception:
-                pass
-        self._ctx = None
-        self._pw = None
-
-    def _step(self, page, step: dict) -> str:
-        """1手ぶん。できなければ理由を返す（例外にしない）。"""
-        kind = str(step.get("do") or "").strip().lower()
-        target = str(step.get("target") or "").strip()
-        value = str(step.get("value") or "")
-        if kind not in BROWSE_ACTIONS:
-            return f"（{kind or '空'}）は使えません"
-        try:
-            if kind == "wait":
-                page.wait_for_timeout(min(int(value or 1000), 5000))
-                return "待ちました"
-            if kind == "press":
-                page.keyboard.press(target or "Enter")
-                return f"{target or 'Enter'} を押しました"
-            if kind == "goto":
-                page.goto(self.g.site(value or target),
-                          wait_until="domcontentloaded", timeout=BROWSE_TIMEOUT_MS)
-                return f"{value or target} を開きました"
-            if not target:
-                return "どこを触るのか分かりません"
-            if kind == "click":
-                page.get_by_text(target, exact=False).first.click(timeout=5000)
-                return f"「{target}」を押しました"
-            if kind == "fill":
-                page.get_by_label(target).first.fill(value, timeout=5000)
-                return f"「{target}」に入力しました"
-            if kind == "select":
-                page.get_by_label(target).first.select_option(value, timeout=5000)
-                return f"「{target}」で{value}を選びました"
-        except PermissionError as e:
-            return f"断りました（{e}）"
-        except Exception as e:
-            return f"できませんでした（{type(e).__name__}）"
-        return "何もしませんでした"
-
-    @staticmethod
-    def _visible(page) -> str:
-        try:
-            body = page.locator("body").inner_text(timeout=5000)
-        except Exception:
-            body = ""
-        body = "\n".join(l.strip() for l in (body or "").splitlines() if l.strip())
-        return body[:BROWSE_MAX_CHARS]
-
-    @staticmethod
-    def _clickable(page, limit: int = 30) -> List[dict]:
-        out: List[dict] = []
-        try:
-            for el in page.locator("a[href], button, input[type=submit]").all()[:limit * 3]:
-                try:
-                    label = (el.inner_text(timeout=500) or "").strip()
-                except Exception:
-                    label = ""
-                if not label:
-                    continue
-                out.append({"label": label[:80]})
-                if len(out) >= limit:
-                    break
-        except Exception:
-            pass
-        return out
+        """開いていたら閉じる（止めるとき）。"""
+        self.playwright.close()
 
     def _shot(self, p: dict) -> dict:
         """画面を撮る（仕様§32の、見る側）。
@@ -493,6 +487,11 @@ def loop(url: str, token: str, runner: Runner, log, once: bool = False) -> None:
     """仕事を取りに行き続ける。落ちているあいだは間を空けて掛け直す。"""
     session = requests.Session()
     headers = {"X-Local-Token": token}
+    # この台で使えるブラウザのエンジン。サーバーの自己診断が
+    # 「このPCはあなたのChromeで動く／専用ブラウザで動く」を言えるように。
+    engines = runner.engines()
+    if engines:
+        headers["X-Local-Engines"] = ",".join(engines)
     miss = 0
     while True:
         try:
@@ -587,6 +586,12 @@ def main(argv: Optional[list] = None) -> int:
                     help="ブラウザのログイン状態を残す場所")
     ap.add_argument("--headless", action="store_true",
                     help="ブラウザの画面を出さない（ふだんは出したほうが安全）")
+    ap.add_argument("--browser-engine", default="auto",
+                    choices=("auto", "opencli", "playwright"),
+                    help="AIが判断して動かすときのエンジン。auto は OpenCLI"
+                         "（あなたのChrome）が使えればそちら、無ければ専用ブラウザ")
+    ap.add_argument("--opencli", default="",
+                    help="opencli の場所（ふつうは PATH から探すので要らない）")
     ap.add_argument("--login", default="",
                     help="そのURLを開いて、ログインするまで待つ（一度きり）")
     ap.add_argument("--log", default="", help="したことを書き出すファイル")
@@ -627,7 +632,15 @@ def main(argv: Optional[list] = None) -> int:
     runner = Runner(guard, args.allow_open, args.allow_screen, log,
                     allow_browser=args.allow_browser,
                     profile=args.browser_profile,
-                    headless=args.headless or None)
+                    headless=args.headless or None,
+                    engine=args.browser_engine,
+                    opencli=OpenCLIEngine(binary=args.opencli))
+    if args.allow_browser:
+        got = runner.engines()
+        log("  ブラウザのエンジン: " + (" / ".join(
+            {"opencli": "あなたのChrome（OpenCLI）",
+             "playwright": "専用ブラウザ（Playwright）"}[e] for e in got)
+            or "使えるものがありません（playwright か OpenCLI を入れてください）"))
 
     if args.login:
         return _login_once(runner, args.login, log)

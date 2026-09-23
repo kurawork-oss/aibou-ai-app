@@ -143,7 +143,7 @@ test("触ってよい場所を決めるのは手元だと、書いてある", as
   await enterApp(page);
   await openConnect(page);
   await expect(page.getByText(/サーバーからは指定できません/)).toBeVisible();
-  await expect(page.getByText(/消す操作とコマンド実行は/)).toBeVisible();
+  await expect(page.getByText(/好きなコマンドを実行する口は/)).toBeVisible();
 });
 
 test("スマホには要らないと書いてある", async ({ page }) => {
@@ -180,4 +180,43 @@ test("ログインが要るサイトの話が、条件と一緒に出る", async
   await expect(page.getByText(/押すほうは設定に関わらず必ず確認します/)).toBeVisible();
   // パスワードを渡す話にしない
   await expect(page.getByText(/パスワードをAIbouに渡すことはありません/)).toBeVisible();
+});
+
+test("台ごとに、どのブラウザで動くかを出す", async ({ page }) => {
+  /* あなたのChromeか専用ブラウザかで「ログインしているか」が変わる。
+     ここが分からないと、結果の読み方を間違える。 */
+  const be = await mockBackend(page);
+  withDevices(be, [
+    { device: "d1", name: "ノート", online: true, last_seen_ago: 1,
+      engines: ["opencli", "playwright"] },
+    { device: "d2", name: "デスクトップ", online: true, last_seen_ago: 2,
+      engines: ["playwright"] },
+  ]);
+  await enterApp(page);
+  await openConnect(page);
+  await expect(page.getByText(/あなたのChrome（OpenCLI）/)).toBeVisible();
+  await expect(page.getByText(/ブラウザ操作: 専用ブラウザ/)).toBeVisible();
+});
+
+test("ブラウザを入れていない台には、ブラウザの話を出さない", async ({ page }) => {
+  // 要らない行を足すと、読む物が増えるだけ
+  const be = await mockBackend(page);
+  withDevices(be, [
+    { device: "d1", name: "ノート", online: true, last_seen_ago: 1, engines: [] },
+  ]);
+  await enterApp(page);
+  await openConnect(page);
+  await expect(page.getByText(/ブラウザ操作:/)).toHaveCount(0);
+});
+
+test("2つのブラウザの役割が、ログインの話と一緒に出る", async ({ page }) => {
+  const be = await mockBackend(page);
+  withDevices(be, [
+    { device: "d1", name: "ノート", online: true, last_seen_ago: 1 },
+  ]);
+  await enterApp(page);
+  await openConnect(page);
+  await page.getByText("ログインが要るサイトも見せる").click();
+  await expect(page.getByText(/役割で使い分けます/)).toBeVisible();
+  await expect(page.getByText(/専用ブラウザで代わりに動き、そう伝えます/)).toBeVisible();
 });

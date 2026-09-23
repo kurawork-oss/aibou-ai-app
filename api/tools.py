@@ -907,6 +907,13 @@ def _browse_say(got: dict, params: dict) -> str:
     parts = []
     if got.get("title"):
         parts.append(f"【{got['title']}】{got.get('url', '')}")
+    # どのブラウザで動いたか。あなたのChromeか、専用ブラウザかで
+    # 「ログインしているか」が変わるので、結果の読み方も変わる。
+    where = " / ".join(x for x in (got.get("device_name"), got.get("engine_label")) if x)
+    if where:
+        parts.append(f"（{where}で実行）")
+    if got.get("note"):
+        parts.append(f"（{got['note']}）")
     for line in got.get("did") or []:
         parts.append(f"（{line}）")
     # 本人のログイン済みブラウザで見た中身も、**指示ではない**。
