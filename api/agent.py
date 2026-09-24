@@ -417,7 +417,7 @@ def _friendly_error(e: Exception) -> str:
         import config
         if config.is_zero_quota_429(e):
             return ("Gemini無料枠の上限（またはこのキーの無料枠が0）に達しました。"
-                    "KEYCHAIN に HUGGINGFACE_TOKEN を入れると自動でHuggingFaceに切り替わります。")
+                    "「連携」で HuggingFace の鍵（HUGGINGFACE_TOKEN）を入れると自動でHuggingFaceに切り替わります。")
     except Exception:
         pass
     return f"生成に失敗しました：{e}"

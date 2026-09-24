@@ -76,7 +76,7 @@ export default function AiProviderSettings() {
               type="button"
               onClick={() => !disabled && void save({ provider: p.key })}
               disabled={saving || disabled}
-              title={disabled ? "先にKEYCHAINでキーを設定してください" : p.hint}
+              title={disabled ? "先に「連携」でキーを設定してください" : p.hint}
               className="rounded-forge border px-2 py-1.5 text-[9px] tracking-[0.08em] label-mono transition disabled:opacity-30"
               style={{
                 borderColor: active ? "var(--accent)" : "var(--panel-bd)",
@@ -91,7 +91,7 @@ export default function AiProviderSettings() {
       </div>
 
       {/* Models (HF利用時のみ意味を持つ) */}
-      <label className="mb-1 mt-2 block text-[9px] tracking-[0.16em] text-muted label-mono">CHAT モデル（HF）</label>
+      <label className="mb-1 mt-2 block text-[9px] tracking-[0.16em] text-muted label-mono">会話のモデル（HF）</label>
       <select
         value={cfg.hf_model}
         onChange={(e) => void save({ hf_model: e.target.value })}
@@ -103,7 +103,7 @@ export default function AiProviderSettings() {
         ))}
       </select>
 
-      <label className="mb-1 block text-[9px] tracking-[0.16em] text-muted label-mono">CODE モデル（HF・コーディング特化）</label>
+      <label className="mb-1 block text-[9px] tracking-[0.16em] text-muted label-mono">コードのモデル（HF・コーディング特化）</label>
       <select
         value={cfg.code_model}
         onChange={(e) => void save({ code_model: e.target.value })}
@@ -117,7 +117,7 @@ export default function AiProviderSettings() {
 
       <p className="mt-2 text-[11px] leading-relaxed text-muted">
         ※ モデル指定はHuggingFace使用時に有効（Geminiは自動で最適モデルを選択）。
-        HFトークンは KEYCHAIN の HUGGINGFACE_TOKEN に。
+        HFトークンは「連携」の HuggingFace に。
       </p>
       {note && <p className="mt-1 text-[10px]" style={{ color: note.startsWith("⚠") ? "#ff9b9b" : "#60d394" }}>{note}</p>}
     </div>

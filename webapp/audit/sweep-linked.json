@@ -1,0 +1,147 @@
+{
+  "at": "2026-09-24T03:27:14.827Z",
+  "project": "sweep-linked",
+  "findings": [
+    {
+      "where": "起動",
+      "kind": "はみ出し",
+      "detail": "<div.forge-ambient> \"\" left=-176 right=359 (幅390)"
+    },
+    {
+      "where": "画面/HOME",
+      "kind": "はみ出し",
+      "detail": "<div.forge-ambient> \"\" left=-135 right=430 (幅390)"
+    },
+    {
+      "where": "画面/CHAT",
+      "kind": "はみ出し",
+      "detail": "<div.forge-ambient> \"\" left=-61 right=558 (幅390)"
+    },
+    {
+      "where": "画面/ME",
+      "kind": "はみ出し",
+      "detail": "<div.forge-ambient> \"\" left=11 right=683 (幅390)"
+    },
+    {
+      "where": "画面/CODE",
+      "kind": "はみ出し",
+      "detail": "<div.forge-ambient> \"\" left=54 right=758 (幅390)"
+    },
+    {
+      "where": "画面/STUDIO",
+      "kind": "はみ出し",
+      "detail": "<div.forge-ambient> \"\" left=59 right=767 (幅390)"
+    },
+    {
+      "where": "画面/SNS",
+      "kind": "はみ出し",
+      "detail": "<div.forge-ambient> \"\" left=34 right=720 (幅390)"
+    },
+    {
+      "where": "画面/CAPTURE",
+      "kind": "はみ出し",
+      "detail": "<div.forge-ambient> \"\" left=-18 right=625 (幅390)"
+    },
+    {
+      "where": "画面/VAULT",
+      "kind": "はみ出し",
+      "detail": "<div.forge-ambient> \"\" left=-75 right=521 (幅390)"
+    },
+    {
+      "where": "画面/TASKS",
+      "kind": "はみ出し",
+      "detail": "<div.forge-ambient> \"\" left=-111 right=456 (幅390)"
+    },
+    {
+      "where": "画面/AUTO",
+      "kind": "はみ出し",
+      "detail": "<div.forge-ambient> \"\" left=-153 right=400 (幅390)"
+    },
+    {
+      "where": "画面/BOARD",
+      "kind": "はみ出し",
+      "detail": "<div.forge-ambient> \"\" left=-88 right=513 (幅390)"
+    },
+    {
+      "where": "画面/ARCHIVE",
+      "kind": "はみ出し",
+      "detail": "<div.forge-ambient> \"\" left=-11 right=644 (幅390)"
+    },
+    {
+      "where": "画面/EXTEND",
+      "kind": "はみ出し",
+      "detail": "<div.forge-ambient> \"\" left=44 right=740 (幅390)"
+    },
+    {
+      "where": "画面/GUIDE",
+      "kind": "はみ出し",
+      "detail": "<div.forge-ambient> \"\" left=61 right=770 (幅390)"
+    },
+    {
+      "where": "管理/もっと",
+      "kind": "はみ出し",
+      "detail": "<div.forge-ambient> \"\" left=54 right=757 (幅390)"
+    },
+    {
+      "where": "設定/基本",
+      "kind": "はみ出し",
+      "detail": "<div.forge-ambient> \"\" left=4 right=665 (幅390)"
+    },
+    {
+      "where": "設定/見た目と声",
+      "kind": "はみ出し",
+      "detail": "<div.forge-ambient> \"\" left=-43 right=580 (幅390)"
+    },
+    {
+      "where": "設定/記憶",
+      "kind": "はみ出し",
+      "detail": "<div.forge-ambient> \"\" left=-84 right=505 (幅390)"
+    },
+    {
+      "where": "設定/つなぐ",
+      "kind": "はみ出し",
+      "detail": "<div.forge-ambient> \"\" left=-110 right=457 (幅390)"
+    }
+  ],
+  "duplicate_requests": [
+    "/health×8",
+    "/account/profile×6",
+    "/capabilities×3",
+    "/conversations×4",
+    "/setup/pending×4",
+    "/keys×4",
+    "/memory/sync×2",
+    "/admin/db/status×4",
+    "/watch×2",
+    "/watch/inbox×2",
+    "/home/summary×2",
+    "/agenda×2",
+    "/notifications×2",
+    "/artifacts×4",
+    "/life/entries×2",
+    "/code/shell×2",
+    "/x/status×2",
+    "/capture/status×2",
+    "/account/database×4",
+    "/vault/notebooks×2",
+    "/tasks×4",
+    "/income/jobs×2",
+    "/income/summary×2",
+    "/autopilot/missions×2",
+    "/boards×2",
+    "/google/status×4",
+    "/keys/orphans×2",
+    "/connect×2",
+    "/guide×2",
+    "/ai/routes×2",
+    "/ai/config×2",
+    "/scheduler×2",
+    "/keepalive/status×2",
+    "/local/status×2",
+    "/recipes×2",
+    "/hf/status×2",
+    "/hf/models×2",
+    "/capabilities/status×2",
+    "/audit×2"
+  ]
+}

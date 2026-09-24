@@ -54,7 +54,9 @@ def test_guide_tells_people_to_connect_their_own_database_first():
     joined = db["summary"] + " ".join(db["steps"]) + " ".join(db["notes"])
     assert "保存されません" in joined or "保存されない" in joined
     assert "service_role" in joined
-    assert "設定" in joined and "つなぐ" in joined
+    # 繋ぐ場所は「連携」の画面（以前は 設定 →「つなぐ」にあったが、連携の画面へ
+    # まとめた。説明書が古い場所を案内すると、押した先に無い）
+    assert "連携" in joined and "自分のデータベース" in joined
 
 
 def test_chat_prompt_says_do_not_make_things_up():
@@ -142,12 +144,28 @@ def test_every_mode_has_a_screenshot_that_actually_ships():
         assert os.path.getsize(path) > 2000, f"画面写真が壊れている: {m['image']}"
 
 
+def _nav_labels() -> set:
+    """画面の入口に並んでいる名前（webapp/src/lib/shell.ts の管理・もっと）。"""
+    import re
+    src = open(os.path.join(os.path.dirname(__file__), "..", "webapp", "src", "lib",
+                            "shell.ts"), encoding="utf-8").read()
+    block = src[src.index("export const MANAGE_SURFACES"):src.index("export function visibleSurfaces")]
+    return set(re.findall(r'label: "([^"]+)"', block))
+
+
 def test_every_screen_in_the_launcher_is_documented():
-    """ランチャーに出る画面は、全部説明書にあること（説明の取りこぼし防止）。"""
+    """入口に並ぶ画面は、全部説明書にあること。**呼び名も入口と同じ**にする。
+
+    以前は説明書の見出しが英語の札（CHAT・HOME・ARCHIVE…）で、その札は右上の
+    「Modes」の一覧にしか無かった。一覧を外して入口を 実行／管理 の1つにした
+    ので、説明書も入口の名前（今日・ボード・ファイル…）で引けるようにする。
+    """
     documented = {m["label"] for m in guide.modes()}
-    for label in ["CHAT", "HOME", "ME", "TASKS", "BOARD", "VAULT", "CODE",
-                  "STUDIO", "CAPTURE", "SNS", "INCOME", "AUTO", "ARCHIVE", "EXTEND"]:
-        assert label in documented, f"説明書に無い画面がある: {label}"
+    labels = _nav_labels() - {"説明書"}          # 説明書そのものは載せない
+    assert len(labels) >= 12, f"入口の名前が読めていない: {labels}"
+    missing = sorted(labels - documented)
+    assert not missing, f"説明書に無い画面がある: {missing}"
+    assert "実行" in documented
 
 
 def test_guide_does_not_promise_features_that_do_not_exist():
@@ -155,10 +173,11 @@ def test_guide_does_not_promise_features_that_do_not_exist():
     text = " ".join(s["summary"] + " ".join(s["steps"]) for s in guide.sections())
     text += " ".join(m["what"] + " ".join(m["how"]) + " ".join(m["tips"])
                      for m in guide.modes())
-    modes = ["HOME", "CHAT", "ME", "TASKS", "BOARD", "VAULT", "CODE",
-             "STUDIO", "CAPTURE", "SNS", "INCOME", "AUTO", "ARCHIVE", "EXTEND"]
-    # 設定のタブ名（app/page.tsx の SettingsTab と同じ）
-    settings_tabs = ["CORE", "PERSONA", "KEYCHAIN", "HF", "DIAGNOSTICS"]
+    # 画面の名前で英字なのは SNS だけ（ほかは 今日・ボード… と日本語）。
+    # 以前の札（CHAT・HOME・ARCHIVE…）や、無くなった設定のタブ
+    # （CORE・KEYCHAIN・DIAGNOSTICS…）が説明に戻ってきたら、ここで落ちる
+    modes = ["SNS"]
+    settings_tabs: list = []
     # 画面の中にある実在のUI名（押せるタブ・見出し）
     ui_parts = ["AGENT", "CONSOLE", "WHITEBOARD", "AUTOMATION"]
     # KEYCHAIN に実在する鍵の名前を分解した断片（GEMINI_API_KEY など）

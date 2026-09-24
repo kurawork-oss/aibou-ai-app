@@ -2,7 +2,7 @@
 
 アプリの各AI機能（チャット・Forge・Vault…）は「頭脳(Gemini)を呼ぶ経路」＝
 **バックエンド(FastAPI, `api/`)** を1つ立てるだけで有効になります。
-Geminiキーはサーバーに直書きしなくても、アプリの **KEYCHAIN** から同期できます。
+Geminiキーはサーバーに直書きしなくても、アプリの **連携**（管理 → もっと →「連携」）から同期できます。
 
 ---
 
@@ -53,8 +53,8 @@ gcloud run deploy aibou-brain \
 ## ステップ3：アプリで確認
 
 1. アプリを強制リロード → 画面上部が **● LINK ACTIVE**（緑）になる
-   （Settings → DIAGNOSTICS の BACKEND が `CONFIGURED`）
-2. **Settings → KEYCHAIN** で **Gemini API Key** を貼り付け **SAVE**
+   （設定 →「しらべる」の BACKEND が `CONFIGURED`。設定は右上の歯車、スマホは下の「設定」）
+2. **管理 → もっと →「連携」→ Gemini** を開き、API キーを貼り付けて **保存する**
    → 自動でバックエンドに同期され、Geminiが即有効（サーバー再設定不要）
 3. チャットに話しかけて返信が来れば完了 🎉
 

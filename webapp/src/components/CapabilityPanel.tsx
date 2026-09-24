@@ -24,7 +24,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { API_URL, capabilityStatus, type CapabilityState } from "@/lib/api";
+import {
+  API_URL, capabilityStatus, openConnect, providerOfConnectPath, type CapabilityState,
+} from "@/lib/api";
 
 /** 状態ごとの見せ方。ここに無い状態が来たら「調べられなかった」に寄せる。 */
 const LOOK: Record<CapabilityState["status"], { mark: string; word: string; tone: string }> = {
@@ -156,16 +158,15 @@ function Row({ cap }: { cap: CapabilityState }) {
         <p className="mt-0.5 pl-5 text-[11px] leading-relaxed text-muted">→ {cap.next}</p>
       )}
       {canGo && (
-        <a
-          href={`${API_URL}${act!.path}`}
-          target="_blank"
-          rel="noreferrer"
+        <button
+          type="button"
+          onClick={() => void openConnect(providerOfConnectPath(act!.path || ""))}
           className="mt-1.5 ml-5 inline-flex min-h-[44px] items-center rounded-forge border px-3 text-[11px] label-mono"
           style={{ borderColor: "var(--accent)", color: "var(--fg-strong)",
                    background: "var(--btn-bg)" }}
         >
           いま繋ぐ
-        </a>
+        </button>
       )}
     </li>
   );

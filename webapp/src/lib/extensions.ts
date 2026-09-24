@@ -13,7 +13,7 @@
  */
 
 export type ExtField = {
-  name: string;            // KEYCHAIN に保存する名前
+  name: string;            // 鍵の保管庫に保存する名前
   label: string;
   placeholder?: string;
   /** true なら入力を伏せる（画面にも履歴にも残さない） */
@@ -66,9 +66,9 @@ export const EXTENSIONS: Extension[] = [
     group: "ai",
     kind: "keys",
     unlocks: [
-      "CHATでの会話、音声での応答",
+      "会話、音声での応答",
       "資料の要約・文章生成・画像の説明",
-      "ゴールを手順に分解する（AUTOPILOT）",
+      "ゴールを手順に分解する（ゴールの画面）",
     ],
     fields: [{ name: "GEMINI_API_KEY", label: "API キー", placeholder: "AIza…", secret: true }],
     howto: [
@@ -149,7 +149,7 @@ export const EXTENSIONS: Extension[] = [
       "チャネル設定 → Messaging API → 「チャネルアクセストークン（長期）」を発行",
       "その文字列をコピーして、ここに貼る",
       "（受信もするなら）チャネル基本設定 → チャネルシークレット をコピーして貼る",
-      "（受信もするなら）Messaging API → Webhook URL に、HOMEの見張りに出ているURLを貼り、"
+      "（受信もするなら）Messaging API → Webhook URL に、「今日」の見張りに出ているURLを貼り、"
         + "「Webhookの利用」をONにする",
     ],
     warning:
@@ -274,7 +274,7 @@ export const EXTENSIONS: Extension[] = [
     id: "github",
     oauth: "github",
     name: "GitHub",
-    tagline: "自分のリポジトリを読み書きする（CODEモード）",
+    tagline: "自分のリポジトリを読み書きする（コードの画面）",
     group: "work",
     kind: "keys",
     unlocks: [
@@ -434,21 +434,21 @@ export const NO_KEY_FEATURES: { title: string; detail: string; where: string }[]
   {
     title: "画像を作る",
     detail: "鍵を入れなくても作れます。HuggingFaceを繋ぐと、モデルを選べるようになります。",
-    where: "STUDIO › 素材 › IMAGE",
+    where: "つくる › 素材 › IMAGE",
   },
   {
     title: "動画を作る",
     detail: "絵コンテから動画を組み立てます。サーバー側で処理するのでAPIは要りません。",
-    where: "STUDIO › 素材 › VIDEO",
+    where: "つくる › 素材 › VIDEO",
   },
   {
     title: "スライド・表・文書を作る",
     detail: "AIの鍵（Gemini）だけで作れます。Googleを繋ぐと、そのまま書き出せます。",
-    where: "STUDIO › 素材",
+    where: "つくる › 素材",
   },
   {
     title: "Webを調べる",
-    detail: "検索用のAPIは要りません。CHATで「〜を調べて」と頼めます。",
-    where: "CHAT",
+    detail: "検索用のAPIは要りません。会話で「〜を調べて」と頼めます。",
+    where: "実行 › 会話",
   },
 ];

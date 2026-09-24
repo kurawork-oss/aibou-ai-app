@@ -217,7 +217,7 @@ export default function AppArchive() {
         <div className="panel p-8 text-center">
           <p className="text-[12px] text-fg-strong">保存されたアプリはまだありません</p>
           <p className="mt-1.5 text-[11px] leading-relaxed text-muted">
-            STUDIO の「アプリ」タブで作ると、自動的にここに保存されます。
+            「つくる」の「アプリ」タブで作ると、自動的にここに保存されます。
           </p>
         </div>
       ) : filtered.length === 0 ? (

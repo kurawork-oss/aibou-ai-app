@@ -11,6 +11,7 @@
  */
 
 import { test, expect, type Page } from "@playwright/test";
+import { goScreen, waitForHud } from "./nav";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -26,13 +27,12 @@ async function enterApp(page: Page) {
     offlineBtn.waitFor({ timeout: 8_000 }).then(() => offlineBtn.click()),
     hudH1.waitFor({ timeout: 10_000 }),
   ]);
-  await page.getByLabel("Modes", { exact: true }).waitFor({ timeout: 10_000 });
+  await waitForHud(page);
 }
 
 /** 起動直後はHOMEとは限らないので、明示的に開く。 */
 async function goHome(page: Page) {
-  await page.getByLabel("Modes", { exact: true }).click();
-  await page.locator("nav").filter({ hasText: "MODES" }).getByText("HOME", { exact: true }).click();
+  await goScreen(page, "HOME");
   await page.locator("[data-widget]").first().waitFor({ timeout: 10_000 });
 }
 

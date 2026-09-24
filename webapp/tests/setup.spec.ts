@@ -9,6 +9,7 @@
  */
 
 import { test, expect } from "@playwright/test";
+import { goScreen } from "./nav";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { SETUP_STEPS, SCHEMA_SQL_URL } from "../src/lib/setup";
@@ -20,14 +21,13 @@ async function openGuide(page: import("@playwright/test").Page) {
   await page.waitForSelector("text=ENTER", { timeout: 10_000 });
   await page.click("text=ENTER");
   const off = page.getByText("ENTER OFFLINE");
-  const hud = page.getByLabel("Modes", { exact: true });
+  const hud = page.locator('nav[aria-label="Mobile navigation"], nav[aria-label="画面の切り替え"]').getByRole("button", { name: "管理", exact: true }).first();
   await Promise.race([
     off.waitFor({ timeout: 8_000 }).then(() => off.click()).catch(() => {}),
     hud.waitFor({ timeout: 10_000 }),
   ]);
   await hud.waitFor({ timeout: 10_000 });
-  await hud.click();
-  await page.locator("nav").filter({ hasText: "MODES" }).getByText("GUIDE", { exact: true }).click();
+  await goScreen(page, "GUIDE");
   await page.waitForTimeout(800);
 }
 
@@ -111,14 +111,13 @@ test("バックエンド未接続でも、はじめる手順が読める", async
   await page.waitForSelector("text=ENTER", { timeout: 10_000 });
   await page.click("text=ENTER");
   const off = page.getByText("ENTER OFFLINE");
-  const hud = page.getByLabel("Modes", { exact: true });
+  const hud = page.locator('nav[aria-label="Mobile navigation"], nav[aria-label="画面の切り替え"]').getByRole("button", { name: "管理", exact: true }).first();
   await Promise.race([
     off.waitFor({ timeout: 8_000 }).then(() => off.click()).catch(() => {}),
     hud.waitFor({ timeout: 10_000 }),
   ]);
   await hud.waitFor({ timeout: 10_000 });
-  await hud.click();
-  await page.locator("nav").filter({ hasText: "MODES" }).getByText("GUIDE", { exact: true }).click();
+  await goScreen(page, "GUIDE");
 
   // 「はじめる」タブが既定で開いていること
   await expect(page.getByText("はじめる手順")).toBeVisible({ timeout: 10_000 });

@@ -11,6 +11,7 @@
  */
 
 import { test, expect } from "@playwright/test";
+import { goScreen } from "./nav";
 import { readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
@@ -54,14 +55,13 @@ test("説明書を開いても、画面が横にはみ出さない", async ({ pa
   await page.waitForSelector("text=ENTER", { timeout: 10_000 });
   await page.click("text=ENTER");
   const off = page.getByText("ENTER OFFLINE");
-  const hud = page.getByLabel("Modes", { exact: true });
+  const hud = page.locator('nav[aria-label="Mobile navigation"], nav[aria-label="画面の切り替え"]').getByRole("button", { name: "管理", exact: true }).first();
   await Promise.race([
     off.waitFor({ timeout: 8_000 }).then(() => off.click()).catch(() => {}),
     hud.waitFor({ timeout: 10_000 }),
   ]);
   await hud.waitFor({ timeout: 10_000 });
-  await hud.click();
-  await page.locator("nav").filter({ hasText: "MODES" }).getByText("GUIDE", { exact: true }).click();
+  await goScreen(page, "GUIDE");
   await page.waitForTimeout(1500);
 
   const overflow = await page.evaluate(

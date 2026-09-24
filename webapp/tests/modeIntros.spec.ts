@@ -15,9 +15,9 @@ import { join } from "node:path";
 
 const src = (p: string) => readFileSync(join(process.cwd(), "src", p), "utf8");
 
-test("VAULT が何をする画面か言っている", () => {
+test("資料（VAULT）が何をする画面か言っている", () => {
   const v = src("components/Vault.tsx");
-  expect(v).toContain("VAULT とは");
+  expect(v).toContain("資料 とは");
   // この画面の値打ちは「入れた資料の中身だけを見て答える」こと
   expect(v).toContain("入れた資料の中身だけを見て答える");
   // 読めないPDFがあることを、詰まる前に伝える

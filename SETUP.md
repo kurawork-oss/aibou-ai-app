@@ -45,16 +45,16 @@ Vercel → Project → **Settings → Environment Variables** に設定:
 | `APP_TOKEN` | 任意（フロントの `NEXT_PUBLIC_API_TOKEN` と一致させる） |
 | `FRONTEND_ORIGIN` | 任意（CORS制限する場合、Vercelのドメイン） |
 
-> Gemini キーは、アプリ内 **Settings → KEYCHAIN** からも保存できます
+> Gemini キーは、アプリ内 **管理 → もっと →「連携」→ Gemini** からも保存できます
 > （バックエンド接続後）。`api_keys` テーブルに保管され、即時に有効化されます。
 
 ## 4. つながると有効になるもの
 
 - **ログイン**: メール認証（Supabase Auth）
-- **HOME**: タスク/ミッション/自動化/副業/予定/通知の実データ集約
-- **チャット / Forge / Vault / Studio / AUTO / BOARD**: Gemini による実生成
+- **今日**: タスク/ミッション/自動化/副業/予定/通知の実データ集約
+- **会話 / つくる / 資料 / ゴール / ボード**: Gemini による実生成
 - **オートパイロット**: 完了・失敗時に LINE / Discord / Slack へ通知
-  （各トークンは KEYCHAIN に保存）
+  （各トークンは「連携」の画面から保存）
 - **24時間の常時自動実行**: cron / GitHub Actions から
   `POST /autopilot/missions/{id}/step` を定期実行
 

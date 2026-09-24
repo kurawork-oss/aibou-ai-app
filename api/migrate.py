@@ -115,7 +115,7 @@ def run_migrations(url: str = "") -> dict:
     """
     url = (url or db_url()).strip()
     if not url:
-        return {"ok": False, "skipped": True, "reason": "SUPABASE_DB_URL が未設定です（KEYCHAINで設定できます）"}
+        return {"ok": False, "skipped": True, "reason": "SUPABASE_DB_URL が未設定です（設定 →「つなぐ」の「上級者向け：キーを名前で直接編集する」か、サーバーの環境変数で設定できます）"}
     scripts = migration_scripts()
     if not scripts:
         return {"ok": False, "error": "スキーマファイルが見つかりませんでした"}

@@ -38,6 +38,7 @@ import { test, expect, type Page } from "@playwright/test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { mockBackend, enablePack } from "../linked/backend";
+import { goScreen } from "../nav";
 
 const MODES = ["HOME", "CHAT", "ME", "CODE", "STUDIO", "SNS", "CAPTURE",
   "VAULT", "TASKS", "AUTO", "BOARD", "ARCHIVE", "EXTEND", "GUIDE"] as const;
@@ -153,11 +154,7 @@ test("全画面と全設定タブを測る", async ({ page }) => {
   for (const mode of MODES) {
     complaints.length = 0;
     const started = Date.now();
-    await page.getByLabel("Modes", { exact: true }).click();
-    await page.locator("nav").filter({ hasText: "MODES" })
-      .getByText(mode, { exact: true }).click();
-    await page.locator("nav").filter({ hasText: "MODES" })
-      .waitFor({ state: "detached", timeout: 5_000 }).catch(() => {});
+    await goScreen(page, mode);
     const painted = Date.now() - started;
     await page.waitForTimeout(500);       // 中身が落ち着くのを待つ（時間には数えない）
     shots.push(await measure(page, `画面/${mode}`, MAIN, painted, complaints));

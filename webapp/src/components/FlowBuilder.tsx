@@ -182,7 +182,7 @@ export default function FlowBuilder({ target, onCreated, onError }: {
                     </select>
                   </label>
                   <label className="flex flex-col gap-0.5">
-                    <span className="text-[9px] tracking-[0.14em] text-muted label-mono">根拠資料（VAULT）</span>
+                    <span className="text-[9px] tracking-[0.14em] text-muted label-mono">根拠資料（資料の画面）</span>
                     <select value={s.notebook_id ?? ""} onChange={(e) => updateExtra(i, "notebook_id", e.target.value)}
                       aria-label={`ステップ${i + 1}の根拠資料`}
                       className="rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-2 py-1 text-[11px] text-fg-strong focus:outline-none">

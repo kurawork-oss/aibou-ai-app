@@ -39,7 +39,7 @@ const TEMPLATES = [
   "アイデアを出して箇条書きに整理する",
 ];
 
-export default function Dashboard() {
+export default function Dashboard({ isOwner = null }: { isOwner?: boolean | null } = {}) {
   const [tab, setTab] = useState<"board" | "auto">("board");
 
   // Restore the last tab (whiteboard is the default).
@@ -88,13 +88,13 @@ export default function Dashboard() {
       {tab === "auto" && <PendingApprovals />}
 
       <div className="min-h-0 flex-1">
-        {tab === "board" ? <Whiteboard /> : <AutomationBoard />}
+        {tab === "board" ? <Whiteboard /> : <AutomationBoard isOwner={isOwner} />}
       </div>
     </div>
   );
 }
 
-function AutomationBoard() {
+function AutomationBoard({ isOwner }: { isOwner: boolean | null }) {
   const [flows, setFlows] = useState<Automation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -150,7 +150,7 @@ function AutomationBoard() {
 
   return (
     <div className="relative h-full min-h-0 overflow-y-auto pb-4">
-      <StepRunnersNote current="automation" />
+      <StepRunnersNote current="automation" isOwner={isOwner} />
       {/* Miro-style canvas backdrop */}
       <div aria-hidden className="forge-grid pointer-events-none absolute inset-0 opacity-50" />
 

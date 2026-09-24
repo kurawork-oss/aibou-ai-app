@@ -118,7 +118,7 @@ export default function FirstRun({ onOpenGuide }: { onOpenGuide: () => void }) {
       </div>
 
       <p className="mt-2 border-t border-panel pt-2 text-[10px] leading-relaxed text-muted/70">
-        分からなくなったら、CHAT で「使い方教えて」と聞いても答えます。
+        分からなくなったら、会話で「使い方教えて」と聞いても答えます。
       </p>
     </div>
   );

@@ -29,6 +29,7 @@ import Markdown from "@/components/Markdown";
 import {
   API_URL,
   streamChat, vision, agentActStream, agentExecute, saveRecipe, type RecipeStep,
+  openConnect, providerOfConnectPath,
   conversationsList, conversationGet, conversationSave, conversationDelete,
   capabilitiesShared, runCommand, setupPending, setupResume,
   type ChatTurn, type AgentEvent, type CommandItem, type CommandResult,
@@ -36,6 +37,7 @@ import {
 } from "@/lib/api";
 import * as facts from "@/lib/facts";
 import * as alwaysAllow from "@/lib/alwaysAllow";
+import { useApproval } from "@/lib/approvalPref";
 import CommandPalette, { readHashInput } from "@/components/CommandPalette";
 import Canvas, { pushItem } from "@/components/Canvas";
 import { PACKS_CHANGED } from "@/lib/shell";
@@ -220,7 +222,9 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
   const [note, setNote] = useState("");
   // 司令塔モード：会話ではなく、道具を使って実際に動く（HOMEのエージェントと同じ）
   const [agentMode, setAgentMode] = useState(false);
-  const [approval, setApproval] = useState(true);   // 取り消せない操作は実行前に確認
+  /* 外に残る操作も実行前に確認するか。置き場は設定 →「基本」の1か所
+     （lib/approvalPref.ts）。以前はここにも別の切り替えがあった。 */
+  const approval = useApproval();
   const actedRef = useRef(false);
 
   /* ── 作った物（会話の隣に出す） ───────────────────────────────
@@ -260,15 +264,13 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
   useEffect(() => {
     try {
       setAgentMode(localStorage.getItem("forge_chat_agent") === "1");
-      setApproval(localStorage.getItem("forge_chat_approval") !== "0");
     } catch { /* ignore */ }
   }, []);
   useEffect(() => {
     try {
       localStorage.setItem("forge_chat_agent", agentMode ? "1" : "0");
-      localStorage.setItem("forge_chat_approval", approval ? "1" : "0");
     } catch { /* ignore */ }
-  }, [agentMode, approval]);
+  }, [agentMode]);
   const [pendingImage, setPendingImage] = useState<{ dataUrl: string; base64: string; mime: string } | null>(null);
   const [speaking, setSpeaking] = useState(false);
 
@@ -1288,13 +1290,10 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
           </div>
           {agentMode && (
             <>
-              <label className="flex cursor-pointer items-center gap-1.5">
-                <input type="checkbox" checked={approval} onChange={(e) => setApproval(e.target.checked)}
-                  className="accent-[var(--accent)]" />
-                <span className="text-[10px] text-muted label-mono">取り消せない操作は確認する</span>
-              </label>
+              {/* 確認の出し方は設定 →「基本」の1か所で決める（ここに切り替えは置かない）。
+                  道具の数は書かない——足すたびに古くなる（「30種」のまま45種になっていた）。 */}
               <span className="text-[11px] text-muted">
-                タスク・予定・資料作成・メール・検索など30種の道具を使って実際に動きます
+                タスク・予定・資料作成・メール・検索などの道具を使って実際に動きます
               </span>
             </>
           )}
@@ -1877,16 +1876,18 @@ function MessageBubble({ message, onRegenerate, onApprove, onReject, onAlways, o
             </div>
             {message.need.canConnect ? (
               <>
-                <a
-                  href={`${API_URL}${message.need.connectPath}`}
-                  target="_blank"
-                  rel="noreferrer"
+                {/* ただのリンクにしない。新しいタブにはログイン情報が載らず、
+                    ログインを求める構成では入口で断られる（openConnect 参照） */}
+                <button
+                  type="button"
+                  onClick={() => void openConnect(message.need!.provider
+                    || providerOfConnectPath(message.need!.connectPath))}
                   className="mt-1.5 inline-flex min-h-[44px] items-center rounded-forge border px-3.5 text-[12px] label-mono"
                   style={{ borderColor: "var(--accent)", color: "var(--fg-strong)",
                            background: "var(--btn-bg)" }}
                 >
                   {message.need.label}と連携する
-                </a>
+                </button>
                 <p className="mt-1.5 text-[11px] leading-relaxed text-muted">
                   許可して戻ってくると、さきほどの用事から続けます。
                   言い直す必要はありません。

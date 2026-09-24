@@ -13,6 +13,7 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import * as alwaysAllow from "@/lib/alwaysAllow";
+import { useApproval } from "@/lib/approvalPref";
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ClipboardEvent } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -47,7 +48,7 @@ import FirstRun from "@/components/FirstRun";
 import CalendarPanel from "@/components/CalendarPanel";
 import WatchPanel from "@/components/WatchPanel";
 
-type View = "chat" | "me" | "capture" | "code" | "vault" | "income" | "tasks" | "studio" | "autopilot" | "board" | "archive" | "home" | "guide";
+type View = "chat" | "me" | "capture" | "code" | "vault" | "income" | "tasks" | "studio" | "autopilot" | "board" | "archive" | "home" | "guide" | "extend";
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -168,7 +169,7 @@ export default function Home({
       {offline && (
         <div className="glass-silver p-3 text-[11px] leading-relaxed text-muted">
           バックエンド未接続です。接続すると、エージェントが実際にタスク・予定・通知を動かせるようになります。
-          <button onClick={() => onNavigate("chat")} className="ml-1 text-[var(--accent)] underline">CHATへ</button>
+          <button onClick={() => onNavigate("chat")} className="ml-1 text-[var(--accent)] underline">会話へ</button>
         </div>
       )}
 
@@ -385,7 +386,8 @@ function AgentConsole({
   const [totalMs, setTotalMs] = useState<number | undefined>(undefined);
   const [answer, setAnswer] = useState("");
   const [ran, setRan] = useState(false);
-  const [approval, setApproval] = useState(true);   // 実行前に確認（機微な操作）
+  // 外に残る操作も実行前に確認するか（置き場は設定 →「基本」。lib/approvalPref.ts）
+  const approval = useApproval();
   const [pending, setPending] = useState<Pending | null>(null);
   const [approving, setApproving] = useState(false);
   const cancelRef = useRef<(() => void) | null>(null);
@@ -616,14 +618,6 @@ function AgentConsole({
             </div>
           )}
         </div>
-
-        {/* approval toggle */}
-        {!offline && (
-          <label className="mt-2 flex cursor-pointer items-center gap-1.5 text-[10px] text-muted">
-            <input type="checkbox" checked={approval} onChange={(e) => setApproval(e.target.checked)} className="accent-[var(--accent)]" />
-            🛡 実行前に確認（メール送信など機微な操作を承認制に）
-          </label>
-        )}
 
         {/* input */}
         <div className="mt-2 flex gap-2">
@@ -969,19 +963,23 @@ function ImageLightbox({
 }
 
 /* ── External connect card ───────────────────────────────────────── */
+/* 以前は「設定 →『つなぐ』でキーを設定」と書いたボタンが、会話の画面へ
+   飛んでいた（押しても設定は開かない）。文も、もう無い「KEYCHAIN」を
+   名指ししていた。繋ぐ作業は「連携」の画面にまとめてあるので、そこへ行く。 */
 function ConnectCard({ onNavigate }: { onNavigate: (v: View) => void }) {
   return (
     <div className="glass-silver p-3">
       <div className="mb-1.5 text-[10px] tracking-[0.2em] text-muted label-mono">外部連携 — CONNECT</div>
       <p className="text-[11px] leading-relaxed text-muted">
-        LINE / Discord / Slack への通知や各種APIは、KEYCHAIN にキーを入れると有効になります（各キーに発行手順あり）。
+        LINE / Discord / Slack への通知や Google・Notion などは、「連携」で繋ぐと使えるようになります
+        （何ができるようになるか・値のとり方も、そこに出ます）。
       </p>
       <button
         type="button"
-        onClick={() => onNavigate("chat")}
+        onClick={() => onNavigate("extend")}
         className="mt-2 text-[10px] tracking-[0.14em] text-[var(--accent)] hover:underline label-mono"
       >
-        → 設定 →「つなぐ」 でキーを設定
+        →「連携」をひらく
       </button>
     </div>
   );

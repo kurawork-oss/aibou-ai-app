@@ -138,7 +138,7 @@ def send(to: str, subject: str, body: str) -> dict:
     if not to:
         return {"ok": False, "error": "宛先(to)が空です"}
     if not configured():
-        return {"ok": False, "error": "メール未設定（KEYCHAINでEMAIL_ADDRESS/EMAIL_PASSWORDを設定）"}
+        return {"ok": False, "error": "メール未設定（「連携」のメールで EMAIL_ADDRESS / EMAIL_PASSWORD を設定）"}
     msg = EmailMessage()
     msg["From"] = _addr()
     msg["To"] = to

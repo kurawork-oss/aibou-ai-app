@@ -6,7 +6,7 @@
 #
 # After it goes live you get a URL like https://aibou-brain-api.onrender.com —
 # put that in Vercel as NEXT_PUBLIC_API_URL, redeploy, then enter your Gemini
-# key in the app (Settings → KEYCHAIN). CORS is open by default.
+# key in the app (管理 → もっと →「連携」→ Gemini). CORS is open by default.
 # =====================================================================
 services:
   - type: web
@@ -18,7 +18,7 @@ services:
     healthCheckPath: /health
     autoDeploy: true
     envVars:
-      # Gemini キー。アプリの KEYCHAIN からも同期できるが、無料プランは
+      # Gemini キー。アプリの「連携」からも同期できるが、無料プランは
       # スリープでメモリが消えるため、ここに設定しておくと確実。
       - key: GEMINI_API_KEY
         sync: false        # ダッシュボードで各自入力（リポジトリには保存されない）

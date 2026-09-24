@@ -197,11 +197,6 @@ export function scheduleSync(delay = SETTLE_MS): void {
   }, delay);
 }
 
-/** 待っている合流を取り消す（画面を離れるときなど）。 */
-export function cancelScheduledSync(): void {
-  if (timer) { clearTimeout(timer); timer = null; }
-}
-
 /* アプリを開いたときに1回だけ。
    ここが無いと、**2台目の端末は設定画面を開くまで空のまま会話する**
    ——記憶を合流させた意味が、いちばん効いてほしい場所で出ない。 */

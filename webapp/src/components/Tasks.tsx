@@ -392,7 +392,7 @@ export default function Tasks() {
         <div className="panel p-6 text-center">
           <p className="text-[12px] text-fg-strong">まだタスクはありません</p>
           <p className="mt-1.5 text-[11px] leading-relaxed text-muted">
-            上の欄から追加できます。CHATで「〜をタスクに入れて」と頼んでも増えます。
+            上の欄から追加できます。会話で「〜をタスクに入れて」と頼んでも増えます。
           </p>
           <p className="mt-1 text-[11px] leading-relaxed text-muted">
             たまってきたら「今日は何からやるのがいい？」と聞くと、順番を提案します。

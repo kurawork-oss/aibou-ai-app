@@ -149,7 +149,7 @@ export default function NewsletterPanel() {
           </div>
         )}
         <p className="mt-2 text-[11px] leading-relaxed text-muted">
-          ※ 全配信メールに配信停止リンクが自動で入ります。送信には KEYCHAIN の EMAIL_ADDRESS / EMAIL_PASSWORD が必要です。
+          ※ 全配信メールに配信停止リンクが自動で入ります。送信には「連携」のメール（EMAIL_ADDRESS / EMAIL_PASSWORD）が必要です。
           配信停止リンクを機能させるには、バックエンドに <code className="text-fg">PUBLIC_SITE_URL</code> を設定してください。
         </p>
       </div>

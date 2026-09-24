@@ -141,7 +141,7 @@ def generate(brief: str, style: str = "modern", sections: str = "",
 
 
 def save_as_artifact(title: str, html: str) -> dict:
-    """生成したLPを成果物として保存（HOMEの生成物に並ぶ）。"""
+    """生成したLPを成果物として保存（「ファイル」の生成物に並ぶ）。"""
     try:
         import artifacts
         return artifacts.create("site", title or "ランディングページ", html, "text/html")

@@ -143,3 +143,28 @@ test("会話も、確認の設定と「いつも許可」をサーバーへ渡�
   expect(typeof body?.approval).toBe("boolean");
   expect(body?.allow).toContain("calendar_add");
 });
+
+/* ── 確認の出し方は1か所 ──
+   以前は会話の画面とHOMEに別々の切り替えがあり、別々に覚えていた。片方で
+   切っても、もう片方は確認を出し続けた。いまは設定 →「基本」の1か所で決め、
+   会話もその値を送る（取り返せない操作は、この値に関わらずサーバーが止める。
+   api/test_gate.py）。 */
+test("設定の「確認の出し方」が、会話の問い合わせにそのまま載る", async ({ page }) => {
+  const be = await mockBackend(page);
+  be.set("/chat", () => ({ sse: [{ token: "はい" }, { done: true }] }));
+  await enterApp(page);
+  const sent = () => be.calls.filter((c) => c.path === "/chat")
+    .map((c) => (c.body as { approval?: boolean }).approval);
+
+  await say(page, "こんにちは");
+  await expect.poll(sent).toEqual([true]);            // 既定は「確認する」
+
+  await page.getByLabel("Settings").click();
+  const box = page.getByRole("region", { name: "確認の出し方" }).getByRole("checkbox");
+  await expect(box).toBeChecked();
+  await box.uncheck();
+  await page.getByLabel("Close settings").click({ position: { x: 8, y: 8 } });
+
+  await say(page, "もう一度");
+  await expect.poll(sent).toEqual([true, false]);
+});

@@ -20,6 +20,7 @@
  */
 
 import { test, expect, type Page } from "@playwright/test";
+import { goScreen, waitForHud } from "./nav";
 
 /** その画面に「繋いでから使えます」系の断り書きが何回出ているか。 */
 async function excuses(page: Page): Promise<string[]> {
@@ -114,15 +115,11 @@ test("どの画面でも、同じ断り書きが2回は出ない", async ({ page
     offlineBtn.waitFor({ timeout: 8_000 }).then(() => offlineBtn.click()).catch(() => {}),
     hud.waitFor({ timeout: 10_000 }).catch(() => {}),
   ]);
-  await page.getByLabel("Modes", { exact: true }).waitFor({ timeout: 10_000 });
+  await waitForHud(page);
 
   const bad: string[] = [];
   for (const mode of MODES) {
-    await page.getByLabel("Modes", { exact: true }).click();
-    await page.locator("nav").filter({ hasText: "MODES" })
-      .getByText(mode, { exact: true }).click();
-    await page.locator("nav").filter({ hasText: "MODES" })
-      .waitFor({ state: "detached", timeout: 5_000 }).catch(() => {});
+    await goScreen(page, mode);
     await page.waitForTimeout(350);
 
     const found = await excuses(page);
@@ -160,7 +157,7 @@ test("使っていない呼び名で、案内していない", async ({ page }) 
     offlineBtn.waitFor({ timeout: 8_000 }).then(() => offlineBtn.click()).catch(() => {}),
     hud.waitFor({ timeout: 10_000 }).catch(() => {}),
   ]);
-  await page.getByLabel("Modes", { exact: true }).waitFor({ timeout: 10_000 });
+  await waitForHud(page);
 
   const bad: string[] = [];
   const look = async (where: string) => {
@@ -174,11 +171,7 @@ test("使っていない呼び名で、案内していない", async ({ page }) 
   };
 
   for (const mode of ["HOME", "CHAT", "VAULT", "SNS", "EXTEND", "GUIDE"]) {
-    await page.getByLabel("Modes", { exact: true }).click();
-    await page.locator("nav").filter({ hasText: "MODES" })
-      .getByText(mode, { exact: true }).click();
-    await page.locator("nav").filter({ hasText: "MODES" })
-      .waitFor({ state: "detached", timeout: 5_000 }).catch(() => {});
+    await goScreen(page, mode);
     await page.waitForTimeout(350);
     await look(mode);
   }
@@ -247,4 +240,35 @@ test("案内が名指しする設定タブは、実在する", async ({ page }) 
   expect(seen, "「設定 → ○○」という案内が1つも無い（空振りしている）")
     .toBeGreaterThan(0);
   expect([...new Set(bad)], `無いタブを名指ししている:\n${bad.join("\n")}`).toEqual([]);
+});
+
+/* ── 無くなったタブの名前が、画面の文に残っていないか（ソースを見る） ──
+   画面を回って見るだけでは、条件が揃ったときにしか出ない文（「未設定」の
+   ときだけ出る案内など）を見落とす。実際、KEYCHAIN・DIAGNOSTICS（今の
+   「つなぐ」「しらべる」、鍵は「連携」）を名指しする文が20か所残っていて、
+   どれも押した先に無い場所を案内していた。コメントは数えない（経緯の記録）。
+
+   画面の英語の札（CHAT・HOME・STUDIO…）も同じ。入口を 実行／管理 の1つに
+   して、札は 今日・ボード・つくる… になった。「CHATで頼めます」「BOARDモード
+   で確認」のように**案内に使っている形**だけを拾う（「AI STUDIO」は実在の
+   タブ、「LOADING TASKS…」は見出しなので案内ではない）。 */
+const OLD_SCREEN = /(?<![A-Za-z_])(?<!AI )(CHAT|HOME|ARCHIVE|STUDIO|VAULT|CAPTURE|INCOME|AUTOPILOT|AUTO|EXTEND|TASKS|BOARD|CODE|LIFE|GUIDE|ME)\s?(で|に|を|の|や|と|タブ|画面|モード|›|から|へ)/;
+test("無くなったタブの名前で案内する文が、ソースに残っていない", async () => {
+  const { readdirSync, readFileSync, statSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const walk = (dir: string): string[] => readdirSync(dir).flatMap((f) => {
+    const p = join(dir, f);
+    return statSync(p).isDirectory() ? walk(p) : /\.(tsx?|jsx?)$/.test(f) ? [p] : [];
+  });
+  const bad: string[] = [];
+  for (const file of walk(join(process.cwd(), "src"))) {
+    const code = readFileSync(file, "utf8")
+      // /* … */ と {/* … */}（行数は残す。落ちたときに何行目か言えるように）
+      .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ""))
+      .replace(/(^|[^:"'`])\/\/.*$/gm, "$1");    // // …（https:// は残す）
+    code.split("\n").forEach((line, i) => {
+      if (/KEYCHAIN|DIAGNOSTICS/.test(line) || OLD_SCREEN.test(line)) bad.push(`${file.split("/src/")[1]}:${i + 1}: ${line.trim().slice(0, 80)}`);
+    });
+  }
+  expect(bad, `無くなったタブを名指ししている:\n${bad.join("\n")}`).toEqual([]);
 });

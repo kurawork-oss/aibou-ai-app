@@ -54,17 +54,17 @@ TASKS = {
     "text": {
         "label": "文章生成・会話", "hf_task": "text-generation",
         "input": "text", "output": "text",
-        "wired": "CHAT・各モードの文章生成", "note": "指示応答(Instruct)モデル",
+        "wired": "会話・各画面の文章生成", "note": "指示応答(Instruct)モデル",
     },
     "image": {
         "label": "画像生成", "hf_task": "text-to-image",
         "input": "text", "output": "image",
-        "wired": "IMAGE STUDIO", "note": "文章から画像を作る",
+        "wired": "つくる › 素材 › IMAGE", "note": "文章から画像を作る",
     },
     "asr": {
         "label": "音声の文字起こし", "hf_task": "automatic-speech-recognition",
         "input": "audio", "output": "text",
-        "wired": "CAPTURE の文字起こし", "note": "Geminiキー無しでも文字起こしできる",
+        "wired": "録音の文字起こし", "note": "Geminiキー無しでも文字起こしできる",
     },
     "translate": {
         "label": "翻訳", "hf_task": "translation",
@@ -123,13 +123,13 @@ SUGGESTED = {
 # （新設せず合わせることで、割り当てた瞬間から既存の生成に効く）。
 ROLES = {
     "chat": {"store_key": "HF_MODEL", "task": "text", "label": "会話・文章生成",
-             "where": "CHAT / 各モードの生成"},
+             "where": "会話 / 各画面の生成"},
     "code": {"store_key": "CODE_MODEL", "task": "text", "label": "コード生成",
-             "where": "CODEモード"},
+             "where": "コードの画面"},
     "image": {"store_key": "HF_IMAGE_MODEL", "task": "image", "label": "画像生成",
-              "where": "IMAGE STUDIO"},
+              "where": "つくる › 素材 › IMAGE"},
     "asr": {"store_key": "HF_ASR_MODEL", "task": "asr", "label": "文字起こし",
-            "where": "CAPTURE"},
+            "where": "録音"},
 }
 
 _mem_models = memstore.TenantList()
@@ -188,7 +188,7 @@ def _explain(resp) -> dict:
 
     if code in (401, 403):
         return {"error": "HuggingFaceのトークンが無効か、このモデルへの権限がありません"
-                         "（KEYCHAIN の HUGGINGFACE_TOKEN を確認。"
+                         "（「連携」の HuggingFace の鍵を確認。"
                          "Llama等はHubでライセンス同意が必要です）",
                 "status": code, "detail": detail or body}
     if code == 404:

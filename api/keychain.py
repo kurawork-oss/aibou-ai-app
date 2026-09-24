@@ -87,7 +87,7 @@ def _decrypt(stored: Optional[str]) -> str:
 # UI にプリセット表示する「よく使うキー」。任意の名前も保存できる。
 KNOWN_KEYS: List[Dict[str, str]] = [
     {"name": "GEMINI_API_KEY", "label": "Gemini API Key", "hint": "チャット・生成の頭脳（必須）"},
-    {"name": "GITHUB_TOKEN", "label": "GitHub Token", "hint": "CODEモードのリポジトリ連携（Fine-grained PAT）"},
+    {"name": "GITHUB_TOKEN", "label": "GitHub Token", "hint": "コードの画面のリポジトリ連携（Fine-grained PAT）"},
     {"name": "HUGGINGFACE_TOKEN", "label": "HuggingFace Token", "hint": "無料の代替AI（学習されない相談向け）。hf_で始まるトークン"},
     {"name": "RULES_REPO", "label": "ルールの置き場（owner/name）",
      "hint": "AIbouに守らせるメモを置いたGitHubリポジトリ。Obsidianの保管庫をpushして使う"},

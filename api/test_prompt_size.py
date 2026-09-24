@@ -114,4 +114,4 @@ def test_画面のガイドそのものは_消していない():
     modes = guide.modes(owner=True)
     assert modes, "説明書が空になっている"
     names = " ".join(str(m) for m in modes)
-    assert "CHAT" in names or "チャット" in names
+    assert "会話" in names, "会話（実行）の説明が無い"

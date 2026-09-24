@@ -16,7 +16,7 @@ async function enterApp(page: Page) {
   await page.waitForSelector("text=ENTER", { timeout: 10_000 });
   await page.click("text=ENTER");
   const offlineBtn = page.getByText("ENTER OFFLINE");
-  const hud = page.getByLabel("Modes", { exact: true });
+  const hud = page.locator('nav[aria-label="Mobile navigation"], nav[aria-label="画面の切り替え"]').getByRole("button", { name: "管理", exact: true }).first();
   await Promise.race([
     offlineBtn.waitFor({ timeout: 8_000 }).then(() => offlineBtn.click()).catch(() => {}),
     hud.waitFor({ timeout: 10_000 }),

@@ -27,7 +27,7 @@ const STATUS_COLOR: Record<string, string> = {
   paused: "#ffd060",
 };
 
-export default function Autopilot() {
+export default function Autopilot({ isOwner = null }: { isOwner?: boolean | null } = {}) {
   const [missions, setMissions] = useState<Mission[]>([]);
   const [loading, setLoading] = useState(true);
   const [goal, setGoal] = useState("");
@@ -120,7 +120,7 @@ export default function Autopilot() {
     <div className="grid h-full min-h-0 gap-3 overflow-y-auto pb-2 lg:grid-cols-[24rem_1fr] lg:content-start">
       {/* ── Left: create mission ── */}
       <div className="flex flex-col gap-3">
-      <StepRunnersNote current="autopilot" />
+      <StepRunnersNote current="autopilot" isOwner={isOwner} />
       <div className="panel p-3">
         <div className="mb-1.5 text-[10px] tracking-[0.2em] text-muted label-mono">NEW MISSION — ゴールを設定</div>
         <textarea

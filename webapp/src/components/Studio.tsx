@@ -464,7 +464,7 @@ function EvolvePanel() {
         const r = await forgeGenerate("app", String(p.prompt ?? instruction));
         if (r.error) throw new Error(r.error);
         if (r.code) addToArchive(String(p.prompt ?? "Evolved App").slice(0, 40), String(p.prompt ?? ""), r.code, r.note);
-        setApplied("アプリを生成し、ARCHIVE に保存しました。");
+        setApplied("アプリを生成し、「ファイル」に保存しました。");
       } else if (proposal.type === "custom_ai") {
         await studioCreateAI({
           name: String(p.name ?? "Evolved AI"),
@@ -476,7 +476,7 @@ function EvolvePanel() {
       } else if (proposal.type === "automation") {
         const steps = Array.isArray(p.steps) ? (p.steps as AutomationStep[]) : [];
         await automationsCreate(String(p.name ?? "Evolved Automation"), steps);
-        setApplied("自動化フローを作成しました。BOARD タブで確認できます。");
+        setApplied("自動化フローを作成しました。管理 →「ボード」で確認できます。");
       } else {
         setApplied("この要望は新規作成不要です（上の回答をご確認ください）。");
       }

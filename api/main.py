@@ -138,7 +138,7 @@ async def _lifespan(_app: "FastAPI"):
 
 # サーバー側のビルド目印。/diagnose で返す。
 # 「直したはずなのに直らない」ときに、デプロイが届いているかを一目で確かめる。
-APP_VERSION = "2026.09.10 · api-r9 CANVAS & GUARDRAILS"
+APP_VERSION = "2026.09.24 · api-r19 TIDY"
 
 app = FastAPI(
     title="AIbou Brain API",
@@ -357,6 +357,47 @@ async def require_storage(_db: str = Depends(use_own_database)) -> None:
     )
 
 
+def _auth_ok(authorization: Optional[str], x_app_token: Optional[str],
+             x_supabase_token: Optional[str]) -> bool:
+    """通してよいか（require_auth の判定そのもの）。
+
+    連携の入口（新しいタブで開く）でも同じ判定を使うため、依存関係から
+    切り出してある。判定が2か所に分かれると、片方だけ緩む。
+    """
+    bearer = ""
+    if authorization and authorization.strip().lower().startswith("bearer "):
+        bearer = authorization.strip()[7:].strip()
+
+    if config.APP_TOKEN:
+        if bearer == config.APP_TOKEN or (x_app_token or "").strip() == config.APP_TOKEN:
+            return True
+    if _verify_supabase_jwt(bearer) or _verify_supabase_jwt((x_supabase_token or "").strip()):
+        return True
+    # どの保護も構成されていなければオープン
+    if not config.APP_TOKEN and not config.REQUIRE_AUTH:
+        return True
+
+    # 最後の受け皿:
+    # SUPABASE_JWT_SECRET が無いサーバーは、ログイン用トークンを検証できない。
+    # 「検証できない」を「拒否してよい」と扱うと、設定漏れだけで動いていた
+    # アプリが止まる（実際に止めた）。ログインを足す前と同じ扱いに戻す。
+    #
+    # REQUIRE_AUTH=1 でもここは通す。検証する手段が無いのに「ログイン必須」を
+    # 貫くと、正しくログインしている本人まで閉め出すだけで、誰も守れない
+    # （偽のトークンは作り放題なので、拒否しても攻撃者は素通りできる）。
+    # 守りたいなら SUPABASE_JWT_SECRET を設定する必要があり、設定した時点で
+    # この経路は使われなくなる。
+    #
+    # ・保護の強さは元のまま。元の APP_TOKEN は公開されるJSに埋め込まれており、
+    #   もともと誰でも読める値だったので、ここで下がるものはない。
+    # ・この経路で「誰か」は決めない（保存先も持ち主判定も動かさない）。
+    if (not config.SUPABASE_JWT_SECRET
+            and (_looks_like_session_token(bearer)
+                 or _looks_like_session_token((x_supabase_token or "").strip()))):
+        return True
+    return False
+
+
 async def require_auth(authorization: Optional[str] = Header(default=None),
                        x_app_token: Optional[str] = Header(default=None),
                        x_supabase_token: Optional[str] = Header(default=None),
@@ -377,39 +418,8 @@ async def require_auth(authorization: Optional[str] = Header(default=None),
     人に配るときは「SUPABASE_JWT_SECRET + REQUIRE_AUTH=1」にして、
     APP_TOKEN は外すこと（外すと 1 の経路が消える）。
     """
-    bearer = ""
-    if authorization and authorization.strip().lower().startswith("bearer "):
-        bearer = authorization.strip()[7:].strip()
-
-    if config.APP_TOKEN:
-        if bearer == config.APP_TOKEN or (x_app_token or "").strip() == config.APP_TOKEN:
-            return
-    if _verify_supabase_jwt(bearer) or _verify_supabase_jwt((x_supabase_token or "").strip()):
-        return
-    # どの保護も構成されていなければオープン
-    if not config.APP_TOKEN and not config.REQUIRE_AUTH:
-        return
-
-    # 最後の受け皿:
-    # SUPABASE_JWT_SECRET が無いサーバーは、ログイン用トークンを検証できない。
-    # 「検証できない」を「拒否してよい」と扱うと、設定漏れだけで動いていた
-    # アプリが止まる（実際に止めた）。ログインを足す前と同じ扱いに戻す。
-    #
-    # REQUIRE_AUTH=1 でもここは通す。検証する手段が無いのに「ログイン必須」を
-    # 貫くと、正しくログインしている本人まで閉め出すだけで、誰も守れない
-    # （偽のトークンは作り放題なので、拒否しても攻撃者は素通りできる）。
-    # 守りたいなら SUPABASE_JWT_SECRET を設定する必要があり、設定した時点で
-    # この経路は使われなくなる。
-    #
-    # ・保護の強さは元のまま。元の APP_TOKEN は公開されるJSに埋め込まれており、
-    #   もともと誰でも読める値だったので、ここで下がるものはない。
-    # ・この経路で「誰か」は決めない（保存先も持ち主判定も動かさない）。
-    if (not config.SUPABASE_JWT_SECRET
-            and (_looks_like_session_token(bearer)
-                 or _looks_like_session_token((x_supabase_token or "").strip()))):
-        return
-
-    raise HTTPException(status_code=401, detail="Unauthorized: valid bearer token required")
+    if not _auth_ok(authorization, x_app_token, x_supabase_token):
+        raise HTTPException(status_code=401, detail="Unauthorized: valid bearer token required")
 
 
 # =====================================================================
@@ -1368,7 +1378,7 @@ async def chat(req: ChatRequest, _auth: None = Depends(require_auth)):
             if config.is_zero_quota_429(e):
                 yield _sse({"error": (
                     "Gemini無料枠の上限（またはこのキーの無料枠が0）に達しました。"
-                    "KEYCHAIN に HUGGINGFACE_TOKEN を入れると自動でHuggingFaceに切り替わります。"
+                    "「連携」で HuggingFace の鍵（HUGGINGFACE_TOKEN）を入れると自動でHuggingFaceに切り替わります。"
                 )})
             else:
                 yield _sse({"error": f"generation failed: {e}"})
@@ -2452,7 +2462,7 @@ async def life_chat(req: ChatRequest, _auth: None = Depends(require_auth)):
         except Exception as e:
             if config.is_zero_quota_429(e):
                 yield _sse({"error": (
-                    "Gemini無料枠の上限に達しました。KEYCHAIN に HUGGINGFACE_TOKEN を入れると"
+                    "Gemini無料枠の上限に達しました。「連携」で HuggingFace の鍵（HUGGINGFACE_TOKEN）を入れると"
                     "自動でHuggingFaceに切り替わります。"
                 )})
             else:
@@ -3717,15 +3727,15 @@ async def google_status(_auth: None = Depends(require_auth)):
 # リダイレクトURI」として登録されている。URLを変えると既存の設定が壊れるので、
 # 入口はそのまま残し、中身だけ共通の仕組みに寄せる。
 @app.get("/google/auth/start")
-async def google_auth_start(request: Request, user_id: str = Depends(current_user),
+async def google_auth_start(request: Request, ticket: str = "",
+                            user_id: str = Depends(current_user),
                             claims: dict = Depends(current_claims),
-                            _auth: None = Depends(require_auth)):
-    """Googleの同意画面へ送る。"""
-    res = oauth.start_url("google", _connect_redirect(request, "google"), user_id,
-                          owner=is_owner_claims(claims))
-    if res.get("error"):
-        return _connect_page("連携を始められません", res["error"], ok=False, status=400)
-    return RedirectResponse(res["url"])
+                            authorization: Optional[str] = Header(default=None),
+                            x_app_token: Optional[str] = Header(default=None),
+                            x_supabase_token: Optional[str] = Header(default=None)):
+    """Googleの同意画面へ送る（入口は /connect/{provider}/start と同じ作り）。"""
+    return _connect_begin("google", request, ticket, user_id, claims,
+                          authorization, x_app_token, x_supabase_token)
 
 
 @app.get("/google/auth/callback")
@@ -4263,17 +4273,57 @@ async def connect_status(_auth: None = Depends(require_auth)):
     return {"ok": True, "providers": items, "no_oauth": oauth.NO_OAUTH}
 
 
-@app.get("/connect/{provider}/start")
-async def connect_start(provider: str, request: Request,
-                        user_id: str = Depends(current_user),
-                        claims: dict = Depends(current_claims),
-                        _auth: None = Depends(require_auth)):
-    """提供元の同意画面へ送る。誰が始めたかを署名して持たせる。"""
-    res = oauth.start_url(provider, _connect_redirect(request, provider), user_id,
-                          owner=is_owner_claims(claims))
+@app.post("/connect/{provider}/ticket")
+async def connect_ticket(provider: str, user_id: str = Depends(current_user),
+                         claims: dict = Depends(current_claims),
+                         _auth: None = Depends(require_auth)):
+    """連携の入口を新しいタブで開くための、使い捨ての札（oauth.make_ticket）。
+
+    新しいタブを開くただのリンクには、画面のログイン情報が載らない。ここで
+    ログインを確かめてから札を渡し、入口はその札で本人を知る。
+    署名できない構成（1人運用）では空を返す——そのときは入口がそのまま通る。
+    """
+    if provider not in oauth.PROVIDERS:
+        return JSONResponse(status_code=404, content={"ok": False, "error": "知らない連携先です"})
+    return {"ok": True, "ticket": oauth.make_ticket(user_id, provider,
+                                                     owner=is_owner_claims(claims))}
+
+
+def _connect_begin(provider: str, request: Request, ticket: str, user_id: str,
+                   claims: dict, authorization: Optional[str], x_app_token: Optional[str],
+                   x_supabase_token: Optional[str]):
+    """連携の入口の中身。**札があれば札で、無ければ見出しで**本人を確かめる。
+
+    札で入ったときは、札に書いてある本人で始める（見出しの本人は見ない）。
+    どちらも無ければ、ログインを求める構成では断る（以前の require_auth と同じ線）。
+    """
+    if ticket:
+        t = oauth.use_ticket(ticket, provider)
+        if t.get("error"):
+            return _connect_page("連携を始められません", t["error"], ok=False, status=400)
+        user_id, owner = t["user_id"], t["owner"]
+    else:
+        if not _auth_ok(authorization, x_app_token, x_supabase_token):
+            return _connect_page("連携を始められません",
+                                 "ログインの確認が取れませんでした。AIbouの画面の「連携」から押してください",
+                                 ok=False, status=401)
+        owner = is_owner_claims(claims)
+    res = oauth.start_url(provider, _connect_redirect(request, provider), user_id, owner=owner)
     if res.get("error"):
         return _connect_page("連携を始められません", res["error"], ok=False, status=400)
     return RedirectResponse(res["url"])
+
+
+@app.get("/connect/{provider}/start")
+async def connect_start(provider: str, request: Request, ticket: str = "",
+                        user_id: str = Depends(current_user),
+                        claims: dict = Depends(current_claims),
+                        authorization: Optional[str] = Header(default=None),
+                        x_app_token: Optional[str] = Header(default=None),
+                        x_supabase_token: Optional[str] = Header(default=None)):
+    """提供元の同意画面へ送る。誰が始めたかを署名して持たせる。"""
+    return _connect_begin(provider, request, ticket, user_id, claims,
+                          authorization, x_app_token, x_supabase_token)
 
 
 async def _connect_finish(provider: str, request: Request, code: str, state: str,

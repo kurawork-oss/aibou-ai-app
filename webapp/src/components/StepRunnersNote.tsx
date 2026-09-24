@@ -17,26 +17,31 @@ const RUNNERS: { key: Runner; name: string; where: string; when: string }[] = [
   {
     key: "autopilot",
     name: "オートパイロット",
-    where: "AUTO",
+    where: "ゴール",
     when: "ゴールだけ決めて、手順はAIに考えさせたいとき（何をすればいいか分からない）",
   },
   {
     key: "workflow",
     name: "ワークフロー",
-    where: "STUDIO › AI STUDIO",
+    where: "つくる › AI STUDIO",
     when: "手順が決まっている作業を、毎回同じ順番で繰り返したいとき",
   },
   {
     key: "automation",
     name: "自動化",
-    where: "BOARD › AUTOMATION",
+    where: "ボード › AUTOMATION",
     when: "きっかけ（時刻・受信など）から、自分が見ていなくても動かしたいとき",
   },
 ];
 
-export default function StepRunnersNote({ current }: { current: Runner }) {
+export default function StepRunnersNote({ current, isOwner = null }:
+  { current: Runner; isOwner?: boolean | null }) {
   const me = RUNNERS.find((r) => r.key === current)!;
-  const others = RUNNERS.filter((r) => r.key !== current);
+  /* ワークフローは、持ち主だけの AI STUDIO にある（Workshop.tsx が持ち主で
+     ない人には隠す）。そこへ案内すると、押した先にタブが無い。
+     分からないあいだ（null）は、持ち主の画面と同じに出しておく。 */
+  const others = RUNNERS.filter((r) => r.key !== current
+    && !(r.key === "workflow" && isOwner === false));
 
   return (
     <div className="panel p-3">

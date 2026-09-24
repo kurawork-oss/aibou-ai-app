@@ -57,7 +57,7 @@ export const GLOSSARY: Term[] = [
   { word: "Gemini（ジェミニ）", means: "Googleが作ったAI。このアプリの頭脳として使います" },
   { word: "プロジェクト", means: "Supabaseで借りる倉庫1つぶんの単位" },
   { word: "バックエンド", means: "アプリの裏で動いている部分。画面ではなく処理をする側" },
-  { word: "KEYCHAIN（キーチェーン）", means: "設定の中にある、鍵をしまう場所" },
+  { word: "連携", means: "外のサービスの鍵を入れる画面（管理 → もっと →「連携」）" },
 ];
 
 /** 貼り付け用のSQL（アプリ自身が配信する。バックエンド不要）。 */
@@ -175,7 +175,7 @@ export const SETUP_STEPS: SetupStep[] = [
       "aistudio.google.com/app/apikey を開く",
       "Googleアカウントでログインし、「Create API key」を押す",
       "表示された鍵（AIza… で始まる文字列）をコピーする",
-      "設定 →「KEYCHAIN」→ GEMINI_API_KEY に貼って保存する",
+      "管理 → もっと →「連携」→ Gemini に貼って保存する",
     ],
     caution: [
       "自分の鍵を入れると、利用料は自分の枠から引かれます（無料枠があります）。",
@@ -189,9 +189,9 @@ export const SETUP_STEPS: SetupStep[] = [
     minutes: "1分",
     detail: "ここまでで準備は終わりです。",
     steps: [
-      "CHAT に「明日15時に歯医者の予定を入れて」と書いて送る",
-      "TASKS や HOME を開いて、入っていることを確かめる",
-      "うまくいかないときは、設定 →「DIAGNOSTICS」で接続状態を見る",
+      "下の「実行」を押し、「明日15時に歯医者の予定を入れて」と書いて送る",
+      "「管理」の「タスク」や「今日」を開いて、入っていることを確かめる",
+      "うまくいかないときは、設定 →「しらべる」で接続状態を見る",
     ],
   },
 ];

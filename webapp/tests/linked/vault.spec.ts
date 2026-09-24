@@ -33,7 +33,7 @@ async function openNotebook(page: Page) {
   await page.getByLabel("Mobile navigation").getByText("管理", { exact: true }).click();
   await page.getByRole("button", { name: /もっと/ }).click();
   await page.getByRole("button", { name: /資料/ }).click();
-  await expect(page.getByText("VAULT とは")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText("資料 とは")).toBeVisible({ timeout: 10_000 });
   // 入れ物は押せる物として並ぶ（説明文にも同じ言葉が出るので、押せる方を取る）
   await page.getByRole("button", { name: /社内規程/ }).first().click();
 }
@@ -169,7 +169,7 @@ async function openVaultEmpty(page: Page) {
   await page.getByLabel("Mobile navigation").getByText("管理", { exact: true }).click();
   await page.getByRole("button", { name: /もっと/ }).click();
   await page.getByRole("button", { name: /資料/ }).click();
-  await expect(page.getByText("VAULT とは")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText("資料 とは")).toBeVisible({ timeout: 10_000 });
 }
 
 test("保存先が無いなら、作る前に言い切る", async ({ page }) => {

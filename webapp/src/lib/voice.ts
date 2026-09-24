@@ -368,11 +368,6 @@ export function stopSpeaking(): void {
   }
 }
 
-/** Play a base64-encoded mp3 (the API /tts fallback). Resolves when done. */
-export function playBase64Audio(audioBase64: string, mime = "audio/mpeg"): Promise<void> {
-  return playBase64AudioControllable(audioBase64, mime).done;
-}
-
 /**
  * 上と同じだが、途中で止められる。
  * 割り込み（利用者が喋りかける・別の返答が来る）で前の音声を確実に切るために要る。

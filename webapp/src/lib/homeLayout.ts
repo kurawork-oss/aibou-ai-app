@@ -22,7 +22,7 @@ export const WIDGET_META: Record<WidgetId, WidgetMeta> = {
   agenda: { label: "予定", hint: "今日以降の予定" },
   notifications: { label: "通知", hint: "未読のお知らせ" },
   artifacts: { label: "生成物", hint: "作った資料・画像" },
-  connect: { label: "接続", hint: "各モードへの入口" },
+  connect: { label: "接続", hint: "外のサービスと繋ぐ（連携の画面へ）" },
 };
 
 /**

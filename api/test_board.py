@@ -54,7 +54,8 @@ def test_board_endpoints_roundtrip():
 # ── tools ────────────────────────────────────────────────────────────
 def test_tool_board_add_note():
     r = tools.execute_tool("board_add_note", {"text": "ブレストの種", "color": "purple"})
-    assert "付箋" in r and "BOARD" in r
+    # 見に行く先は、いまの入口の名前で言う（以前は「BOARDモード」＝無い場所）
+    assert "付箋" in r and "「ボード」" in r and "BOARD" not in r
 
 
 # ── 複数ボード ───────────────────────────────────────────────────────

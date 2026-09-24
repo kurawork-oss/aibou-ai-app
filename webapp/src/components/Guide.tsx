@@ -103,7 +103,7 @@ export default function Guide() {
           {doc?.app ?? "AIbou"} の説明書
         </h2>
         <p className="mt-1 text-[11px] text-muted">
-          はじめての人は「はじめる」から。困ったら CHAT で「使い方教えて」と聞いてもOKです。
+          はじめての人は「はじめる」から。困ったら会話で「使い方教えて」と聞いてもOKです。
         </p>
       </div>
 

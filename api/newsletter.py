@@ -266,7 +266,7 @@ def send_issue(issue_id: str, test_to: str = "") -> dict:
     try:
         import email_svc
         if not email_svc.configured():
-            return {"error": "メール送信が未設定です（KEYCHAIN の EMAIL_ADDRESS / EMAIL_PASSWORD）"}
+            return {"error": "メール送信が未設定です（「連携」のメール: EMAIL_ADDRESS / EMAIL_PASSWORD）"}
     except Exception as e:
         return {"error": f"メール送信を初期化できません: {e}"}
 

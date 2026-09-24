@@ -37,6 +37,7 @@ import base64
 import hashlib
 import hmac
 import json
+import secrets
 import time
 from typing import Dict, List, Optional
 from urllib.parse import urlencode
@@ -122,7 +123,7 @@ PROVIDERS: Dict[str, dict] = {
         "client_id_env": "GITHUB_CLIENT_ID",
         "client_secret_env": "GITHUB_CLIENT_SECRET",
         "refreshable": False,
-        "unlocks": ["リポジトリを読む・書く（CODEモード）", "ルールのメモを取り込む"],
+        "unlocks": ["リポジトリを読む・書く（コードの画面）", "ルールのメモを取り込む"],
     },
 }
 
@@ -214,10 +215,75 @@ def verify_state(state: str, provider: str) -> dict:
         return {"error": "state を読み取れません"}
     if data.get("p") != provider:
         return {"error": "state の提供元が違います"}
+    # 連携を始めるための札（make_ticket）は、同じ鍵・同じ形で署名している。
+    # 見分ける印（k）が付いた物は、戻り（state）としては通さない
+    if data.get("k"):
+        return {"error": "state ではありません"}
     if time.time() - int(data.get("t") or 0) > STATE_TTL:
         return {"error": "時間が経ちすぎました。もう一度お試しください"}
     return {"ok": True, "user_id": str(data.get("u") or ""),
             "owner": bool(data.get("o"))}
+
+
+# ── 「始める」を、新しいタブへ持ち出すための使い捨ての札 ────────────────
+#
+# 連携の入口（/connect/{provider}/start）は、画面が**新しいタブで開く**。
+# ただのリンクで開くと、画面が普段付けているログイン情報（Authorization の
+# 見出し）が載らない。ログインを求める構成では、そこで 401 になって連携が
+# 始められず、たとえ通っても「誰が始めたか」が分からない（state に載せる
+# 本人が空になる）。
+#
+# そこで、画面はまず**ログイン情報つきで**この札をもらい、札を付けて新しい
+# タブを開く。札は:
+#   ・その提供元にだけ効く
+#   ・2分で切れる
+#   ・1回きり（同じ札で2回始められない）
+#   ・署名つき（中身を書き換えられない）
+TICKET_TTL = 120
+_used_tickets: Dict[str, float] = {}
+
+
+def make_ticket(user_id: str, provider: str, owner: bool = False) -> str:
+    """ログインを確かめ終えた本人に渡す札。署名できない構成では作らない。"""
+    secret = _secret()
+    if not secret:
+        return ""
+    payload = json.dumps({"k": "start", "u": user_id or "", "p": provider,
+                          "o": bool(owner), "t": int(time.time()),
+                          "n": secrets.token_urlsafe(12)},
+                         separators=(",", ":"), ensure_ascii=False).encode()
+    body = base64.urlsafe_b64encode(payload).decode().rstrip("=")
+    sig = hmac.new(secret.encode(), body.encode(), hashlib.sha256).hexdigest()[:32]
+    return f"{body}.{sig}"
+
+
+def use_ticket(ticket: str, provider: str) -> dict:
+    """札を確かめて使い切る。{"ok":True,"user_id","owner"} / {"error":...}"""
+    secret = _secret()
+    body, _, sig = (ticket or "").strip().partition(".")
+    if not secret or not body or not sig:
+        return {"error": "連携の札がありません。画面の「連携」からもう一度押してください"}
+    want = hmac.new(secret.encode(), body.encode(), hashlib.sha256).hexdigest()[:32]
+    if not hmac.compare_digest(want, sig):
+        return {"error": "連携の札が正しくありません"}
+    try:
+        data = json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))
+    except Exception:
+        return {"error": "連携の札を読み取れません"}
+    if data.get("k") != "start" or data.get("p") != provider:
+        return {"error": "別の連携の札です"}
+    now = time.time()
+    if now - int(data.get("t") or 0) > TICKET_TTL:
+        return {"error": "時間が経ちすぎました。画面の「連携」からもう一度押してください"}
+    # 1回きり。古い控えは捨てる（札の寿命を過ぎた物は、もう通らないので要らない）
+    for n, at in list(_used_tickets.items()):
+        if now - at > TICKET_TTL:
+            _used_tickets.pop(n, None)
+    nonce = str(data.get("n") or "")
+    if not nonce or nonce in _used_tickets:
+        return {"error": "この札はもう使われています。画面の「連携」からもう一度押してください"}
+    _used_tickets[nonce] = now
+    return {"ok": True, "user_id": str(data.get("u") or ""), "owner": bool(data.get("o"))}
 
 
 # ── 送り出す ─────────────────────────────────────────────────────────

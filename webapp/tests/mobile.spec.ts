@@ -14,6 +14,7 @@
  */
 
 import { test, expect, type Page } from "@playwright/test";
+import { goScreen, waitForHud } from "./nav";
 
 const MODES = ["HOME", "CHAT", "ME", "CODE", "STUDIO", "SNS", "CAPTURE",
   "VAULT", "TASKS", "AUTO", "BOARD", "ARCHIVE", "EXTEND", "GUIDE"] as const;
@@ -30,12 +31,11 @@ async function enterApp(page: Page) {
     offlineBtn.waitFor({ timeout: 8_000 }).then(() => offlineBtn.click()),
     hud.waitFor({ timeout: 10_000 }),
   ]);
-  await page.getByLabel("Modes", { exact: true }).waitFor({ timeout: 10_000 });
+  await waitForHud(page);
 }
 
 async function goMode(page: Page, label: string) {
-  await page.getByLabel("Modes", { exact: true }).click();
-  await page.locator("nav").filter({ hasText: "MODES" }).getByText(label, { exact: true }).click();
+  await goScreen(page, label);
   await page.waitForTimeout(400);
 }
 
@@ -257,11 +257,9 @@ test("スマホで、押せるものが他の物に覆われていない", async
   const bad: string[] = [];
   for (const mode of MODES) {
     await goMode(page, mode);
-    /* 行き先を選ぶ一覧が消えきるまで待つ。これを待たずに測ると、
-       開いたままの一覧が画面の全部を覆っていて、**60か所が重なって
-       いる**ように見える。最初それを本物の不具合として数えかけた。 */
-    await page.locator("nav").filter({ hasText: "MODES" })
-      .waitFor({ state: "detached", timeout: 5_000 });
+    /* 「もっと」の一覧が閉じてから測る（開いたままだと、その一覧に覆われた
+       所まで重なりとして数えてしまう）。 */
+    await expect(page.getByRole("button", { name: /▲ もっと/ })).toHaveCount(0);
     await page.waitForTimeout(300);
     for (const line of await covered(page)) bad.push(`${mode}: ${line}`);
   }

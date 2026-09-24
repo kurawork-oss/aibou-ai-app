@@ -11,7 +11,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { calendarItems, googleAuthStartUrl, type CalendarItem } from "@/lib/api";
+import { calendarItems, openConnect, type CalendarItem } from "@/lib/api";
 import {
   groupByDate, monthCells, monthLabel, shiftMonth, WEEKDAYS, ymd,
 } from "@/lib/calendar";
@@ -125,7 +125,7 @@ export default function CalendarPanel() {
           <p className="text-[11px] text-muted">読み込み中…</p>
         ) : dayItems.length === 0 ? (
           <p className="text-[11px] leading-relaxed text-muted">
-            この日の予定はありません。CHATで「{picked.slice(5).replace("-", "月")}日15時に打ち合わせ」
+            この日の予定はありません。会話で「{picked.slice(5).replace("-", "月")}日15時に打ち合わせ」
             のように頼むと登録できます。
           </p>
         ) : (
@@ -152,8 +152,8 @@ export default function CalendarPanel() {
       {!googleOn && (
         <p className="mt-2 border-t border-panel pt-2 text-[10px] leading-relaxed text-muted">
           Googleカレンダーを繋ぐと、こちらの予定もここに並びます。
-          <a href={googleAuthStartUrl()} target="_blank" rel="noreferrer"
-             className="ml-1 text-[var(--accent)] underline">Googleと接続</a>
+          <button type="button" onClick={() => void openConnect("google")}
+             className="ml-1 text-[var(--accent)] underline">Googleと接続</button>
         </p>
       )}
     </div>

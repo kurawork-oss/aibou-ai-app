@@ -151,22 +151,22 @@ def _packs_on(names):
 def test_guide_hides_owner_only_modes_from_employees(owner_is_set):
     """使えない機能の説明が並ぶと「壊れている」と受け取られる。"""
     emp = call("get", "/guide", None, token_for("emp-1", "employee@example.com")).json()
-    labels = [m["label"] for m in emp["modes"]]
-    assert "INCOME" not in labels, "従業員の説明書に持ち主専用モードが出ている"
+    ids = [m["id"] for m in emp["modes"]]
+    assert "income" not in ids, "従業員の説明書に持ち主専用モードが出ている"
     assert emp["mode_count"] == len(emp["modes"])
-    assert "CHAT" in labels and "TASKS" in labels        # 共通モードは出る
+    assert "chat" in ids and "tasks" in ids              # 共通モードは出る
 
     # 持ち主でも、使う機能のかたまりを入れていなければ出ない。
     # INCOME の入口（管理 → もっと）も同じ条件なので、説明書だけ先に
     # 出しても行き先が無い。**入れてから**出る、が正しい。
     boss = call("get", "/guide", None, token_for("boss-1", "boss@example.com")).json()
-    assert "INCOME" not in [m["label"] for m in boss["modes"]], \
+    assert "income" not in [m["id"] for m in boss["modes"]], \
         "副業を入れていないのに、説明書に出ている"
 
     import capabilities
     with _packs_on(["core", "income"]):
         boss2 = call("get", "/guide", None, token_for("boss-1", "boss@example.com")).json()
-        assert "INCOME" in [m["label"] for m in boss2["modes"]], \
+        assert "income" in [m["id"] for m in boss2["modes"]], \
             "副業を入れたのに、説明書に出ない"
         assert boss2["mode_count"] == len(boss2["modes"])
         assert capabilities is not None

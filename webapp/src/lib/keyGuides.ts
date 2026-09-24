@@ -35,7 +35,7 @@ export const KEY_GUIDES: Record<string, KeyGuide> = {
     note: "無料枠あり。ただし無料枠の入力は学習に使われる場合があります。機密な相談は HuggingFace の利用を推奨。",
   },
   HUGGINGFACE_TOKEN: {
-    purpose: "学習に使われない無料の推論API。チャット/CODEの代替AIとして自動フォールバック。",
+    purpose: "学習に使われない無料の推論API。会話・コードの代替AIとして自動フォールバック。",
     free: true,
     url: "https://huggingface.co/settings/tokens",
     urlLabel: "HuggingFace › Access Tokens",
@@ -49,7 +49,7 @@ export const KEY_GUIDES: Record<string, KeyGuide> = {
     note: "設定すると AI PROVIDER で HUGGINGFACE を選べるようになり、Geminiの無料枠が0でも動きます。",
   },
   GITHUB_TOKEN: {
-    purpose: "CODEモードでリポジトリを読み書き・コミット・PR作成する連携。",
+    purpose: "コードの画面でリポジトリを読み書き・コミット・PR作成する連携。",
     free: true,
     url: "https://github.com/settings/personal-access-tokens/new",
     urlLabel: "GitHub › Fine-grained token",

@@ -90,6 +90,24 @@ test("作れなかったときに、作った顔をしない", async ({ page }) 
   await expect(page.getByText(/保存先がつながっていない/)).toBeVisible({ timeout: 10_000 });
 });
 
+/* 「手順を並べる3つ」の使い分けの案内。ワークフローは持ち主だけの
+   AI STUDIO にあるので、持ち主でない人に案内すると押した先にタブが無い。 */
+test("持ち主でない人には、入れない AI STUDIO を案内しない", async ({ page }) => {
+  const be = await mockBackend(page);
+  be.set("/account/profile", { json: { is_owner: false, owner_only_modes: ["income"] } });
+  await enterApp(page);
+  await openMore(page, /^ゴール\s*分解して進める$/, seeText(page, /オートパイロット とは/));
+  await expect(page.getByText(/ボード › AUTOMATION の ?自動化/)).toBeVisible();
+  await expect(page.getByText(/AI STUDIO/)).toHaveCount(0);
+});
+
+test("持ち主には、ワークフローの場所も案内する", async ({ page }) => {
+  await mockBackend(page);
+  await enterApp(page);
+  await openMore(page, /^ゴール\s*分解して進める$/, seeText(page, /オートパイロット とは/));
+  await expect(page.getByText(/つくる › AI STUDIO の ?ワークフロー/)).toBeVisible();
+});
+
 /* ── 副業（承認してから外に出す） ───────────────────────────────── */
 function withIncome(be: Backend) {
   enablePack(be, "income");     // 既定では切ってあるので、入口が出ない

@@ -1,17 +1,18 @@
 "use client";
 
 /**
- * IntegrationsSettings — Settings 内の「Google連携」と「DB永続化（自動テーブル作成）」。
- * どちらもバックエンド接続時のみ動作。未接続時は案内のみ。
+ * IntegrationsSettings — 設定「つなぐ」の、サーバー側の用事（定期実行・DB・眠らせない）。
+ * どれもバックエンド接続時のみ動作。未接続時は案内のみ。
+ *
+ * Google の連携はここに置かない。以前はここにも「Googleに接続する」があり、
+ * 「連携」の画面と2か所に同じ入口があった（同じタブの下で「連携にまとめました」
+ * と案内しているのに、上にまだ残っていた）。繋ぐ作業は「連携」1か所にする。
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import FreeOps from "@/components/FreeOps";
 import {
   API_URL,
-  googleStatus,
-  googleAuthStartUrl,
-  googleDisconnect,
   dbStatus,
   dbMigrate,
   schedulesWithHealth,
@@ -20,7 +21,6 @@ import {
   scheduleDelete,
   keepaliveStatus,
   keepalivePing,
-  type GoogleStatus,
   type DbStatus,
   type ScheduleItem,
   type KeepaliveStatus,
@@ -30,13 +30,12 @@ export default function IntegrationsSettings() {
   if (!API_URL) {
     return (
       <div className="mb-4 rounded-forge border border-panel p-3 text-[11px] leading-relaxed text-muted">
-        Google連携・DB永続化は、バックエンド接続後に使えます（設定 →「しらべる」）。
+        定期実行・DB永続化は、バックエンド接続後に使えます（設定 →「しらべる」）。
       </div>
     );
   }
   return (
     <>
-      <GooglePanel />
       <SchedulerPanel />
       <DbPanel />
       <KeepalivePanel />
@@ -253,84 +252,10 @@ function SchedulerPanel() {
       )}
       <p className="mt-2 text-[11px] leading-relaxed text-muted">
         ※ 曜日を選ばなければ毎日実行。サーバーが起きている間は自動で実行します。無料プランでスリープする場合は、
-        <code className="text-fg">/scheduler/tick</code> を無料の外部cron（cron-job.org等）から定期的に叩くと確実です。定期実行は承認なしで実行されます。
+        <code className="text-fg">/scheduler/tick</code> を無料の外部cron（cron-job.org等）から定期的に叩くと確実です。
+        定期実行でも、<b className="text-fg">取り返せない操作（メール送信・通知など）は実行の前に止まり</b>、
+        端末への通知で確認を求めます。
       </p>
-    </div>
-  );
-}
-
-/* ── Google (Sheets / Docs) ─────────────────────────────────────── */
-function GooglePanel() {
-  const [st, setSt] = useState<GoogleStatus | null>(null);
-  const [note, setNote] = useState<string | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const load = useCallback(async () => {
-    try { setSt(await googleStatus()); } catch { setSt(null); }
-  }, []);
-
-  useEffect(() => {
-    void load();
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [load]);
-
-  const connect = () => {
-    window.open(googleAuthStartUrl(), "_blank", "noopener,noreferrer");
-    setNote("別タブでGoogleにログイン→許可してください。完了後この画面は自動更新されます。");
-    // Poll for connection for ~90s.
-    let n = 0;
-    if (pollRef.current) clearInterval(pollRef.current);
-    pollRef.current = setInterval(async () => {
-      n += 1;
-      try {
-        const s = await googleStatus();
-        setSt(s);
-        if (s.connected || n > 36) {
-          if (pollRef.current) clearInterval(pollRef.current);
-          if (s.connected) setNote("✓ Google連携が完了しました");
-        }
-      } catch { /* keep polling */ }
-    }, 2500);
-  };
-
-  const disconnect = async () => {
-    if (!window.confirm("Google連携を解除しますか？")) return;
-    await googleDisconnect();
-    setNote(null);
-    void load();
-  };
-
-  const connected = st?.connected;
-  const configured = st?.configured;
-
-  return (
-    <div className="mb-4 rounded-forge border border-panel p-3">
-      <div className="mb-2 flex items-center justify-between">
-        <span className="text-[10px] tracking-[0.2em] text-muted label-mono">GOOGLE 連携（スプレッドシート / ドキュメント）</span>
-        <span className="text-[9px] tracking-[0.1em] label-mono" style={{ color: connected ? "#60d394" : "#ffd060" }}>
-          ● {connected ? "接続済み" : configured ? "未接続" : "未設定"}
-        </span>
-      </div>
-
-      {!configured ? (
-        <p className="text-[10px] leading-relaxed text-muted">
-          先に KEYCHAIN で <b className="text-fg">GOOGLE_CLIENT_ID</b> と <b className="text-fg">GOOGLE_CLIENT_SECRET</b> を設定してください（各欄の「?」に手順）。
-        </p>
-      ) : connected ? (
-        <div className="flex items-center gap-2">
-          <p className="flex-1 text-[11px] leading-relaxed text-fg">
-            エージェントが Google スプレッドシート / ドキュメントを作成できます。
-          </p>
-          <button type="button" onClick={() => void disconnect()}
-            className="shrink-0 rounded-forge border border-[#ff6b6b44] px-3 py-1.5 text-[10px] tracking-[0.12em] text-[#ff8888] label-mono">解除</button>
-        </div>
-      ) : (
-        <button type="button" onClick={connect}
-          className="w-full rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] py-2 text-[11px] tracking-[0.16em] text-fg-strong shadow-glow transition hover:shadow-glow-strong label-mono">
-          Googleに接続する ↗
-        </button>
-      )}
-      {note && <p className="mt-2 text-[10px] leading-relaxed" style={{ color: note.startsWith("✓") ? "#60d394" : "var(--muted)" }}>{note}</p>}
     </div>
   );
 }
@@ -415,8 +340,9 @@ function DbPanel() {
         </>
       ) : (
         <p className="text-[10px] leading-relaxed text-muted">
-          KEYCHAIN に <b className="text-fg">SUPABASE_DB_URL</b>（postgresql://… 接続文字列）を設定すると、
-          ここからワンクリックでテーブルを自動作成できます（各欄の「?」に手順）。未設定でもメモリ動作します。
+          <b className="text-fg">SUPABASE_DB_URL</b>（postgresql://… 接続文字列）を、この画面の下の
+          「上級者向け：キーを名前で直接編集する」かサーバーの環境変数に設定すると、
+          ここからワンクリックでテーブルを自動作成できます。未設定でもメモリ動作します。
         </p>
       )}
       {note && <p className="mt-2 text-[10px] leading-relaxed" style={{ color: note.startsWith("✓") ? "#60d394" : "#ff9b9b" }}>{note}</p>}

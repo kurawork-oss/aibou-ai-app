@@ -7,9 +7,10 @@
  * Views (13): HOME / CHAT / ME / CODE / STUDIO / SNS / CAPTURE / VAULT / TASKS /
  *   INCOME / AUTO / BOARD / ARCHIVE — default is CHAT.
  * (STUDIO hosts the former FORGE as a tab, plus the LP/HP builder.)
- * Navigation is a Google-apps-style waffle "ModeLauncher" popover (top-right),
- * not a bottom bar. CHAT goes extra-wide with its history in the far-left
- * margin; other modes use the full width with their own centring.
+ * Navigation is 実行 / 管理 (lib/shell.ts): the bottom bar on phones, the same
+ * two buttons in the header on wide screens. 管理 holds 今日・ボード・タスク・
+ * ファイル and 「もっと」 for the rest. CHAT goes extra-wide with its history in
+ * the far-left margin; other modes use the full width with their own centring.
  */
 
 import {
@@ -23,7 +24,7 @@ import dynamic from "next/dynamic";
    「開いてから使えるまで」に足される（実測で 900ms → 1666ms に伸びた）。 */
 import BootScreen from "@/components/BootScreen";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { syncOnBoot } from "@/lib/memorySync";
 import { CORE_TYPES, readCoreType, setCoreType, type CoreType } from "@/lib/coreType";
 import NeedsBackend from "@/components/NeedsBackend";
@@ -53,6 +54,7 @@ const HfModels = lazy(() => import("@/components/HfModels"));
 const AppearanceSettings = lazy(() => import("@/components/AppearanceSettings"));
 const PushSettings = lazy(() => import("@/components/PushSettings"));
 const AlwaysAllowSettings = lazy(() => import("@/components/AlwaysAllowSettings"));
+const ApprovalSetting = lazy(() => import("@/components/ApprovalSetting"));
 const MemorySettings = lazy(() => import("@/components/MemorySettings"));
 const FeaturePacks = lazy(() => import("@/components/FeaturePacks"));
 const IntegrationsSettings = lazy(() => import("@/components/IntegrationsSettings"));
@@ -105,6 +107,7 @@ function usePrefetchScreens(ready: boolean): void {
       import("@/components/AppearanceSettings"),
       import("@/components/PushSettings"),
       import("@/components/AlwaysAllowSettings"),
+      import("@/components/ApprovalSetting"),
       import("@/components/MemorySettings"),
       import("@/components/FeaturePacks"),
       import("@/components/IntegrationsSettings"),
@@ -219,17 +222,11 @@ function Hud() {
       .then((p) => {
         setIsOwner(p.is_owner);
         if (p.owner_only_modes.length) {
-          setOwnerOnlyViews(p.owner_only_modes.filter((m): m is View =>
-            NAV_ITEMS.some((n) => n.key === m)));
+          setOwnerOnlyViews(p.owner_only_modes.filter((m): m is View => isView(m)));
         }
       })
       .catch(() => setIsOwner(true));             // 判定できないときは従来通り
   }, []);
-
-  const visibleNav = useMemo(
-    () => (isOwner === false ? NAV_ITEMS.filter((i) => !ownerOnlyViews.includes(i.key)) : NAV_ITEMS),
-    [isOwner, ownerOnlyViews],
-  );
 
   // 持ち主専用の画面を開いたまま権限が変わった／保存されていた場合に備える
   useEffect(() => {
@@ -366,7 +363,7 @@ function Hud() {
           </div>
           <div className="flex items-center gap-2">
             <Briefing />
-            <ModeLauncher view={view} onChange={setView} items={visibleNav} />
+            <DesktopTabs view={view} onChange={setView} />
             <button
               type="button"
               onClick={() => setFullscreen((f) => !f)}
@@ -492,8 +489,8 @@ function Hud() {
             {loaded && view === "income" && <Centered><Income /></Centered>}
             {loaded && view === "tasks" && <Centered><Tasks /></Centered>}
             {loaded && view === "studio" && <Centered><Workshop /></Centered>}
-            {loaded && view === "autopilot" && <Centered><Autopilot /></Centered>}
-            {loaded && view === "board" && <Centered><Dashboard /></Centered>}
+            {loaded && view === "autopilot" && <Centered><Autopilot isOwner={isOwner} /></Centered>}
+            {loaded && view === "board" && <Centered><Dashboard isOwner={isOwner} /></Centered>}
             {loaded && view === "archive" && <Centered><AppArchive /></Centered>}
             {loaded && view === "extend" && <Centered><Extensions onNavigate={setView} /></Centered>}
             {loaded && view === "guide" && <Centered><Guide /></Centered>}
@@ -532,65 +529,18 @@ const stateLabel = coreStateLabel;
 // 応答が返る前の初期表示に使う控えの一覧（多めに隠す側に倒す）。
 const OWNER_ONLY_VIEWS: View[] = ["income"];
 
-const NAV_ITEMS: { key: View; label: string }[] = [
-  { key: "home", label: "HOME" },
-  { key: "chat", label: "CHAT" },
-  { key: "me", label: "ME" },
-  { key: "code", label: "CODE" },
-  { key: "studio", label: "STUDIO" },
-  { key: "sns", label: "SNS" },
-  { key: "capture", label: "CAPTURE" },
-  { key: "vault", label: "VAULT" },
-  { key: "tasks", label: "TASKS" },
-  { key: "income", label: "INCOME" },
-  { key: "autopilot", label: "AUTO" },
-  { key: "board", label: "BOARD" },
-  { key: "archive", label: "ARCHIVE" },
-  { key: "extend", label: "EXTEND" },
-  { key: "guide", label: "GUIDE" },
-];
 
-/* Silver line-art nav icons (stroke = currentColor → inherits the muted /
-   bright text colour). No coloured emoji — keeps the futuristic monochrome. */
-function NavIcon({ name }: { name: View }) {
+/* 下のナビと上の切り替えの印（線画・currentColor で文字色に合わせる）。
+   以前は15画面ぶんの印があったが、行き先は実行・管理の2つになった。 */
+function NavIcon({ name }: { name: "run" | "manage" }) {
   const p = {
     width: 17, height: 17, viewBox: "0 0 24 24", fill: "none",
     stroke: "currentColor", strokeWidth: 1.6,
     strokeLinecap: "round" as const, strokeLinejoin: "round" as const,
   };
-  switch (name) {
-    case "home":
-      return (<svg {...p}><path d="M3 11l9-7 9 7" /><path d="M5 10v10h14V10" /><path d="M9 20v-6h6v6" /></svg>);
-    case "code":
-      return (<svg {...p}><path d="M8 6l-5 6 5 6" /><path d="M16 6l5 6-5 6" /><path d="M13 4l-2 16" /></svg>);
-    case "me":
-      return (<svg {...p}><path d="M12 20s-7-4.6-9.2-8.8C1.2 8 3 5 6.2 5c2 0 3.3 1 4 2.2C11 6 12.3 5 14.3 5c3.2 0 5 3 3.4 6.2C15.5 15.4 12 20 12 20z" /></svg>);
-    case "chat":
-      return (<svg {...p}><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.7A8.5 8.5 0 1 1 21 11.5z" /></svg>);
-    case "sns":
-      return (<svg {...p}><path d="M4 5h16v11H7l-3 3V5z" /><circle cx="9" cy="10.5" r="1" /><circle cx="12" cy="10.5" r="1" /><circle cx="15" cy="10.5" r="1" /></svg>);
-    case "capture":
-      return (<svg {...p}><rect x="3" y="6" width="13" height="12" rx="2" /><path d="M16 10l5-3v10l-5-3" /><circle cx="8.5" cy="12" r="2.2" /></svg>);
-    case "vault":
-      return (<svg {...p}><rect x="4" y="10" width="16" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg>);
-    case "tasks":
-      return (<svg {...p}><path d="M10 6h10M10 12h10M10 18h10" /><path d="M3.5 6l1.2 1.2L7 5M3.5 12l1.2 1.2L7 11M3.5 18l1.2 1.2L7 17" /></svg>);
-    case "income":
-      return (<svg {...p}><path d="M3 17l5-5 4 4 7-7" /><path d="M16 9h5v5" /></svg>);
-    case "studio":
-      return (<svg {...p}><path d="M12 3l1.9 5.4L19 10l-5.1 1.6L12 17l-1.9-5.4L5 10l5.1-1.6L12 3z" /></svg>);
-    case "autopilot":
-      return (<svg {...p}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>);
-    case "board":
-      return (<svg {...p}><rect x="3" y="4" width="7" height="7" rx="1" /><rect x="14" y="4" width="7" height="4" rx="1" /><rect x="14" y="12" width="7" height="8" rx="1" /><rect x="3" y="15" width="7" height="5" rx="1" /></svg>);
-    case "archive":
-      return (<svg {...p}><path d="M3 7l9-4 9 4-9 4-9-4z" /><path d="M3 12l9 4 9-4M3 17l9 4 9-4" /></svg>);
-    case "extend":
-      // コンセント（差し込む＝つなぐ）。他のアイコンと同じ線画で揃える
-      return (<svg {...p}><path d="M9 3v6M15 3v6" /><path d="M5 9h14v3a7 7 0 0 1-14 0V9z" /><path d="M12 19v2" /></svg>);
-    default:
-      return null;
-  }
+  return name === "run"
+    ? (<svg {...p}><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.7A8.5 8.5 0 1 1 21 11.5z" /></svg>)
+    : (<svg {...p}><path d="M3 11l9-7 9 7" /><path d="M5 10v10h14V10" /><path d="M9 20v-6h6v6" /></svg>);
 }
 
 /** Centres non-fullbleed views so they don't stretch on the wide page. */
@@ -598,17 +548,6 @@ function Centered({ children }: { children: React.ReactNode }) {
   return <div className="mx-auto h-full w-full max-w-5xl">{children}</div>;
 }
 
-function WaffleIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      {[4, 10, 16].flatMap((y) => [4, 10, 16].map((x) => (
-        <circle key={`${x}-${y}`} cx={x + 1} cy={y + 1} r="1.6" />
-      )))}
-    </svg>
-  );
-}
-
-/** Google-apps-style mode launcher: a waffle button → popover grid of modes. */
 /**
  * 下のナビ。「実行」「管理」の2つと、歯車だけ。
  *
@@ -650,23 +589,22 @@ function MobileNav({ view, onChange, onSettings }:
       <div className="mx-auto grid max-w-md grid-cols-3">
         <button
           type="button"
-          onClick={() => onChange(RUN_VIEW as View)}
+          onClick={() => onChange(tabTarget("run", view))}
           aria-current={tab === "run" ? "page" : undefined}
           className="flex min-h-[52px] flex-col items-center justify-center gap-0.5 text-[10px] tracking-[0.06em] label-mono"
           style={{ color: tab === "run" ? "var(--accent)" : "var(--muted)" }}
         >
-          <NavIcon name="chat" />
+          <NavIcon name="run" />
           <span>実行</span>
         </button>
         <button
           type="button"
-          onClick={() => onChange((surfaceOf(view as ShellView)
-            ? view : MANAGE_SURFACES[0].view) as View)}
+          onClick={() => onChange(tabTarget("manage", view))}
           aria-current={tab === "manage" ? "page" : undefined}
           className="flex min-h-[52px] flex-col items-center justify-center gap-0.5 text-[10px] tracking-[0.06em] label-mono"
           style={{ color: tab === "manage" ? "var(--accent)" : "var(--muted)" }}
         >
-          <NavIcon name="home" />
+          <NavIcon name="manage" />
           <span>管理</span>
         </button>
         <button
@@ -748,82 +686,42 @@ function ManageBar({ view, onChange, isOwner, packs }:
   );
 }
 
-function ModeLauncher({ view, onChange, items: navItems }:
-  { view: View; onChange: (v: View) => void; items: { key: View; label: string }[] }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="grid h-8 w-8 place-items-center rounded-lg border border-panel text-muted transition hover:border-[var(--line)] hover:text-fg-strong"
-        aria-label="Modes"
-        title="Modes"
-        aria-expanded={open}
-      >
-        <WaffleIcon />
-      </button>
+/** タブを押したときの行き先（下のナビと上の切り替えで同じにする）。 */
+function tabTarget(key: "run" | "manage", view: View): View {
+  if (key === "run") return RUN_VIEW as View;
+  return (surfaceOf(view as ShellView) ? view : MANAGE_SURFACES[0].view) as View;
+}
 
-      <AnimatePresence>
-        {open && (
-          <>
-            {/* click-away backdrop */}
-            <button
-              type="button"
-              aria-hidden
-              tabIndex={-1}
-              onClick={() => setOpen(false)}
-              className="fixed inset-0 z-40 cursor-default"
-            />
-            {/* Outer owns positioning (absolute); inner owns the glass look.
-                (Keeping glass-silver — which is position:relative — off the
-                positioned element avoids it overriding `absolute`.) */}
-            <motion.nav
-              initial={{ opacity: 0, y: -8, scale: 0.97, rotateX: -16 }}
-              animate={{ opacity: 1, y: 0, scale: 1, rotateX: 0 }}
-              /* 消えるときは**バネを使わない**。
-                  入るときのバネ（stiffness 360 / damping 28）は
-                  臨界（約38）より弱いので揺り戻す。揺れが収まるまで
-                  framer-motion は要素を外さない——実測で、押してから
-                  メニューが消え切るまで**中央値 1769ms**かかっていた。
-                  画面そのものは 6〜61ms で描き終わっているのに、
-                  1.8秒ぶん「重い」と感じていたのはこれ。 */
-              exit={{ opacity: 0, y: -8, scale: 0.97, rotateX: -12,
-                      transition: { duration: 0.12, ease: "easeOut" } }}
-              transition={{ type: "spring", stiffness: 360, damping: 28 }}
-              style={{ transformPerspective: 900 }}
-              className="absolute right-0 top-11 z-50 w-[17rem] origin-top-right"
-            >
-              <div className="glass-silver p-3">
-                <div className="mb-2 px-1 text-[9px] tracking-[0.22em] text-muted label-mono">MODES</div>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {navItems.map((it) => {
-                    const active = it.key === view;
-                    return (
-                      <button
-                        key={it.key}
-                        type="button"
-                        onClick={() => { onChange(it.key); setOpen(false); }}
-                        className="flex h-[4.25rem] flex-col items-center justify-center gap-1.5 rounded-forge border text-[10px] tracking-[0.06em] label-mono transition duration-150 hover:-translate-y-0.5 hover:scale-[1.05]"
-                        style={{
-                          borderColor: active ? "var(--accent)" : "var(--panel-bd)",
-                          color: active ? "var(--fg-strong)" : "var(--muted)",
-                          boxShadow: active ? "0 0 12px var(--glow)" : "none",
-                          background: active ? "var(--btn-bg)" : "rgba(255,255,255,0.02)",
-                        }}
-                      >
-                        <NavIcon name={it.key} />
-                        <span>{it.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </motion.nav>
-          </>
-        )}
-      </AnimatePresence>
-    </div>
+/**
+ * 広い画面の 実行／管理（スマホでは下のナビが同じ役をする）。
+ *
+ * 以前ここには、15の画面を英語の札で並べた「Modes」の一覧があった。
+ * 下のナビ（実行・管理）と管理の中の切り替え（今日・ボード・タスク・
+ * ファイル・もっと）が同じ行き先を日本語で持っていて、**入口が2通り・
+ * 呼び名が2通り**になっていた。しかも Modes のほうは、使っていない
+ * 機能のかたまり（設定で切った物）まで並べていた。入口を1つにする。
+ */
+function DesktopTabs({ view, onChange }: { view: View; onChange: (v: View) => void }) {
+  const tab = tabOf(view as ShellView);
+  return (
+    <nav aria-label="画面の切り替え" className="hidden items-center gap-1 sm:flex">
+      {([["run", "実行"], ["manage", "管理"]] as const).map(([key, label]) => (
+        <button
+          key={key}
+          type="button"
+          onClick={() => onChange(tabTarget(key, view))}
+          aria-current={tab === key ? "page" : undefined}
+          className="flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[10px] tracking-[0.12em] label-mono transition hover:border-[var(--line)]"
+          style={{
+            borderColor: tab === key ? "var(--accent)" : "var(--panel-bd)",
+            color: tab === key ? "var(--fg-strong)" : "var(--muted)",
+          }}
+        >
+          <NavIcon name={key} />
+          <span>{label}</span>
+        </button>
+      ))}
+    </nav>
   );
 }
 
@@ -1139,6 +1037,8 @@ function SettingsPanel({
               <ModelRouter />
               <AiProviderSettings />
               <PushSettings />
+              {/* 確認の出し方は、ここ1か所（以前は会話とHOMEに別々の切り替えがあった） */}
+              <ApprovalSetting />
               <AlwaysAllowSettings />
             </>
           )}
@@ -1395,8 +1295,8 @@ function SettingsPanel({
                   </p>
                   <p className="mt-1.5 text-[11px] leading-relaxed text-fg">
                     これは<b>あなたのデータベースの接続とは別</b>です。自分のデータを保存するには、
-                    KEYCHAIN の「自分のデータベース」を繋いでください
-                    （繋ぐまでは保存されません）。手順は GUIDE に載っています。
+                    「連携」の「自分のデータベース」を繋いでください
+                    （繋ぐまでは保存されません）。手順は「説明書」に載っています。
                   </p>
                 </div>
               ) : process.env.NEXT_PUBLIC_API_URL ? (
@@ -1416,9 +1316,9 @@ function SettingsPanel({
                   <ol className="ml-4 list-decimal space-y-1.5 text-[11px] leading-relaxed text-fg marker:text-muted">
                     <li><b>バックエンドをデプロイ</b>：<code>api/</code> を Render（推奨・付属の <code>render.yaml</code> でほぼワンクリック）か Google Cloud Run へ。<code>api/Dockerfile</code> 同梱済み。</li>
                     <li><b>Vercelに登録</b>：Settings → Environment Variables に <code>NEXT_PUBLIC_API_URL</code> ＝ 発行されたURL を追加 → <b>Redeploy</b>。</li>
-                    <li><b>再読込</b>：上部が <b>LINK ACTIVE</b> になったら KEYCHAIN で <b>Gemini API Key</b> を SAVE（自動でサーバーへ同期・即有効）。</li>
+                    <li><b>再読込</b>：上部が <b>LINK ACTIVE</b> になったら 「連携」で <b>Gemini</b> の API キーを保存（自動でサーバーへ同期・即有効）。</li>
                   </ol>
-                  <p className="mt-2 text-[10px] text-muted">詳細は <code>BACKEND_CONNECT.md</code>。CORSは既定で全許可、GeminiキーはKEYCHAIN同期でOK（サーバーのenv設定は不要）。</p>
+                  <p className="mt-2 text-[10px] text-muted">詳細は <code>BACKEND_CONNECT.md</code>。CORSは既定で全許可、Geminiキーは「連携」で保存すればOK（サーバーのenv設定は不要）。</p>
                 </div>
               )}
 
@@ -1438,7 +1338,7 @@ function SettingsPanel({
               <button
                 type="button"
                 onClick={() => {
-                  if (!window.confirm("端末内の全データを消去します：チャット履歴・アプリアーカイブ・KEYCHAINの暗号化ボルト（オフライン保存分）・各種設定。\n本当に実行しますか？（元に戻せません）")) return;
+                  if (!window.confirm("端末内の全データを消去します：チャット履歴・アプリアーカイブ・鍵の暗号化下書き（オフライン保存分）・各種設定。\n本当に実行しますか？（元に戻せません）")) return;
                   try { localStorage.clear(); } catch { /* ignore */ }
                   try { sessionStorage.clear(); } catch { /* ignore */ }
                   window.location.reload();

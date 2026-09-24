@@ -134,7 +134,7 @@ TOOL_DOCS: Dict[str, str] = {
     "recipe_delete":
         '保存した手順を消す / params: { "name": "朝のケース確認" }',
     "generate_image":
-        'プロンプトから画像を生成する（HOMEの生成物に保存される） / params: { "prompt": "夕焼けの富士山、油絵風" }',
+        'プロンプトから画像を生成する（「ファイル」の生成物に保存される） / params: { "prompt": "夕焼けの富士山、油絵風" }',
     "draw_diagram":
         '説明を図にして見せる。手順・関係・構成のように、言葉で並べると長くなるものに使う。'
         'sourceは mermaid の記法（flowchart / sequenceDiagram / mindmap など）。'
@@ -396,7 +396,7 @@ def _do_board_add_note(params: dict) -> str:
     if isinstance(res, dict) and res.get("error"):
         return f"付箋の追加に失敗しました：{res['error']}"
     where = f"「{res.get('board')}」" if res.get("board") else "ホワイトボード"
-    return f"{where}に付箋を追加しました（現在 {res.get('count')}枚）。BOARDモードで確認できます。"
+    return f"{where}に付箋を追加しました（現在 {res.get('count')}枚）。管理 →「ボード」で確認できます。"
 
 
 def _do_watch_report(params: dict) -> str:
@@ -1221,7 +1221,7 @@ def _do_web_read(params: dict) -> str:
 
 
 def _do_generate_image(params: dict) -> str:
-    """プロンプトから画像を生成して保存（HOMEの生成物で閲覧）。"""
+    """プロンプトから画像を生成して保存（「ファイル」の生成物で閲覧）。"""
     prompt = (params.get("prompt") or "").strip()
     if not prompt:
         return "画像の指示(prompt)が空です。"
@@ -1363,7 +1363,7 @@ def _do_notion_add(params: dict) -> str:
         return ("Notion未設定です。「連携」から「Notionと連携する」を押すと繋がります"
                 "（手で入れる場合は NOTION_TOKEN に保存）。")
     if not parent:
-        return "NOTION_PARENT_ID（追記先のページ or データベースID）が未設定です。KEYCHAIN で設定してください。"
+        return "NOTION_PARENT_ID（追記先のページ or データベースID）が未設定です。「連携」の Notion で設定してください。"
 
     headers = {
         "Authorization": f"Bearer {token}",
@@ -1415,7 +1415,7 @@ def _do_create_automation(params: dict) -> str:
     if isinstance(flow, dict) and flow.get("error"):
         return f"自動化の作成に失敗しました：{flow['error']}"
     n = len(flow.get("steps") or [])
-    return f"自動化フロー「{name}」を作成しました（{n}ステップ）。BOARDモードから実行・編集できます。"
+    return f"自動化フロー「{name}」を作成しました（{n}ステップ）。管理 →「ボード」から実行・編集できます。"
 
 
 def _do_run_automation(params: dict) -> str:
@@ -1450,7 +1450,7 @@ def _do_create_mission(params: dict) -> str:
     if isinstance(m, dict) and m.get("error"):
         return f"ミッションの作成に失敗しました：{m['error']}"
     n = len(m.get("steps") or [])
-    return f"オートパイロットのミッション「{goal}」を作成しました（{n}ステップに分解）。AUTOモードで進められます。"
+    return f"オートパイロットのミッション「{goal}」を作成しました（{n}ステップに分解）。管理 → もっと →「ゴール」で進められます。"
 
 
 # ツール名 → 実装関数のディスパッチ表。

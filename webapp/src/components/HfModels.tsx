@@ -178,7 +178,7 @@ export default function HfModels() {
 
       {!st.token_ready && (
         <div className="mb-3 rounded-forge border border-panel p-2.5 text-[10px] leading-relaxed text-[#ffd060]">
-          KEYCHAIN の <span className="label-mono">HUGGINGFACE_TOKEN</span> を設定すると使えます。
+          「連携」で HuggingFace（<span className="label-mono">HUGGINGFACE_TOKEN</span>）を設定すると使えます。
           huggingface.co → Settings → Access Tokens で作れます（読み取り権限でOK）。
         </div>
       )}
@@ -246,7 +246,7 @@ export default function HfModels() {
         {models.length === 0 && !openAdd && (
           <p className="text-[10px] leading-relaxed text-muted">
             まだ登録がありません。画像生成（FLUX等）や文字起こし（Whisper等）を追加すると、
-            IMAGE STUDIO や CAPTURE でそのまま使えます。
+            つくる › 素材 › IMAGE や 録音 でそのまま使えます。
           </p>
         )}
 
@@ -420,7 +420,7 @@ export default function HfModels() {
             </select>
             {models.some((m) => m.task === "asr") && (
               <p className="mb-1.5 text-[11px] text-muted">
-                ※ 文字起こしは音声が必要なので、CAPTUREモードで試してください
+                ※ 文字起こしは音声が必要なので、録音の画面で試してください
               </p>
             )}
             <textarea

@@ -15,7 +15,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  API_URL, connectDisconnect, connectStartUrl, connectStatus, deleteKey, googleStatus,
+  API_URL, connectDisconnect, openConnect, connectStatus, deleteKey, googleStatus,
   keyOrphans, keyRescue, listKeys, myDatabase, profileGet, rulesSync, sendNotify, setKey,
   type ApiKeyInfo, type ConnectProvider, type GoogleStatus, type OrphanKey,
 } from "@/lib/api";
@@ -104,7 +104,7 @@ export default function Extensions({ onNavigate }: { onNavigate?: (v: "guide") =
         </div>
         <p className="text-[11px] leading-relaxed text-fg">
           使いたいサービスを選んでつなぐと、その分だけできることが増えます。
-          <span className="text-muted">つながなくても、CHATと基本の機能は動きます。</span>
+          <span className="text-muted">つながなくても、会話と基本の機能は動きます。</span>
         </p>
       </div>
 
@@ -476,11 +476,13 @@ function Detail({ ext, connected, google, provider, info, onClose, onChanged }: 
                     </button>
                   </div>
                 ) : (
-                  <a href={connectStartUrl(provider.key)} target="_blank" rel="noreferrer"
+                  /* ただのリンクにしない。新しいタブにはログイン情報が載らず、
+                     ログインを求める構成では入口で断られる（openConnect 参照） */
+                  <button type="button" onClick={() => void openConnect(provider.key)}
                      className="inline-flex min-h-[44px] items-center rounded-forge border px-3.5 text-[12px] label-mono"
                      style={{ borderColor: "var(--accent)", color: "var(--fg-strong)", background: "var(--btn-bg)" }}>
                     {provider.label}と連携する
-                  </a>
+                  </button>
                 )}
                 {provider.note && !provider.connected && (
                   <p className="mt-1.5 text-[11px] leading-relaxed text-muted">{provider.note}</p>

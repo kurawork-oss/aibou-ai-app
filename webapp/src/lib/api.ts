@@ -494,22 +494,6 @@ export interface CodeGenerateResult {
   error?: string;
 }
 
-/** POST /code/generate — run the coding agent over the workspace. */
-export async function codeGenerate(
-  instruction: string,
-  files: CodeFile[],
-  history: ChatTurn[] = [],
-): Promise<CodeGenerateResult> {
-  const res = await fetch(`${requireApiUrl()}/code/generate`, {
-    method: "POST",
-    headers: authHeaders({ "Content-Type": "application/json" }),
-    body: JSON.stringify({ instruction, files, history }),
-  });
-  const data = (await res.json().catch(() => ({}))) as CodeGenerateResult;
-  if (!res.ok && !data.error) throw new Error(`Code failed (${res.status})`);
-  return data;
-}
-
 /** GET /code/scaffold — starter workspace (web | python | empty). */
 export interface CodeProgress {
   phase: string;
@@ -1058,10 +1042,6 @@ export interface ScheduleItem {
   automation_id?: string;   // 指定時は BOARD の自動化を回す
 }
 
-export async function schedulesList(): Promise<ScheduleItem[]> {
-  return (await schedulesWithHealth()).items;
-}
-
 /** 見回りが生きているか。無料プランのサーバーは無操作で寝るので、
  *  時刻になっても発火しないことがある。登録できたのに何も来ないのが
  *  いちばん困るので、状態を一緒に取る。 */
@@ -1127,18 +1107,6 @@ export async function googleStatus(): Promise<GoogleStatus> {
   return (await res.json()) as GoogleStatus;
 }
 
-/** URL that starts the Google OAuth consent flow (open in a new tab). */
-export function googleAuthStartUrl(): string {
-  return `${requireApiUrl()}/google/auth/start`;
-}
-
-/** POST /google/disconnect — forget the stored refresh token. */
-export async function googleDisconnect(): Promise<boolean> {
-  const res = await fetch(`${requireApiUrl()}/google/disconnect`, { method: "POST", headers: authHeaders() });
-  const data = (await res.json().catch(() => ({ ok: false }))) as { ok?: boolean };
-  return Boolean(data.ok);
-}
-
 /* ---------------- 押すだけの連携（OAuth） ---------------- */
 /**
  * 連携先1つぶんの状態。
@@ -1176,6 +1144,46 @@ export function connectStartUrl(provider: string): string {
   return provider === "google"
     ? `${requireApiUrl()}/google/auth/start`
     : `${requireApiUrl()}/connect/${provider}/start`;
+}
+
+/** 連携の入口の道（/connect/notion/start・/google/auth/start）から、提供元の名前。 */
+export function providerOfConnectPath(path: string): string {
+  if ((path || "").startsWith("/google/auth/start")) return "google";
+  const m = /^\/connect\/([a-z0-9_-]+)\/start/.exec(path || "");
+  return m ? m[1] : "";
+}
+
+/**
+ * 連携の入口を、新しいタブで開く。**「連携」ボタンは全部これを通す。**
+ *
+ * ただのリンク（`<a href>`）で開くと、画面が普段付けているログイン情報が
+ * 新しいタブには載らない。ログインを求める構成では入口が 401 になり、
+ * 連携を始められなかった（通っても「誰が始めたか」が空になる）。
+ * 先にログイン情報つきで使い捨ての札をもらい、札を付けて開く（api/oauth.py）。
+ *
+ * タブは**押された瞬間に**開いておき、札が来てから行き先を入れる。札を
+ * 待ってから開くと、押した操作から離れるため、ブラウザに「勝手に開いた窓」
+ * として止められる。
+ */
+export async function openConnect(provider: string): Promise<void> {
+  const tab = typeof window !== "undefined" ? window.open("about:blank", "_blank") : null;
+  let url = connectStartUrl(provider);
+  try {
+    const res = await fetch(`${requireApiUrl()}/connect/${encodeURIComponent(provider)}/ticket`, {
+      method: "POST", headers: authHeaders(),
+    });
+    const d = (await res.json().catch(() => ({}))) as { ticket?: string };
+    // 札が空＝署名できない構成（1人運用）。そのときは入口がそのまま通る
+    if (res.ok && d.ticket) url += `?ticket=${encodeURIComponent(d.ticket)}`;
+  } catch {
+    /* 札が取れなくても、ログインを求めない構成なら入口はそのまま通る */
+  }
+  if (tab) {
+    try { tab.opener = null; } catch { /* 開いた先から、この画面を触らせない */ }
+    tab.location.href = url;
+  } else {
+    window.location.href = url;
+  }
 }
 
 /** POST /connect/{provider}/disconnect — 保存したトークンを忘れる。 */
@@ -2321,17 +2329,6 @@ export async function agendaList(): Promise<AgendaEvent[]> {
   return data.items ?? [];
 }
 
-export async function agendaAdd(title: string, date = "", time = "", note = ""): Promise<AgendaEvent> {
-  const res = await fetch(`${requireApiUrl()}/agenda`, {
-    method: "POST",
-    headers: authHeaders({ "Content-Type": "application/json" }),
-    body: JSON.stringify({ title, date, time, note }),
-  });
-  const data = (await res.json().catch(() => ({}))) as AgendaEvent & { error?: string };
-  if (!res.ok) throw new Error(reason(data) ?? `Add event failed (${res.status})`);
-  return data;
-}
-
 /** Natural-language → parsed event ("明日15時に歯医者"). */
 export async function agendaParse(text: string, today = ""): Promise<AgendaEvent> {
   const res = await fetch(`${requireApiUrl()}/agenda/parse`, {
@@ -2649,15 +2646,6 @@ export interface RuleInfo {
   applies: "always" | "tool" | "mode" | "topic";
   targets: string[];
   preview: string;
-}
-
-/** GET /rules — 取り込み済みのルール。GitHubには触らない（保存済みを読むだけ）。 */
-export async function rulesStatus(): Promise<{ repo: string; count: number; items: RuleInfo[] }> {
-  const res = await fetch(`${requireApiUrl()}/rules`, { headers: authHeaders(), cache: "no-store" });
-  if (!res.ok) return { repo: "", count: 0, items: [] };
-  const d = (await res.json().catch(() => ({}))) as
-    { repo?: string; count?: number; items?: RuleInfo[] };
-  return { repo: d.repo ?? "", count: asNumber(d.count), items: asArray<RuleInfo>(d.items) };
 }
 
 /**
@@ -3123,7 +3111,7 @@ export interface GuideSection {
 /** 全モードの説明書1件（実画面つき）。 */
 export interface GuideMode {
   id: string;
-  label: string;      // 画面上の名前（CHAT など）
+  label: string;      // 画面上の名前（実行・今日 など）
   name: string;       // 日本語の呼び名
   image: string;      // /guide/xxx.webp（実際に撮った初期画面）
   what: string;
@@ -3321,17 +3309,6 @@ export async function xPost(text: string): Promise<{ ok?: boolean; id?: string; 
     body: JSON.stringify({ text }),
   });
   return failable<{ ok?: boolean; id?: string; url?: string; error?: string }>(res, "投稿できませんでした");
-}
-
-/** Xの数え方に合わせた長さ（日本語は1文字＝2）。画面で事前に出すため。 */
-export function xWeightedLength(text: string): number {
-  let n = 0;
-  for (const ch of text || "") {
-    const o = ch.codePointAt(0) ?? 0;
-    n += (o <= 0x10ff || (o >= 0x2000 && o <= 0x200a)
-      || (o >= 0x2028 && o <= 0x202f) || (o >= 0x2060 && o <= 0x206f)) ? 1 : 2;
-  }
-  return n;
 }
 
 /* ---------------- Conversations (CHAT history on your own DB) ---------------- */

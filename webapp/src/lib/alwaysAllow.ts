@@ -76,10 +76,6 @@ export function allowed(): string[] {
   return read().map((r) => r.tool);
 }
 
-export function isAllowed(tool: string): boolean {
-  return read().some((r) => r.tool === tool);
-}
-
 /** 1つ許す。 */
 export function allow(tool: string, label?: string): void {
   const name = (tool || "").trim();

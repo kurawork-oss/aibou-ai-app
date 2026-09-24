@@ -21,7 +21,7 @@ const LS_VAULT = "forge_vault_v1";
 const KNOWN_KEYS: { name: string; label: string; hint: string }[] = [
   { name: "GEMINI_API_KEY", label: "Gemini API Key", hint: "コアAI（必須） · Google AI Studioで取得" },
   { name: "HUGGINGFACE_TOKEN", label: "HuggingFace Token", hint: "無料の代替AI（学習されない）" },
-  { name: "GITHUB_TOKEN", label: "GitHub Token", hint: "CODEモードのリポジトリ連携" },
+  { name: "GITHUB_TOKEN", label: "GitHub Token", hint: "コードの画面のリポジトリ連携" },
   { name: "NOTION_TOKEN", label: "Notion Token", hint: "エージェントがNotionにメモを追記" },
   { name: "NOTION_PARENT_ID", label: "Notion 追記先ID", hint: "メモを追加するページ/DBのID" },
   { name: "GOOGLE_CLIENT_ID", label: "Google Client ID", hint: "Google連携（スプレッドシート/ドキュメント/カレンダー）" },
@@ -242,7 +242,7 @@ function OfflineVault() {
         <span className="text-[10px] tracking-[0.16em] text-muted label-mono">BACKEND: ○ OFFLINE</span>
         <p className="mt-1 text-[10px] leading-relaxed text-muted">
           いまはバックエンド未接続のため、ここで入れたキーは<b className="text-fg">この端末に暗号化して下書き保存</b>されます。
-          バックエンドを接続（設定 →「しらべる」）すると、KEYCHAINは<b className="text-fg">Supabaseに暗号化保存</b>する画面に切り替わり、
+          バックエンドを接続（設定 →「しらべる」）すると、ここに入れた鍵は<b className="text-fg">Supabaseに暗号化保存</b>する画面に切り替わり、
           下書きの取り込みができます。
         </p>
         {note && <p className="mt-1 text-[10px] text-[#60d394]">{note}</p>}
@@ -344,7 +344,7 @@ function SupabaseVault() {
       setError(/\(401\)|\(403\)/.test(msg)
         ? "サーバーがログインを確認できませんでした。一度サインアウトして入り直すか、"
           + "管理者にサーバー側の認証設定（SUPABASE_JWT_SECRET）を確認してもらってください。"
-        : "バックエンドに接続できません。DIAGNOSTICS で BACKEND を確認してください。");
+        : "バックエンドに接続できません。設定 →「しらべる」で接続状況を確認してください。");
     } finally {
       setLoading(false);
     }
@@ -419,7 +419,7 @@ function SupabaseVault() {
 
       {loading ? (
         <motion.div className="panel p-4 text-center text-[11px] tracking-[0.2em] text-muted label-mono" animate={{ opacity: [0.4, 1, 0.4] }} transition={{ duration: 1.4, repeat: Infinity }}>
-          ◈ LOADING KEYCHAIN…
+          ◈ 鍵を読み込み中…
         </motion.div>
       ) : (
         <div className="flex flex-col gap-2">

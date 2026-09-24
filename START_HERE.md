@@ -89,7 +89,7 @@ Render → 該当サービス → **Environment** に:
 | やりたいこと | やること |
 | --- | --- |
 | メール＋パスワードで**ログイン** | Vercelに `NEXT_PUBLIC_SUPABASE_ANON_KEY`（anon public）を追加 → Redeploy。Supabase → Authentication → Email を有効化 |
-| 副業自動化を**毎晩自動**で | GitHub Actions の cron で `/income/enqueue` を定期実行（INCOMEモードの案内参照） |
+| 副業自動化を**毎晩自動**で | GitHub Actions の cron で `/income/enqueue` を定期実行（副業の画面の案内参照） |
 | APIを**他人に叩かれない**ように | Renderに `APP_TOKEN`、Vercelに同じ値の `NEXT_PUBLIC_API_TOKEN` |
 | 常時**速く** | Render無料はスリープあり。Cloud Run か Render有料へ（`BACKEND_CONNECT.md` 参照） |
 

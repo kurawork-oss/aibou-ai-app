@@ -8,6 +8,7 @@
 
 import { test, expect, type Page } from "@playwright/test";
 import { DEFAULT_HIDDEN, DEFAULT_ORDER } from "../src/lib/homeLayout";
+import { goScreen, waitForHud } from "./nav";
 
 /* ── helpers ────────────────────────────────────────────────────── */
 async function enterApp(page: Page) {
@@ -22,14 +23,13 @@ async function enterApp(page: Page) {
     offlineBtn.waitFor({ timeout: 8_000 }).then(() => offlineBtn.click()),
     hudH1.waitFor({ timeout: 10_000 }),
   ]);
-  // HUD is ready once the Modes launcher button is present.
-  await page.getByLabel("Modes", { exact: true }).waitFor({ timeout: 10_000 });
+  // HUD is ready once the 実行／管理 switch is present.
+  await waitForHud(page);
 }
 
-/** Open the Google-apps-style mode launcher and pick a mode by label. */
+/** 画面を開く（呼び名は以前の札。今の入口への置き換えは tests/nav.ts）。 */
 async function goMode(page: Page, label: string) {
-  await page.getByLabel("Modes", { exact: true }).click();
-  await page.locator("nav").filter({ hasText: "MODES" }).getByText(label, { exact: true }).click();
+  await goScreen(page, label);
 }
 
 /** STUDIO mode merges FORGE (生成) + AI STUDIO; open a tab. */
@@ -72,28 +72,42 @@ test("HUD renders after entering offline mode", async ({ page }) => {
   await expect(page.getByRole("heading", { name: /THE FORGE OS/i }).first()).toBeVisible();
 });
 
-test("Mode launcher shows all 10 modes", async ({ page }) => {
+/* 右上の「Modes」（15画面を英語の札で並べた一覧）は外した。下のナビ・管理の
+   切り替えと同じ行き先を別の呼び名で持っていて、入口が2通りになっていた。 */
+test("画面の入口は1つ（Modes の一覧はもう無い）", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
-  await page.getByLabel("Modes", { exact: true }).click();
-  const nav = page.locator("nav").filter({ hasText: "MODES" });
-  for (const label of ["HOME", "CHAT", "CAPTURE", "VAULT", "INCOME", "TASKS", "STUDIO", "BOARD", "ARCHIVE"]) {
-    await expect(nav.getByText(label, { exact: true })).toBeVisible();
-  }
-  await expect(nav.getByText("AUTO", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Modes", { exact: true })).toHaveCount(0);
 });
 
-test("Mode panel opens downward, not upward", async ({ page }) => {
+test("管理の中から、全部の画面へ行ける", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
-  const btn = page.getByLabel("Modes", { exact: true });
-  const bb = await btn.boundingBox();
-  await btn.click();
-  const panel = page.locator("nav").filter({ hasText: "MODES" });
-  await expect(panel).toBeVisible({ timeout: 5_000 });
-  const pb = await panel.boundingBox();
-  // The panel's top must sit below the button's top (it opens downward).
-  expect(pb!.y).toBeGreaterThanOrEqual(bb!.y);
+  await page.getByRole("navigation", { name: "Mobile navigation" })
+    .getByRole("button", { name: "管理", exact: true }).click();
+  for (const label of ["今日", "ボード", "タスク", "ファイル"]) {
+    await expect(page.getByRole("button", { name: label, exact: true })).toBeVisible();
+  }
+  await page.getByRole("button", { name: /もっと/ }).click();
+  for (const label of ["つくる", "コード", "SNS", "録音", "資料", "きろく", "ゴール", "副業", "連携", "説明書"]) {
+    await expect(page.getByRole("button", { name: new RegExp(`^${label}(\\s|$)`) })).toBeVisible();
+  }
+});
+
+test.describe("広い画面", () => {
+  test.use({ viewport: { width: 1280, height: 900 } });
+
+  test("下のナビが無い幅でも、実行と管理を行き来できる", async ({ page }) => {
+    await page.goto("/");
+    await enterApp(page);
+    const tabs = page.getByRole("navigation", { name: "画面の切り替え" });
+    await expect(tabs).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Mobile navigation" })).toBeHidden();
+    await tabs.getByRole("button", { name: "管理", exact: true }).click();
+    await expect(page.getByRole("button", { name: "今日", exact: true })).toBeVisible();
+    await tabs.getByRole("button", { name: "実行", exact: true }).click();
+    await expect(page.locator("textarea").first()).toBeVisible();
+  });
 });
 
 test("CHAT is the default view; HOME shows the cockpit", async ({ page }) => {
@@ -297,7 +311,7 @@ test("GUIDE mode opens and shows how to start even without a backend", async ({ 
   await expect(page.getByRole("tab")).toHaveCount(4);
 });
 
-test("GUIDE is reachable from the mode launcher and survives a reload", async ({ page }) => {
+test("説明書は 管理 →「もっと」から開けて、再読み込みしても残る", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
   await goMode(page, "GUIDE");
@@ -473,7 +487,7 @@ test("Settings close button works", async ({ page }) => {
   await expect(page.getByText("CORE SETTINGS")).not.toBeVisible({ timeout: 3_000 });
 });
 
-/* ── Navigation (via mode launcher) ─────────────────────────────── */
+/* ── Navigation（管理 →「もっと」から） ───────────────────────────── */
 test("STUDIO のタブは「何を作るか」で並ぶ（アプリの入口は1つだけ）", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
@@ -604,18 +618,19 @@ test("CHAT can switch between conversation and agent (司令塔) mode", async ({
   await enterApp(page);
   // 既定は会話モード（エージェントの説明は出ていない）
   await expect(page.getByRole("button", { name: "💬 会話" })).toBeVisible({ timeout: 5_000 });
-  await expect(page.getByText(/30種の道具/)).toBeHidden();
+  await expect(page.getByText(/などの道具を使って実際に動きます/)).toBeHidden();
 
-  // 司令塔モードにすると、何ができるかと承認の設定が出る
+  // 司令塔モードにすると、何ができるかが出る。確認の出し方の切り替えは
+  // ここには置かない（設定 →「基本」の1か所。会話とHOMEで別々にあった）
   await page.getByRole("button", { name: /実行（司令塔）/ }).click();
-  await expect(page.getByText(/30種の道具/)).toBeVisible({ timeout: 5_000 });
-  await expect(page.getByText("取り消せない操作は確認する")).toBeVisible();
+  await expect(page.getByText(/などの道具を使って実際に動きます/)).toBeVisible({ timeout: 5_000 });
+  await expect(page.getByText("取り消せない操作は確認する")).toHaveCount(0);
   await expect(page.getByPlaceholder(/やってほしいことを指示/)).toBeVisible();
 
   // 選んだモードは記憶される
   await page.reload();
   await enterApp(page);
-  await expect(page.getByText(/30種の道具/)).toBeVisible({ timeout: 8_000 });
+  await expect(page.getByText(/などの道具を使って実際に動きます/)).toBeVisible({ timeout: 8_000 });
 });
 
 /* ── ⑨ BOARD: multi-select + edge styles (works offline) ──
@@ -628,9 +643,6 @@ test.describe("board on desktop", () => {
     await page.goto("/");
     await enterApp(page);
     await goMode(page, "BOARD");
-    // モード選択パネルの全面backdropが残っていると最初のクリックを吸われるので、
-    // 閉じきるのを待ってからキャンバスを触る。
-    await expect(page.locator("nav").filter({ hasText: "MODES" })).toBeHidden({ timeout: 8_000 });
     const canvas = page.locator("[data-board-canvas]");
     await expect(canvas).toBeVisible({ timeout: 8_000 });
     // ボードが読み込み終わるまで待つ（未読込だとダブルクリックが空振りする）。
@@ -724,8 +736,8 @@ test("AUTO mode explains what AUTOPILOT is and when to use the others", async ({
   await expect(page.getByText("オートパイロット とは")).toBeVisible({ timeout: 5_000 });
   await expect(page.getByText(/ゴールだけ決めて/)).toBeVisible();
   // 3つの「手順を並べる」機能の使い分けを示す（同じ説明を3画面で共有している）
-  await expect(page.getByText(/STUDIO › AI STUDIO の ?ワークフロー/)).toBeVisible();
-  await expect(page.getByText(/BOARD › AUTOMATION の ?自動化/)).toBeVisible();
+  await expect(page.getByText(/つくる › AI STUDIO の ?ワークフロー/)).toBeVisible();
+  await expect(page.getByText(/ボード › AUTOMATION の ?自動化/)).toBeVisible();
 });
 
 /* ── ⑤ AI STUDIO: per-step AI / knowledge / condition (ui-r41) ── */
@@ -826,7 +838,9 @@ test("ARCHIVE renders archive UI", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
   await goMode(page, "ARCHIVE");
-  await expect(page.getByText(/ARCHIVE|NO APPS/i).first()).toBeVisible({ timeout: 5_000 });
+  /* 以前は /ARCHIVE/ で見ていたが、当たっていたのは消えかけの「Modes」の札だった
+     （画面そのものには ARCHIVE の字は無い）。画面の中身で見る。 */
+  await expect(page.getByText("ここまでに作ったアプリが残ります")).toBeVisible({ timeout: 5_000 });
 });
 
 test("AUTO renders autopilot UI", async ({ page }) => {

@@ -109,7 +109,7 @@ def _access_token():
 
 def _err_not_connected() -> dict:
     if not configured():
-        return {"ok": False, "error": "Google未設定です（KEYCHAINでGOOGLE_CLIENT_ID/SECRETを設定）"}
+        return {"ok": False, "error": "Google未設定です（アプリ登録の GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET をサーバーに設定）"}
     return {"ok": False,
             "error": "Google未接続です。「連携」から「Googleと連携する」を押すと繋がります。"}
 

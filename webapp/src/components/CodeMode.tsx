@@ -658,7 +658,7 @@ export default function CodeMode() {
           </div>
           {!ghList && !ghError && (
             <p className="text-[10px] leading-relaxed text-muted">
-              KEYCHAIN に <code className="text-fg">GITHUB_TOKEN</code>（Fine-grained PAT・Contents/Pull requests権限）を保存すると、
+              「連携」で GitHub（<code className="text-fg">GITHUB_TOKEN</code>（Fine-grained PAT・Contents/Pull requests権限）を保存すると、
               リポジトリを選んでそのままAIコーディング → 新ブランチへプッシュ＋PR作成までできます。
             </p>
           )}

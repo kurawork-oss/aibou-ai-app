@@ -272,7 +272,7 @@ function IncomeSetupGuide({ open, onToggle }: { open: boolean; onToggle: () => v
           </GuideStep>
 
           <GuideStep n="5" title="毎日の運用（1日1分）" color="#c5c6c7">
-            <li>朝、この <b>INCOME</b> 画面で「承認待ち」を確認 → <b>✓ 承認</b> / <b>✕ 却下</b></li>
+            <li>朝、この <b>副業</b> の画面で「承認待ち」を確認 → <b>✓ 承認</b> / <b>✕ 却下</b></li>
             <li>上部のKPIで収益・進捗をチェック。これだけで全体が回ります</li>
           </GuideStep>
 

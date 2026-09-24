@@ -495,6 +495,6 @@ def scaffold(kind: str) -> dict:
     if k == "python":
         return {"files": [
             {"path": "main.py", "content": _PY_STARTER, "action": "create"},
-            {"path": "README.md", "content": "# My Project\n\nCODEモードで生成したプロジェクト。\n", "action": "create"},
+            {"path": "README.md", "content": "# My Project\n\nコードの画面で生成したプロジェクト。\n", "action": "create"},
         ]}
     return {"files": []}

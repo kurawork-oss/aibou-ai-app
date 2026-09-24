@@ -287,7 +287,7 @@ export default function Vault() {
       {/* この画面が何をするものかを最初に言う。他のモードと揃える */}
       <div className="panel p-3">
         <div className="mb-1.5 text-[10px] tracking-[0.2em] text-muted label-mono">
-          VAULT とは
+          資料 とは
         </div>
         <p className="text-[11px] leading-relaxed text-fg">
           <span className="text-fg-strong">入れた資料の中身だけを見て答える</span>画面です。

@@ -236,7 +236,7 @@ def push_files(
                     "title": (pr_title or message)[:120],
                     "head": branch,
                     "base": base,
-                    "body": "🤖 THE FORGE OS / CODE モードからのプッシュ",
+                    "body": "🤖 THE FORGE OS（コードの画面）からのプッシュ",
                 },
                 timeout=30,
             )
