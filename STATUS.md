@@ -14,10 +14,12 @@
 
 | 何を | どこで | 本数 |
 |---|---|---|
-| サーバー側の機能ぜんぶ | `api/test_*.py` | 1,585 |
-| 画面（接続なし・ふだんのUI） | `webapp/tests/*.spec.ts` | 609 |
-| 画面（接続あり・繋がっているときだけ動く所） | `webapp/tests/linked/` | 151 |
-| 確認の門（会話・実行・承認ボタン・通知。通した重さを超えない） | `api/test_gate.py` ＋ `webapp/tests/linked/chatGate.spec.ts` | 16 + 6 |
+| サーバー側の機能ぜんぶ | `api/test_*.py` | 1,598 |
+| 画面（接続なし・ふだんのUI） | `webapp/tests/*.spec.ts` | 611 |
+| 画面（接続あり・繋がっているときだけ動く所） | `webapp/tests/linked/` | 156 |
+| 確認の門（会話・実行・承認ボタン・通知。通した重さを超えない） | `api/test_gate.py` ＋ `webapp/tests/linked/chatGate.spec.ts` | 16 + 7 |
+| 連携の入口（ログインを求める構成でも開く・札は1回きり） | `api/test_connect_ticket.py` ＋ `webapp/tests/linked/connect.spec.ts` | 11 + 2 |
+| 無くなった画面の名前で案内しない（画面の文・サーバーの文） | `webapp/tests/oneReason.spec.ts` ＋ `api/test_screen_names.py` | 1 + 2 |
 | 本番の置き場に、流すSQLが全部入っているか | `api/test_deploy_bundle.py` | 3 |
 | 決まった手順（保存・流す・止める・パスワードを入れない） | `api/test_recipes.py` ほか2つ ＋ `webapp/tests/linked/recipes.spec.ts` | 72 + 8 |
 | 操作の記録（入口ごとに残る・確認の有無・本文を残さない） | `api/test_audit_log.py` ＋ `webapp/tests/linked/auditLog.spec.ts` | 21 + 3 |
@@ -46,9 +48,9 @@
 実行:
 
 ```bash
-cd api    && python -m pytest -q      # 1,585
-cd webapp && npx playwright test --project=chromium          # 609（接続なし）
-cd webapp && npx playwright test --project=chromium-linked   # 151（接続あり。上と同時に流さない）
+cd api    && python -m pytest -q      # 1,598
+cd webapp && npx playwright test --project=chromium          # 611（接続なし）
+cd webapp && npx playwright test --project=chromium-linked   # 156（接続あり。上と同時に流さない）
 cd webapp && npx tsc --noEmit && npm run lint
 ```
 

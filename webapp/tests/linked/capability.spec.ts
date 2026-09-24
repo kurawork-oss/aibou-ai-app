@@ -75,12 +75,14 @@ test("押しても始まらないものには、ボタンを出さない", async
 
   const slack = page.locator("li").filter({ hasText: "Slackのアプリ登録" });
   await expect(slack).toBeVisible();
-  await expect(slack.getByRole("link", { name: "いま繋ぐ" })).toHaveCount(0);
+  /* 「いま繋ぐ」はリンクではなくボタン（押すと先に使い捨ての札をもらって開く。
+     ただのリンクだと、ログインを求める構成では入口で断られる） */
+  await expect(slack.getByRole("button", { name: "いま繋ぐ" })).toHaveCount(0);
   await expect(slack).toContainText("持ち主");
 
   // 繋げるほうには、ちゃんと出ている（この確認が空振りしていないこと）
   const notion = page.locator("li").filter({ hasText: "Notionと繋いでいません" });
-  await expect(notion.getByRole("link", { name: "いま繋ぐ" })).toBeVisible();
+  await expect(notion.getByRole("button", { name: "いま繋ぐ" })).toBeVisible();
 });
 
 test("切ってある機能は、壊れているようには見せない", async ({ page }) => {
