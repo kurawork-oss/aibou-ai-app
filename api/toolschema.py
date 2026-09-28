@@ -229,6 +229,55 @@ SCHEMAS: Dict[str, Dict[str, Any]] = {
         "theme": ("str", True, "生成テーマ"),
     }},
     "income_status": {"fields": {}},
+
+    # ── 資料（保管庫）・ゴール ───────────────────────────────────
+    "ask_vault": {"fields": {
+        "question": ("str", True, "資料に聞きたいこと"),
+        "notebook": ("str", False, "聞く先のノートブックの名前（1つしか無ければ省略可）"),
+    }},
+    "vault_list": {"fields": {}},
+    "mission_list": {"fields": {}},
+    "mission_step": {"fields": {
+        "goal": ("str", False, "進めるゴールの名前の一部（進行中が1つなら省略可）"),
+        "steps": ("int", False, "何手進めるか（1〜3。既定1）"),
+    }},
+
+    # ── 発信する・つくる ─────────────────────────────────────────
+    "sns_draft": {"fields": {
+        "topic": ("str", True, "何について投稿するか"),
+        "platform": ("enum:x,instagram", False, "どのSNSか（既定 x）"),
+        "n": ("int", False, "案の数（1〜5）"),
+        "tone": ("str", False, "言葉の調子"),
+        "promo": ("bool", False, "PR・宣伝の投稿か（#PR を付ける）"),
+    }},
+    "create_lp": {"fields": {
+        "brief": ("str", True, "どんなページにするか"),
+        "style": ("enum:modern,bold,warm,dark,minimal", False, "見た目の方向"),
+    }},
+    "create_app": {"fields": {
+        "brief": ("str", True, "どんなアプリにするか（何を入れて、何が出るか）"),
+    }},
+    "create_video": {"fields": {
+        "topic": ("str", True, "動画のテーマ"),
+        "n": ("int", False, "シーンの数（2〜8）"),
+        "aspect": ("enum:16:9,9:16,1:1", False, "画面の比率（既定 16:9）"),
+    }},
+
+    # ── 副業・AI STUDIO（持ち主だけ） ────────────────────────────
+    "seo_pages": {"fields": {
+        "axes": ("rows", True, 'キーワードの軸の配列。例 [["東京","大阪"],["歯医者"]]'),
+        "template": ("str", False, '題の型。例 "{0}の{1}の選び方"'),
+        "limit": ("int", False, "作る数（1〜10）"),
+    }},
+    "newsletter_draft": {"fields": {
+        "subject": ("str", True, "件名"),
+        "topic": ("str", False, "本文のテーマ（AIが書く）"),
+        "body": ("str", False, "本文（自分で渡すとき）"),
+    }},
+    "run_workflow": {"fields": {
+        "name": ("str", True, "流すワークフローの名前（一部でよい）"),
+        "input": ("str", False, "最初の手順に渡す入力"),
+    }},
 }
 
 

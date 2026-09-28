@@ -199,3 +199,22 @@ def test_置き場を作っても_呼んだ側は汚れない():
     present.carrier()
     present.show({"kind": "image", "url": "x"})
     assert present.peek() == [], "呼び出し元の文脈に箱が残っている"
+
+
+def test_起動し直しても_閉じた実行先を使い回さない():
+    """前のループが閉じると、その既定の実行先も閉じられる。使い回すと
+    「cannot schedule new futures after shutdown」で、道具がぜんぶ落ちる。"""
+    async def _one():
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, lambda: "ok")
+
+    for _ in range(2):
+        loop = asyncio.new_event_loop()
+        try:
+            async def _wrap():
+                config.install_context_executor()
+                return await _one()
+            assert loop.run_until_complete(_wrap()) == "ok"
+        finally:
+            loop.run_until_complete(loop.shutdown_default_executor())
+            loop.close()

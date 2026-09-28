@@ -67,6 +67,17 @@ export const TOOL_LABELS: Record<string, string> = {
   local_write: "手元のファイルに書く",
   local_append: "手元のファイルに書き足す",
   obsidian_note: "今日の日誌に書き足す",
+  ask_vault: "入れた資料に聞く",
+  vault_list: "資料の一覧を見る",
+  mission_list: "ゴールを確認",
+  mission_step: "ゴールを進める",
+  sns_draft: "SNSの投稿文を考える",
+  create_lp: "ページを作る",
+  create_app: "アプリを作る",
+  create_video: "動画の絵コンテを作る",
+  seo_pages: "SEOページを作る",
+  newsletter_draft: "ニュースレターを書く",
+  run_workflow: "ワークフローを流す",
 };
 
 export type AgentStep =

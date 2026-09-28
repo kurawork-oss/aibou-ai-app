@@ -99,6 +99,16 @@ CAPABILITIES: List[dict] = [
      "tool": "create_spreadsheet", "arg": "表の名前", "icon": "🧮"},
     {"cmd": "ノート", "yomi": "のーと note", "label": "ノートに保存する", "pack": "make",
      "tool": "save_note", "arg": "書く内容", "icon": "📓"},
+    # 以前は「つくる」の画面でしか作れなかった物
+    {"cmd": "LP", "yomi": "えるぴー lp homepage ほーむぺーじ", "label": "LP・ホームページをつくる",
+     "pack": "make", "tool": "create_lp", "arg": "どんなページか", "icon": "🪧"},
+    {"cmd": "アプリ", "yomi": "あぷり app", "label": "Webアプリをつくる", "pack": "make",
+     "tool": "create_app", "arg": "どんなアプリか", "icon": "📱"},
+    {"cmd": "動画", "yomi": "どうが video", "label": "動画の絵コンテをつくる", "pack": "make",
+     "tool": "create_video", "arg": "テーマ", "icon": "🎬"},
+    # 発信する（SNSの画面と同じかたまり。投稿はせず、案を作るだけ）
+    {"cmd": "投稿文", "yomi": "とうこうぶん post sns", "label": "SNSの投稿文の案をつくる",
+     "pack": "share", "tool": "sns_draft", "arg": "テーマ", "icon": "📣"},
 
     # Google（繋いでいなければ勝手に消える）
     {"cmd": "ドライブ", "yomi": "どらいぶ drive", "label": "ドライブにファイルを作る", "pack": "make",
@@ -114,21 +124,44 @@ CAPABILITIES: List[dict] = [
     {"cmd": "カレンダー", "yomi": "かれんだー calendar", "label": "Googleカレンダーを見る", "pack": "core",
      "tool": "calendar_list", "arg": "日数", "needs": "google", "icon": "📆"},
 
-    # 発信する
-    {"cmd": "Notion", "yomi": "のーしょん notion", "label": "Notionに書き足す", "pack": "share",
+    # メモを書き足す先。以前は「発信する」に入っていて、既定で切ってあった。
+    # Notion は投稿ではなく**自分のメモ**で、自己診断（capability_status.py）も
+    # 「仕事の基本」として数えていた——「Notionは使える？」に「使えます」と
+    # 答えるのに、AIには道具が渡っていなかった。仕事の基本に置く。
+    {"cmd": "Notion", "yomi": "のーしょん notion", "label": "Notionに書き足す", "pack": "core",
      "tool": "notion_add", "arg": "見出し", "needs": "notion", "icon": "🗃"},
 
-    # 自動化・開発・副業
-    {"cmd": "自動化", "yomi": "じどうか automation", "label": "自動化フローを作る", "pack": "dev",
+    # 自動化・ゴール。以前は「開発（コード・GitHub）」に入っていて、既定で
+    # 切ってあった。名前からは分からず、しかも画面（ボード・ゴール）は
+    # かたまりに関係なく管理タブにいつも出ている——**画面では使えるのに、
+    # 会話で頼むと道具が無い**。入口と同じ基準に揃える（shell.ts）。
+    {"cmd": "自動化", "yomi": "じどうか automation", "label": "自動化フローを作る", "pack": "core",
      "tool": "create_automation", "arg": "フロー名", "icon": "⚡"},
-    {"cmd": "自動化実行", "yomi": "じどうかじっこう run automation", "label": "自動化フローを動かす", "pack": "dev",
+    {"cmd": "自動化実行", "yomi": "じどうかじっこう run automation", "label": "自動化フローを動かす", "pack": "core",
      "tool": "run_automation", "arg": "フロー名", "icon": "▶"},
-    {"cmd": "ゴール", "yomi": "ごーる goal mission", "label": "ゴールを分解して進める", "pack": "dev",
+    {"cmd": "ゴール", "yomi": "ごーる goal mission", "label": "ゴールを分解して進める", "pack": "core",
      "tool": "create_mission", "arg": "達成したいこと", "icon": "🎯"},
+    # よみを「ごーる…」で始めない。#ごーる と打った時点で2つに割れて、
+    # どちらも出せなくなる（「資料」と「保管庫」で実際に起きた）。
+    {"cmd": "ゴールを進める", "yomi": "すすめる advance step", "label": "ゴールを次の手順へ進める",
+     "pack": "core", "tool": "mission_step", "arg": "", "view": "autopilot", "icon": "⏩"},
+    # 入れた資料に聞く。よみを「しりょう…」で始めない（同上）
+    {"cmd": "資料に聞く", "yomi": "きく ask question vault", "label": "入れた資料に聞く",
+     "pack": "core", "tool": "ask_vault", "arg": "聞きたいこと", "icon": "📚"},
+
+    # 副業
     {"cmd": "副業", "yomi": "ふくぎょう income", "label": "副業ジョブを積む", "pack": "income",
      "tool": "enqueue_income", "arg": "テーマ", "icon": "💰"},
     {"cmd": "副業状況", "yomi": "ふくぎょうじょうきょう income status", "label": "副業の状況を見る", "pack": "income",
      "tool": "income_status", "arg": "", "icon": "📈"},
+    # 以前は副業の画面でしか作れなかった物（下書きまで。公開・配信は画面で人が押す）
+    {"cmd": "SEOページ", "yomi": "えすいーおー seo pages", "label": "SEOページの下書きをまとめて作る",
+     "pack": "income", "tool": "seo_pages", "arg": "キーワード", "icon": "🔎"},
+    {"cmd": "ニュースレター", "yomi": "にゅーすれたー newsletter", "label": "ニュースレターの下書きを作る",
+     "pack": "income", "tool": "newsletter_draft", "arg": "件名", "icon": "📰"},
+    # AI STUDIO のワークフロー（持ち主だけ。_OWNER_TOOLS）
+    {"cmd": "ワークフロー", "yomi": "わーくふろー workflow", "label": "ワークフローを流す",
+     "pack": "make", "tool": "run_workflow", "arg": "ワークフロー名", "icon": "⚙"},
 
     # 画面を開くだけ（道具ではない）。
     # "view" は画面側の View 名をそのまま書く。ここが実在しない名前だと
@@ -166,7 +199,9 @@ _HIDDEN_TOOLS = {"list_state", "schedule_list", "complete_task", "self_check",
                  "local_list", "local_read", "local_write", "local_append",
                  "obsidian_note",
                  # 決まった手順。流す前に中身を見せて確認するので、# の直行は作らない
-                 "recipe_run", "recipe_save", "recipe_list", "recipe_delete"}
+                 "recipe_run", "recipe_save", "recipe_list", "recipe_delete",
+                 # 一覧を見るだけの物（人は画面で見られる）
+                 "vault_list", "mission_list"}
 
 
 # ── どのパックが有効か ───────────────────────────────────────────────
@@ -228,6 +263,8 @@ def available(is_owner: bool = True) -> List[dict]:
     for c in CAPABILITIES:
         if c["pack"] not in packs:
             continue
+        if not is_owner and c.get("tool") in _OWNER_TOOLS:
+            continue
         need = c.get("needs")
         if need and not _connected(need):
             continue
@@ -235,7 +272,29 @@ def available(is_owner: bool = True) -> List[dict]:
     return out
 
 
-def enabled_tools(is_owner: bool = True) -> set:
+# 持ち主だけの道具（かたまりに関係なく）。AI STUDIO は「つくる」の中にあるが、
+# 画面（Workshop.tsx）も入口（require_owner）も持ち主だけにしている。
+_OWNER_TOOLS = {"run_workflow"}
+
+
+def owner_only_tools() -> set:
+    """持ち主でない人には渡さない道具（持ち主専用のかたまりの物も含む）。"""
+    out = set(_OWNER_TOOLS)
+    for c in CAPABILITIES:
+        if c.get("tool") and PACKS.get(c["pack"], {}).get("owner_only"):
+            out.add(c["tool"])
+    return out
+
+
+def _owner(is_owner) -> bool:
+    """渡されなければ、いまのリクエストの利用者で決める。"""
+    if is_owner is None:
+        import config
+        return config.current_is_owner()
+    return bool(is_owner)
+
+
+def enabled_tools(is_owner=None) -> set:
     """AIに渡してよい道具の名前。
 
     絞るのはパックだけで、**連携の有無では絞らない**。ここは # の一覧とは
@@ -253,15 +312,19 @@ def enabled_tools(is_owner: bool = True) -> set:
     表に出さない道具（_HIDDEN_TOOLS）も、パックが有効なら渡す。
     人に見せる入口を作らないだけで、AIには使わせたいものがある。
     """
+    is_owner = _owner(is_owner)
     packs = set(enabled_packs(is_owner))
     names = {c["tool"] for c in CAPABILITIES
              if c.get("tool") and c["pack"] in packs}
     if "core" in packs:
         names |= _HIDDEN_TOOLS
+    # 持ち主専用のかたまりを、持ち主でない人が保存していても渡さない
+    if not is_owner:
+        names -= owner_only_tools()
     return names
 
 
-def tools_doc(is_owner: bool = True) -> str:
+def tools_doc(is_owner=None) -> str:
     """AIに渡す道具の説明（使う物だけ）。"""
     import tools
     return tools.tools_doc(enabled_tools(is_owner))

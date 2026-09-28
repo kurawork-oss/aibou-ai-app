@@ -338,6 +338,38 @@ def current_user_id() -> str:
     return _request_user.get() or ""
 
 
+# ── いまの利用者は、このアプリの持ち主か ─────────────────────────────
+#
+# 持ち主専用の機能（副業・AI STUDIO）は、HTTPの入口（main.require_owner）で
+# 塞いでいた。ところが会話の道具は入口を通らずモジュールを直接呼ぶので、
+# 持ち主でない人の会話にも、持ち主専用の道具が渡りうる（道具の一覧は
+# 持ち主のつもりで作っていた）。入口で判定した結果をここに置き、道具の側
+# からも引けるようにする。判定そのものは main.is_owner_claims の1か所。
+_request_owner: contextvars.ContextVar = contextvars.ContextVar(
+    "request_is_owner", default=None)
+
+
+def bind_request_owner(is_owner: bool) -> object:
+    return _request_owner.set(bool(is_owner))
+
+
+def reset_request_owner(token) -> None:
+    try:
+        _request_owner.reset(token)
+    except Exception:
+        pass
+
+
+def current_is_owner() -> bool:
+    """このリクエストの利用者が持ち主か。
+
+    リクエストの外（起動時・テスト・中の処理）では True（これまでどおり）。
+    リクエストの中では、入口で判定した値を使う。
+    """
+    v = _request_owner.get()
+    return True if v is None else bool(v)
+
+
 def storage_is_bound() -> bool:
     """このリクエストに「保存先の差し替え」が入っているか。
 
@@ -409,7 +441,11 @@ def install_context_executor(loop=None) -> None:
     import asyncio
 
     loop = loop or asyncio.get_event_loop()
-    if _context_executor is None:
+    # 前のイベントループが閉じると、その既定の実行先も閉じられる
+    # （asyncio が終わり際に shutdown_default_executor を呼ぶ）。閉じた物を
+    # 使い回すと「cannot schedule new futures after shutdown」で、起動し直した
+    # 後の道具がぜんぶ落ちる。閉じていたら作り直す。
+    if _context_executor is None or getattr(_context_executor, "_shutdown", False):
         # スレッド数は既定（min(32, cpu+4)）のまま。ここを絞ると、道具の
         # 重い人が数人いるだけで全員が詰まる。
         _context_executor = _ContextExecutor(thread_name_prefix="forge")

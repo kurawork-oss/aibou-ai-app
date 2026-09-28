@@ -189,8 +189,11 @@ test("2台目の端末が、空のままにならない", async ({ page }) => {
   await enterApp(page);
   await openMemory(page);
 
+  /* 開いてから揃えに行くのはタイマー（memorySync.syncOnBoot）＋往復1回。
+     全部のテストを同時に流して機械が混んでいると、10秒では足りないことが
+     あった（単独では毎回通る）。待つ時間だけ延ばし、確かめる中身は変えない。 */
   await expect(page.getByText("猫を飼っている。名前はミケ", { exact: true }))
-    .toBeVisible({ timeout: 10_000 });
+    .toBeVisible({ timeout: 20_000 });
   await expect(page.getByText("健康診断は毎年10月", { exact: true })).toBeVisible();
 });
 

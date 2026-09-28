@@ -58,6 +58,13 @@ LEVELS: Dict[str, int] = {
     "email_inbox": 0,
     "calendar_list": 0,
     "income_status": 0,
+    # 入れた資料に聞く・一覧を見る。資料はすでにサーバーにあり、何も変わらない
+    "ask_vault": 0,
+    "vault_list": 0,
+    "mission_list": 0,
+    # 案や絵コンテを作って見せるだけ。どこにも残らず、投稿も書き出しもしない
+    "sns_draft": 0,
+    "create_video": 0,
 
     # ── 1 このアプリの中だけが変わる ──────────────────────────────
     "add_task": 1,
@@ -75,6 +82,15 @@ LEVELS: Dict[str, int] = {
     "schedule_add": 1,
     "create_automation": 1,
     "create_mission": 1,
+    # ゴールの次の手順を作って書き込む（AIbouの中だけ。終わったときの通知は、
+    # ゴールを作ったときに決めた自分宛ての知らせで、ゴールの画面と同じ）
+    "mission_step": 1,
+    # 1枚のHTMLを作って、AIbouの中（ファイル）に残す
+    "create_lp": 1,
+    "create_app": 1,
+    # 下書きを中に残すだけ（公開・配信は画面で人が押す）
+    "seo_pages": 1,
+    "newsletter_draft": 1,
     # 手順を残す・消すのは、このアプリの中だけ（流すときに、中身を見せて確認する）
     "recipe_save": 1,
     "recipe_delete": 1,
@@ -103,6 +119,8 @@ LEVELS: Dict[str, int] = {
     "notify": 3,
     "enqueue_income": 3,
     "run_automation": 3,
+    # 自動化と同じ仕組みで流す。通知の手順があれば実際に届く
+    "run_workflow": 3,
 }
 
 # 段階の説明（画面に出す）
@@ -128,6 +146,7 @@ WHY: Dict[str, str] = {
     "notify": "LINEやSlackに実際に届きます。",
     "enqueue_income": "副業の処理が動き出します。",
     "run_automation": "フローの中身がまとめて実行されます。",
+    "run_workflow": "ワークフローの中身がまとめて実行されます（通知の手順があれば実際に届きます）。",
 }
 
 # 段階を書き忘れた道具の扱い。

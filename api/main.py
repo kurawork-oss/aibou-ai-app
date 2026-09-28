@@ -161,6 +161,48 @@ app.add_middleware(
 )
 
 
+class _ChangeSignals:
+    """画面からの書き込みが通ったら、その人の開いている画面へ「変わった」を流す。
+
+    スマホでタスクを足したら、ノートの画面にもすぐ出る（events.py・仕様§38）。
+    道の頭で種類を決めるので、書き込みの口を足しても、ここを書き換えなくてよい。
+    純粋なASGIにしているのは、会話の流れ（SSE）を途中で溜め込まないため。
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") != "http" or scope.get("method") in ("GET", "HEAD", "OPTIONS"):
+            await self.app(scope, receive, send)
+            return
+        import events
+        kind = events.kind_for_path(scope.get("path") or "")
+        if not kind:
+            await self.app(scope, receive, send)
+            return
+        status = {"code": 500}
+
+        async def _send(message):
+            if message.get("type") == "http.response.start":
+                status["code"] = int(message.get("status") or 500)
+            await send(message)
+
+        await self.app(scope, receive, _send)
+        if status["code"] >= 400:
+            return
+        try:
+            headers = {k.decode("latin-1").lower(): v.decode("latin-1")
+                       for k, v in (scope.get("headers") or [])}
+            claims = _identity_claims(headers.get("authorization"), headers.get("x-supabase-token"))
+            events.publish(str(claims.get("sub") or ""), kind)
+        except Exception:
+            pass
+
+
+app.add_middleware(_ChangeSignals)
+
+
 # ── 認証（任意のBearerトークン） ─────────────────────────────────
 # ── ログイン用トークンの検証 ──────────────────────────────────────────
 # Supabase には2つの方式がある。
@@ -312,24 +354,31 @@ async def use_own_database(user_id: str = Depends(current_user),
     None に差し替えると、認証が通り始めた瞬間に、持ち主の既存データが
     まるごと見えなくなる（保存もされなくなる）。
     """
-    if not user_id:
-        yield ""
-        return
-    # 「いま誰のリクエストか」を、道具の側からも引けるようにしておく。
-    # DBを使わない機能（手元のパソコンで動く相棒）にも要る。
-    who = config.bind_request_user(user_id)
+    # 持ち主かどうかも、道具の側から引けるようにする（config.current_is_owner）。
+    # 会話の道具は require_owner を通らないので、ここで渡しておかないと
+    # 持ち主専用の道具が誰にでも渡る。
+    own = config.bind_request_owner(is_owner_claims(claims))
     try:
-        client = tenancy.client_for(user_id)
-        if client is None and is_owner_claims(claims):
-            yield user_id        # 差し替えない = サーバーの既定DBのまま
+        if not user_id:
+            yield ""
             return
-        token = config.bind_request_client(client)
+        # 「いま誰のリクエストか」を、道具の側からも引けるようにしておく。
+        # DBを使わない機能（手元のパソコンで動く相棒）にも要る。
+        who = config.bind_request_user(user_id)
         try:
-            yield user_id
+            client = tenancy.client_for(user_id)
+            if client is None and is_owner_claims(claims):
+                yield user_id        # 差し替えない = サーバーの既定DBのまま
+                return
+            token = config.bind_request_client(client)
+            try:
+                yield user_id
+            finally:
+                config.reset_request_client(token)
         finally:
-            config.reset_request_client(token)
+            config.reset_request_user(who)
     finally:
-        config.reset_request_user(who)
+        config.reset_request_owner(own)
 
 
 async def require_storage(_db: str = Depends(use_own_database)) -> None:
@@ -1012,6 +1061,42 @@ async def health():
     return {"status": "ok"}
 
 
+# 流れを開いたまま、何も無いときに送る合図の間隔。Render などの手前の
+# 中継は、しばらく何も流れない接続を切るので、それより短くする。
+EVENTS_PING_SECONDS = 20
+
+
+@app.get("/events")
+async def live_events(request: Request, user_id: str = Depends(current_user),
+                      _auth: None = Depends(require_auth)):
+    """その人の「変わった」を流し続ける（仕様§38）。中身は流さない。
+
+    受けた画面は、いつもの読み込みで取り直す。見せてよい物の判定を
+    ここにもう1つ持たないため（events.py の冒頭）。
+    """
+    import events
+    q = events.subscribe(user_id)
+
+    async def gen():
+        try:
+            yield _sse({"kind": "hello"})
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    ev = await asyncio.wait_for(q.get(), timeout=EVENTS_PING_SECONDS)
+                except asyncio.TimeoutError:
+                    yield ": ping\n\n"
+                    continue
+                if ev is None:           # 開きすぎ。古い物から閉じる
+                    break
+                yield _sse(ev)
+        finally:
+            events.unsubscribe(user_id, q)
+
+    return _sse_response(gen())
+
+
 def _oauth_report() -> dict:
     """「押すだけ」で繋げる連携が、いま何本用意できているか。
 
@@ -1215,7 +1300,7 @@ async def chat(req: ChatRequest, _auth: None = Depends(require_auth)):
     # AIプロバイダ（Gemini か HuggingFace）が1つも無ければ crash させず案内。
     if llm.active_provider() == "none":
         async def err_stream():
-            yield _sse({"error": "AI未設定です。設定 →「つなぐ」 に GEMINI_API_KEY か HUGGINGFACE_TOKEN を保存してください。"})
+            yield _sse({"error": "AI未設定です。管理 → もっと →「連携」→ Gemini（または HuggingFace）で鍵を入れてください。"})
             yield _sse({"done": True})
         return _sse_response(err_stream())
 
@@ -1404,7 +1489,7 @@ async def agent_act(req: AgentActRequest, _auth: None = Depends(require_auth)):
     繰り返し、進捗を data:{"phase":...} で実況、最後に final→done を送る。"""
     if llm.active_provider() == "none":
         async def err_stream():
-            yield _sse({"phase": "error", "detail": "AI未設定です。設定 →「つなぐ」 に GEMINI_API_KEY か HUGGINGFACE_TOKEN を保存してください。"})
+            yield _sse({"phase": "error", "detail": "AI未設定です。管理 → もっと →「連携」→ Gemini（または HuggingFace）で鍵を入れてください。"})
             yield _sse({"phase": "done", "steps": 0})
         return _sse_response(err_stream())
 
@@ -2432,7 +2517,7 @@ async def life_chat(req: ChatRequest, _auth: None = Depends(require_auth)):
     通常 /chat と違いツール実行は無し — 純粋な相談相手として振る舞う。"""
     if llm.active_provider() == "none":
         async def err_stream():
-            yield _sse({"error": "AI未設定です。設定 →「つなぐ」 に GEMINI_API_KEY か HUGGINGFACE_TOKEN を保存してください。"})
+            yield _sse({"error": "AI未設定です。管理 → もっと →「連携」→ Gemini（または HuggingFace）で鍵を入れてください。"})
             yield _sse({"done": True})
         return _sse_response(err_stream())
 
@@ -4205,6 +4290,11 @@ def _command_params(cap: dict, rest: str):
         "create_mission": "objective", "enqueue_income": "theme",
         "create_automation": "name", "run_automation": "name",
         "google_doc": "title",
+        "ask_vault": "question",
+        # 省略可（進行中が1つなら、それを進める）
+        "mission_step": "goal",
+        "create_lp": "brief", "create_app": "brief", "create_video": "topic",
+        "sns_draft": "topic", "newsletter_draft": "subject", "run_workflow": "name",
     }
     if tool in simple:
         return {simple[tool]: rest}

@@ -73,7 +73,7 @@ GROUPS: List[dict] = [
      "pack": "core",
      "tools": [],
      "why_missing": "AIの鍵が1つも入っていません",
-     "next": "設定 →「つなぐ」 に GEMINI_API_KEY を入れてください（無料枠があります）",
+     "next": "管理 → もっと →「連携」→ Gemini で API キーを入れてください（無料枠があります）",
      "action": {"kind": "key", "name": "GEMINI_API_KEY"}},
 
     {"id": "memory", "name": "記憶", "kind": "local", "pack": "core",
@@ -84,6 +84,14 @@ GROUPS: List[dict] = [
 
     {"id": "tasks", "name": "タスク・予定", "kind": "local", "pack": "core",
      "tools": ["add_task", "add_agenda", "list_state"]},
+
+    # 画面（ボード・ゴール）はいつも出ているので、会話からも同じく使える
+    {"id": "automation", "name": "自動化・ゴール", "kind": "local", "pack": "core",
+     "tools": ["create_automation", "run_automation", "create_mission",
+               "mission_list", "mission_step"]},
+
+    {"id": "vault", "name": "入れた資料から答える", "kind": "local", "pack": "core",
+     "tools": ["ask_vault", "vault_list"]},
 
     {"id": "google_calendar", "name": "Googleカレンダー", "kind": "oauth",
      "provider": "google", "pack": "core",
@@ -108,10 +116,13 @@ GROUPS: List[dict] = [
     {"id": "github", "name": "GitHub", "kind": "oauth", "provider": "github",
      "pack": "dev", "tools": []},
 
-    {"id": "make", "name": "画像・スライド・資料をつくる", "kind": "local",
+    {"id": "make", "name": "画像・スライド・資料・ページ・アプリ・動画をつくる", "kind": "local",
      "pack": "make",
      "tools": ["generate_image", "create_document", "create_slides",
-               "create_spreadsheet"]},
+               "create_spreadsheet", "create_lp", "create_app", "create_video"]},
+
+    {"id": "sns", "name": "SNSの投稿文の案", "kind": "local", "pack": "share",
+     "tools": ["sns_draft"]},
 
     {"id": "voice", "name": "声（読み上げ・聞き取り）", "kind": "local",
      "pack": "core", "tools": []},
@@ -119,14 +130,18 @@ GROUPS: List[dict] = [
     {"id": "vision", "name": "画像を見て答える", "kind": "key",
      "keys": ["GEMINI_API_KEY"], "pack": "core", "tools": [],
      "why_missing": "画像を読むにはGeminiの鍵が要ります",
-     "next": "設定 →「つなぐ」 に GEMINI_API_KEY を入れてください",
+     "next": "管理 → もっと →「連携」→ Gemini で API キーを入れてください",
      "action": {"kind": "key", "name": "GEMINI_API_KEY"}},
 
     {"id": "notify", "name": "通知（端末・LINE・Discord・Slack）", "kind": "local",
      "pack": "core", "tools": ["notify"]},
 
     {"id": "income", "name": "副業の自動化", "kind": "local", "pack": "income",
-     "owner_only": True, "tools": ["enqueue_income", "income_status"]},
+     "owner_only": True, "tools": ["enqueue_income", "income_status",
+                                   "seo_pages", "newsletter_draft"]},
+
+    {"id": "workflow", "name": "AI STUDIO のワークフロー", "kind": "local", "pack": "make",
+     "owner_only": True, "tools": ["run_workflow"]},
 
     {"id": "shell", "name": "パソコンのコマンド実行", "kind": "off",
      "env": "ENABLE_SHELL", "pack": "dev", "tools": [],

@@ -46,7 +46,8 @@ def test_the_prompt_only_carries_the_tools_actually_in_use():
     assert len(now) < len(full), "絞り込みが効いていない"
     # 既定で切ってあるパックの道具は入らない
     assert "enqueue_income" not in now       # 副業（既定OFF）
-    assert "create_automation" not in now    # 開発（既定OFF）
+    # 自動化・ゴールは仕事の基本（画面がいつも出ているので、会話でも使える）
+    assert "create_automation" in now and "create_mission" in now
     # よく使う物は入る
     assert "add_task" in now and "generate_image" in now
 
@@ -371,3 +372,56 @@ def test_risk_endpoint():
     assert by["send_email"]["level"] == 3 and by["send_email"]["always_confirm"] is True
     assert by["web_search"]["level"] == 0
     assert d["labels"]["3"] == "取り返せない"
+
+
+# ── 同じ道具は、どこから見ても同じかたまりに入っている ─────────────────
+def test_自己診断と台帳で_同じ道具が同じかたまりに入っている():
+    """「Notionは使える？」に「使えます」と答えるのに、AIに道具が渡っていない。
+
+    自己診断（capability_status.py）は Notion を「仕事の基本」に、台帳
+    （capabilities.py）は「発信する（既定OFF）」に入れていたので、実際に
+    起きていた。同じ道具は同じかたまりに入れる。
+    """
+    import capability_status
+    by_tool = {c["tool"]: c["pack"] for c in cap.CAPABILITIES if c.get("tool")}
+    wrong = [f"{t}: 台帳={by_tool[t]} 自己診断={g.get('pack', 'core')}"
+             for g in capability_status.GROUPS for t in (g.get("tools") or [])
+             if t in by_tool and by_tool[t] != g.get("pack", "core")]
+    assert not wrong, "\n".join(wrong)
+
+
+# 画面ごとの、会話から使う道具。ここに無い画面は、会話の道具を持たない。
+_VIEW_TOOLS = {
+    "board": ["board_add_note", "create_automation", "run_automation"],
+    "autopilot": ["create_mission", "mission_list", "mission_step"],
+    "tasks": ["add_task", "complete_task"],
+    "vault": ["ask_vault", "vault_list"],
+}
+
+
+def _always_shown_views() -> set:
+    """管理タブに、かたまりに関係なくいつも出ている画面（webapp/src/lib/shell.ts）。"""
+    import re
+    src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "webapp",
+                            "src", "lib", "shell.ts"), encoding="utf-8").read()
+    block = src[src.index("export const MANAGE_SURFACES"):src.index("export function visibleSurfaces")]
+    out = set()
+    for entry in re.findall(r"\{[^{}]*view: \"[a-z]+\"[^{}]*\}", block):
+        if "pack:" in entry or "ownerOnly" in entry:
+            continue
+        out.add(re.search(r'view: "([a-z]+)"', entry).group(1))
+    return out
+
+
+def test_いつも出ている画面の道具は_既定で会話に渡る():
+    """画面では使えるのに、会話で頼むと道具が無い——を作らない。
+
+    自動化とゴールは「開発（コード・GitHub）」に入っていて既定で切ってあった。
+    一方、ボードとゴールの画面は管理タブにいつも出ている。
+    """
+    shown = _always_shown_views()
+    assert {"board", "autopilot", "tasks", "vault"} <= shown, f"入口が読めていない: {shown}"
+    default_tools = cap.enabled_tools()
+    missing = [f"{v}: {t}" for v, ts in _VIEW_TOOLS.items() if v in shown
+               for t in ts if t not in default_tools]
+    assert not missing, "画面はいつも出ているのに、会話に渡らない道具:\n" + "\n".join(missing)

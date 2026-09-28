@@ -164,6 +164,34 @@ TOOL_DOCS: Dict[str, str] = {
         '設定済みの通知先（LINE / Discord / Slack）へメッセージを送る / params: { "message": "送信するメッセージ" }',
     "save_note":
         'ノート（Vault）にメモを保存する。ノートブックが無ければ作成する / params: { "notebook": "保存先ノートブック名", "title": "タイトル", "content": "本文" }',
+    # 資料の画面（保管庫）。以前は画面でしか聞けず、会話で「規程だと有給は何日？」と
+    # 聞いても、AIは入れた資料を見ないまま一般論で答えていた。
+    "ask_vault":
+        'ユーザーが入れた資料（資料の画面のノートブック）だけを根拠に質問へ答える。社内規程・マニュアル・議事録など「入れた資料では〜？」「規程だと〜？」の質問で使う。Webや一般論では答えない。notebook は省略可（1つしか無ければそれを使う） / params: { "question": "有給休暇は何日？", "notebook": "社内規程" }',
+    "vault_list":
+        '資料の画面に入っているノートブックと、中の資料の名前を一覧する（「どんな資料が入ってる？」） / params: { }',
+    # ゴール。以前は作るだけで、進めるのはゴールの画面のボタンだけだった。
+    "mission_list":
+        'ゴール（オートパイロット）の一覧と、どこまで進んだかを見る / params: { }',
+    "mission_step":
+        'ゴールを次の手順へ進め、その手順の成果を返す（1回で最大3手）。goal はゴール名の一部（進行中が1つなら省略可） / params: { "goal": "新商品ローンチ", "steps": 1 }',
+    # 「つくる」「SNS」の画面でしか作れなかった物。どれも一度きりの頼み事なので、
+    # 会話で完結させる（作った物は会話の隣に出す）。
+    "sns_draft":
+        'SNS（X / Instagram）の投稿文の案を作る。**投稿はしない**（案を見せ、投稿は人がSNSの画面で行う）。platform は x|instagram、n は案の数（1〜5）、PR案件なら promo を true（#PR を必ず付ける） / params: { "topic": "新商品の紹介", "platform": "x", "n": 3, "tone": "親しみやすく", "promo": false }',
+    "create_lp":
+        'ランディングページ・ホームページ（1枚で完結するHTML）を作り、会話の隣で表示する。style は modern|bold|warm|dark|minimal / params: { "brief": "新しいカフェのホームページ。メニュー・地図・予約ボタン", "style": "warm" }',
+    "create_app":
+        '動く小さなWebアプリ（1枚で完結するHTML。入力・保存・計算ができる道具）を作り、会話の隣で実際に操作できるようにする / params: { "brief": "家計簿アプリ。支出を入れると月ごとの合計が出る" }',
+    # 副業の画面でしか作れなかった物（下書きまで。公開・配信は画面で人が押す）
+    "seo_pages":
+        '軸（キーワードの組み合わせ）からSEOページの下書きをまとめて作る（公開はしない）。axes は [["東京","大阪"],["歯医者","整体"]] のような軸の配列、template は "{0}の{1}おすすめ" のような題の型、limit は作る数（1〜10） / params: { "axes": [["東京","大阪"],["歯医者"]], "template": "{0}の{1}の選び方", "limit": 4 }',
+    "newsletter_draft":
+        'ニュースレターの下書きを作る（送らない。配信は副業の画面で人が押す）。topic を渡すとAIが本文を書く / params: { "subject": "9月号", "topic": "秋の新商品の紹介" }',
+    "run_workflow":
+        'AI STUDIO で作ったワークフローを名前で流し、結果を返す（持ち主だけ） / params: { "name": "週報まとめ", "input": "今週やったこと…" }',
+    "create_video":
+        '動画の絵コンテ（シーンごとのナレーションと画の説明）を作り、会話の隣に出す。書き出しはそこで「動画にする」を押すと始まる（数十秒〜数分かかるため）。aspect は 16:9|9:16|1:1 / params: { "topic": "朝のストレッチ3分", "n": 5, "aspect": "9:16" }',
 }
 
 
@@ -1453,6 +1481,368 @@ def _do_create_mission(params: dict) -> str:
     return f"オートパイロットのミッション「{goal}」を作成しました（{n}ステップに分解）。管理 → もっと →「ゴール」で進められます。"
 
 
+# === 資料（保管庫）に聞く ================================================
+def _pick_notebook(want: str, question: str):
+    """聞く先のノートブックを決める。(ノートブック | None, 決められない理由)。
+
+    勝手に1つ選ぶと、別の資料の中身で答えてしまう。名前で1つに絞れない
+    ときは選ばず、どれがあるかを返して聞き直させる。
+    """
+    books = [b for b in (vault.list_notebooks() or []) if isinstance(b, dict) and b.get("id")]
+    if not books:
+        return None, ("資料の保管庫に、まだノートブックがありません。"
+                      "管理 → もっと →「資料」でノートブックを作って資料を入れると、ここから聞けます。")
+    want = (want or "").strip()
+    if want:
+        exact = [b for b in books if b.get("name") == want]
+        part = [b for b in books if want in (b.get("name") or "")]
+        for hits in (exact, part):
+            if len(hits) == 1:
+                return hits[0], ""
+    elif len(books) == 1:
+        return books[0], ""
+    else:
+        named = [b for b in books if b.get("name") and b["name"] in question]
+        if len(named) == 1:
+            return named[0], ""
+    names = "・".join(f"「{b.get('name')}」" for b in books[:12])
+    head = (f"「{want}」に当たるノートブックが1つに絞れません。" if want
+            else "どのノートブックに聞くか決められません。")
+    return None, (f"{head}あるのは {names} です。"
+                  "notebook に名前を入れて呼び直すか、どれに聞くかをユーザーに確かめてください。")
+
+
+def _do_ask_vault(params: dict) -> str:
+    """入れた資料（ノートブック）だけを根拠に答える。出典の番号つき。"""
+    question = (params.get("question") or "").strip()
+    if not question:
+        return "資料に聞きたいことが空です。"
+    if vault is None:
+        return "この置き場では、資料の保管庫が使えません。"
+    nb, why = _pick_notebook(params.get("notebook") or "", question)
+    if nb is None:
+        return why
+    name = nb.get("name") or "無題"
+    if not nb.get("doc_count"):
+        return (f"ノートブック「{name}」には、まだ資料が入っていません。"
+                "管理 → もっと →「資料」で資料を入れてから聞いてください。")
+    res = vault.query(nb["id"], question)
+    if not isinstance(res, dict) or res.get("error"):
+        err = res.get("error") if isinstance(res, dict) else "応答が読めません"
+        return f"資料「{name}」に聞けませんでした：{err}"
+    answer = (res.get("answer") or "").strip()
+    sources = res.get("sources") or []
+    cited = set(res.get("cited") or [])
+    used = [s for s in sources if s.get("n") in cited]
+
+    body = [answer]
+    if used:
+        body += ["", "出典: " + " / ".join(f"[{s['n']}] {s['title']}" for s in used)]
+    else:
+        body += ["", "出典の番号が付いていません。資料に書かれていない内容かもしれません"
+                     "（推測で補わず、そのまま伝えること）。"]
+    if res.get("partial"):
+        body += ["※ 資料が多いため、質問に関係しそうな部分だけを読んで答えています。"]
+
+    # 出典ごと、会話の隣に出す。AIが報告で言い換えても、根拠の番号が消えないように
+    md = answer
+    if used:
+        md += "\n\n---\n**出典**\n" + "\n".join(f"- [{s['n']}] {s['title']}" for s in used)
+    if res.get("partial"):
+        md += "\n\n※ 資料が多いため、関係しそうな部分だけを読んで答えています。"
+    _present({"kind": "document", "title": f"資料「{name}」から", "content": md})
+
+    # 資料は外から来た物のことがある（取り込んだPDFなど）。中に書かれた
+    # 「〜しなさい」を、指示として実行させない（web_read と同じ扱い）。
+    return (f"資料「{name}」だけを根拠に答えました（資料に書かれていないことは答えていません）。\n"
+            + untrusted.wrap("\n".join(body), source=f"資料「{name}」", kind="資料から作った答え"))
+
+
+def _do_vault_list(_params: dict) -> str:
+    """資料の保管庫にあるノートブックと、中の資料の名前。"""
+    if vault is None:
+        return "この置き場では、資料の保管庫が使えません。"
+    books = [b for b in (vault.list_notebooks() or []) if isinstance(b, dict) and b.get("id")]
+    if not books:
+        return ("資料の保管庫に、まだノートブックがありません。"
+                "管理 → もっと →「資料」でノートブックを作ると、資料を入れて聞けるようになります。")
+    lines = [f"資料の保管庫にあるノートブック（{len(books)}件）："]
+    for i, b in enumerate(books[:20]):
+        head = f"- 「{b.get('name')}」資料{b.get('doc_count', 0)}件"
+        if i < 10 and b.get("doc_count"):
+            got = vault.list_docs(b["id"])
+            titles = [d.get("title") for d in (got.get("items") or [])] if isinstance(got, dict) else []
+            if titles:
+                more = f" ほか{len(titles) - 8}件" if len(titles) > 8 else ""
+                head += "：" + "、".join(titles[:8]) + more
+        lines.append(head)
+    if len(books) > 20:
+        lines.append(f"（ほか{len(books) - 20}件）")
+    return "\n".join(lines)
+
+
+# === ゴールを進める =======================================================
+_MISSION_STATE = {"active": "進行中", "completed": "完了", "failed": "失敗", "paused": "止めている"}
+
+
+def _mission_line(m: dict) -> str:
+    steps = m.get("steps") or []
+    cur = int(m.get("current") or 0)
+    head = (f"「{m.get('goal')}」{_MISSION_STATE.get(m.get('status'), m.get('status') or '')}"
+            f"（{min(cur, len(steps))}/{len(steps)}）")
+    if m.get("status") == "active" and cur < len(steps):
+        head += f" 次: {steps[cur].get('title')}"
+    return head
+
+
+def _do_mission_list(_params: dict) -> str:
+    """ゴールの一覧と進み具合。"""
+    import autopilot
+    items = [m for m in (autopilot.list_missions(limit=30) or []) if isinstance(m, dict)]
+    if not items:
+        return "ゴールはまだありません。「〜をゴールにして」と頼むと、手順に分けて作ります。"
+    return "ゴールの一覧：\n" + "\n".join(f"- {_mission_line(m)}" for m in items[:15])
+
+
+def _do_mission_step(params: dict) -> str:
+    """ゴールを次の手順へ進める（最大3手）。進めた手順の成果を返し、会話の隣にも出す。"""
+    import autopilot
+    want = (params.get("goal") or "").strip()
+    try:
+        n = int(params.get("steps") or 1)
+    except (TypeError, ValueError):
+        n = 1
+    n = max(1, min(n, 3))
+
+    items = [m for m in (autopilot.list_missions(limit=50) or []) if isinstance(m, dict)]
+    active = [m for m in items if m.get("status") == "active"]
+    if not active:
+        return ("進行中のゴールがありません。"
+                + ("「〜をゴールにして」と頼むと、手順に分けて作ります。" if not items
+                   else "終わったゴールをやり直すときは、新しく作ってください。"))
+    if want:
+        hits = [m for m in active if want in (m.get("goal") or "")] or \
+               [m for m in active if (m.get("goal") or "") and m["goal"] in want]
+    else:
+        hits = active if len(active) == 1 else []
+    if len(hits) != 1:
+        names = "・".join(f"「{m.get('goal')}」" for m in active[:10])
+        head = f"「{want}」に当たる進行中のゴールが1つに絞れません。" if want else \
+               f"進行中のゴールが{len(active)}つあります。"
+        return f"{head}{names}。goal にどれを進めるか入れて呼び直してください。"
+
+    mission = hits[0]
+    goal = mission.get("goal") or ""
+    done: list = []
+    problem = ""
+    for _ in range(n):
+        res = autopilot.run_step(mission["id"])
+        if not isinstance(res, dict):
+            problem = "応答が読めません"
+            break
+        mission = res.get("mission") or mission
+        if res.get("error"):
+            problem = res["error"]
+            break
+        if res.get("step"):
+            done.append(res["step"])
+        if res.get("done"):
+            break
+
+    steps = mission.get("steps") or []
+    cur = int(mission.get("current") or 0)
+    lines = []
+    if done:
+        lines.append(f"ゴール「{goal}」を{len(done)}手進めました（{min(cur, len(steps))}/{len(steps)}）。")
+    for s in done:
+        lines.append(f"■ {s.get('n')}. {s.get('title')}\n{(s.get('result') or '').strip()[:800]}")
+    if problem:
+        lines.append(f"次の手順は失敗しました：{problem}"
+                     + ("（ゴールは失敗として止めました）" if mission.get("status") == "failed" else ""))
+    elif mission.get("status") == "completed":
+        lines.append("これで全部の手順が終わりました。")
+    elif cur < len(steps):
+        lines.append(f"次の手順: {steps[cur].get('title')}")
+
+    if done:
+        md = "\n\n".join(f"### {s.get('n')}. {s.get('title')}\n\n{(s.get('result') or '').strip()}"
+                          for s in done)
+        _present({"kind": "document", "title": f"ゴール「{goal}」の成果", "content": md})
+    return "\n".join(lines) if lines else f"ゴール「{goal}」は進められませんでした。"
+
+
+# === 発信する・つくる（画面でしか作れなかった物） ===========================
+def _do_sns_draft(params: dict) -> str:
+    """SNSの投稿文の案。**投稿はしない**（案を見せ、投稿は人がSNSの画面で押す）。"""
+    import sns
+    topic = (params.get("topic") or "").strip()
+    if not topic:
+        return "投稿のテーマが空です。"
+    platform = (params.get("platform") or "x").strip().lower()
+    res = sns.generate_posts(platform, topic, params.get("n") or 3,
+                             (params.get("tone") or "").strip(), bool(params.get("promo")))
+    if not isinstance(res, dict) or res.get("error"):
+        why = res.get("error") if isinstance(res, dict) else "応答が読めません"
+        return f"投稿文の案を作れませんでした：{why}"
+    posts = res.get("posts") or []
+    label = res.get("label") or platform
+    limit = res.get("limit")
+    lines = [f"{label}の投稿文の案を{len(posts)}つ作りました（投稿はしていません）。"]
+    parts = []
+    for i, post in enumerate(posts, start=1):
+        tags = " ".join(post.get("hashtags") or [])
+        size = (f"{post.get('length')}字・上限{limit}字を超えています" if post.get("over_limit")
+                else f"{post.get('length')}字")
+        lines.append(f"案{i}（{size}）: {post.get('text')}" + (f" {tags}" if tags else ""))
+        parts.append(f"### 案{i}（{size}）\n\n{post.get('text')}" + (f"\n\n{tags}" if tags else ""))
+    lines.append("投稿するときは、管理 → もっと →「SNS」で中身を確かめてから押してください"
+                 "（自動では投稿しません）。")
+    _present({"kind": "document", "title": f"{label}の投稿文の案",
+              "content": "\n\n---\n\n".join(parts)})
+    return "\n".join(lines)
+
+
+def _make_site(params: dict, kind: str) -> str:
+    """ページ（lp）かアプリ（app）を1枚のHTMLで作り、保存して会話の隣に出す。"""
+    import lp
+    what = "Webアプリ" if kind == "app" else "ページ"
+    brief = (params.get("brief") or "").strip()
+    if not brief:
+        return f"作りたい{what}の中身が空です。"
+    style = (params.get("style") or "modern").strip()
+    res = lp.generate(brief, style=style, kind=kind)
+    if not isinstance(res, dict) or res.get("error"):
+        why = res.get("error") if isinstance(res, dict) else "応答が読めません"
+        return f"{what}を作れませんでした：{why}"
+    html = res.get("html") or ""
+    title = res.get("title") or what
+    try:
+        import artifacts
+        # アプリは「ファイル」のアプリ一覧と同じ種類で残す（画面で作った物と並ぶ）
+        meta = artifacts.create("webapp" if kind == "app" else "site", title, html, "text/html")
+    except Exception:
+        meta = {}
+    _present({"kind": "site", "artifact_id": (meta or {}).get("id", ""), "title": title,
+              "html": html, "app": kind == "app"})
+    how = "実際に操作できます" if kind == "app" else "そのまま表示しています"
+    saved = "管理 →「ファイル」に残りました。" if (meta or {}).get("id") else "（保存はできませんでした）"
+    return (f"{what}「{title}」を作りました（1枚で完結するHTML・{len(html):,}字）。"
+            f"会話の隣で{how}。{saved}")
+
+
+def _do_create_lp(params: dict) -> str:
+    return _make_site(params, "lp")
+
+
+def _do_create_app(params: dict) -> str:
+    return _make_site(params, "app")
+
+
+def _do_create_video(params: dict) -> str:
+    """動画の絵コンテを作って会話の隣に出す。書き出しはそこで人が押す。
+
+    書き出しはシーン数×十数秒かかり、置き場によっては使えない（ffmpeg が要る）。
+    道具の中で待たせると会話ごと止まるので、ここでは絵コンテまでにする。
+    """
+    import video_script
+    topic = (params.get("topic") or "").strip()
+    if not topic:
+        return "動画のテーマが空です。"
+    aspect = (params.get("aspect") or "16:9").strip()
+    res = video_script.storyboard(topic, params.get("n") or 5, aspect)
+    if not isinstance(res, dict) or res.get("error"):
+        why = res.get("error") if isinstance(res, dict) else "応答が読めません"
+        return f"絵コンテを作れませんでした：{why}"
+    scenes = res.get("scenes") or []
+    title = res.get("title") or topic
+    _present({"kind": "video", "title": title, "scenes": scenes, "aspect": aspect})
+    lines = [f"動画「{title}」の絵コンテを{len(scenes)}シーン作りました（{aspect}）。"]
+    for i, sc in enumerate(scenes, start=1):
+        lines.append(f"{i}. {sc.get('narration')}")
+    lines.append("会話の隣の「動画にする」を押すと書き出します（シーン数×十数秒かかります）。")
+    return "\n".join(lines)
+
+
+# === 副業・AI STUDIO（持ち主だけ） ======================================
+def _do_seo_pages(params: dict) -> str:
+    """軸の掛け合わせから、SEOページの下書きをまとめて作る（公開はしない）。"""
+    import pseo
+    axes = params.get("axes") or []
+    if not axes:
+        return "軸（キーワードの組み合わせ）が空です。"
+    try:
+        limit = max(1, min(int(params.get("limit") or 5), 10))
+    except (TypeError, ValueError):
+        limit = 5
+    res = pseo.generate_batch(axes, (params.get("template") or "").strip(), limit)
+    if not isinstance(res, dict) or res.get("error"):
+        why = res.get("error") if isinstance(res, dict) else "応答が読めません"
+        return f"SEOページを作れませんでした：{why}"
+    made = res.get("created") or []
+    lines = [f"SEOページの下書きを{len(made)}件作りました（公開はしていません）。"]
+    lines += [f"- {p.get('title')}（/{p.get('slug')}）" for p in made]
+    failed = res.get("failed") or []
+    if failed:
+        lines.append(f"作れなかった物が{len(failed)}件あります（{failed[0].get('error')}）。")
+    lines.append("公開するときは、管理 → もっと →「副業」→「SEOページ」で中身を確かめてから切り替えてください。")
+    return "\n".join(lines)
+
+
+def _do_newsletter_draft(params: dict) -> str:
+    """ニュースレターの下書き。**送らない**（配信は副業の画面で人が押す）。"""
+    import newsletter
+    subject = (params.get("subject") or "").strip()
+    if not subject:
+        return "件名が空です。"
+    res = newsletter.draft_issue(subject, (params.get("body") or "").strip(),
+                                 (params.get("topic") or "").strip())
+    if not isinstance(res, dict) or res.get("error"):
+        why = res.get("error") if isinstance(res, dict) else "応答が読めません"
+        return f"下書きを作れませんでした：{why}"
+    body = res.get("body") or ""
+    _present({"kind": "document", "title": f"ニュースレター「{res.get('subject')}」（下書き）",
+              "content": body})
+    return (f"ニュースレター「{res.get('subject')}」の下書きを作りました（{len(body)}字・送っていません）。"
+            "配信するときは、管理 → もっと →「副業」→「ニュースレター」で中身を確かめてから押してください。")
+
+
+def _do_run_workflow(params: dict) -> str:
+    """AI STUDIO のワークフローを名前で流す（持ち主だけ）。"""
+    import studio
+    want = (params.get("name") or "").strip()
+    if not want:
+        return "流すワークフローの名前が空です。"
+    flows = [w for w in (studio.list_workflows() or []) if isinstance(w, dict) and w.get("id")]
+    if not flows:
+        return "ワークフローはまだありません。管理 → もっと →「つくる」→「AI STUDIO」で作れます。"
+    exact = [w for w in flows if (w.get("name") or "") == want]
+    part = [w for w in flows if want in (w.get("name") or "")]
+    hits = exact if len(exact) == 1 else part
+    if len(hits) != 1:
+        names = "・".join(f"「{w.get('name')}」" for w in flows[:12])
+        return f"「{want}」に当たるワークフローが1つに絞れません。あるのは {names} です。"
+    wf = hits[0]
+    res = studio.run_workflow(wf["id"], (params.get("input") or "").strip())
+    if not isinstance(res, dict) or res.get("error"):
+        why = res.get("error") if isinstance(res, dict) else "応答が読めません"
+        return f"ワークフロー「{wf.get('name')}」を流せませんでした：{why}"
+    rows = res.get("results") or []
+    failed = [r for r in rows if not r.get("skipped") and r.get("ok") is False]
+    final = (res.get("final_output") or "").strip()
+    lines = [f"ワークフロー「{wf.get('name')}」を流しました（{res.get('ran', 0)}手）。"]
+    for r in rows:
+        mark = "飛ばした" if r.get("skipped") else ("失敗" if r.get("ok") is False else "済")
+        lines.append(f"- {r.get('step')}. {r.get('name') or r.get('type')}（{mark}）"
+                     + (f"：{r.get('error')}" if r.get("error") else ""))
+    if failed:
+        lines.append("途中で失敗した手順があります。結果は最後まで出ていません。")
+    if final:
+        lines += ["", "結果:", final[:1500]]
+        _present({"kind": "document", "title": f"ワークフロー「{wf.get('name')}」の結果",
+                  "content": final})
+    return "\n".join(lines)
+
+
 # ツール名 → 実装関数のディスパッチ表。
 _DISPATCH = {
     "add_task": _do_add_task,
@@ -1500,6 +1890,17 @@ _DISPATCH = {
     "income_status": _do_income_status,
     "notify": _do_notify,
     "save_note": _do_save_note,
+    "ask_vault": _do_ask_vault,
+    "vault_list": _do_vault_list,
+    "mission_list": _do_mission_list,
+    "mission_step": _do_mission_step,
+    "sns_draft": _do_sns_draft,
+    "create_lp": _do_create_lp,
+    "create_app": _do_create_app,
+    "create_video": _do_create_video,
+    "seo_pages": _do_seo_pages,
+    "newsletter_draft": _do_newsletter_draft,
+    "run_workflow": _do_run_workflow,
 }
 
 
@@ -1514,6 +1915,8 @@ _TOOLS_THAT_PERSIST = {
     "add_task", "complete_task", "add_agenda", "board_add_note",
     "remember", "save_note", "create_automation", "create_mission",
     "enqueue_income", "schedule_add",
+    # 手順の成果をゴールに書き込む（保存先が無いと、進めた結果が残らない）
+    "mission_step",
 }
 
 _NO_STORAGE_MSG = (
@@ -1521,6 +1924,16 @@ _NO_STORAGE_MSG = (
     "管理 → もっと →「連携」→ Supabase から自分のデータベースを接続してください。"
     "接続するまで、作ったものは残りません。"
 )
+
+
+def _allowed_for_this_person(tool: str) -> bool:
+    """いまの利用者が、この道具を使ってよいか。判定できないときは通す（これまでどおり）。"""
+    try:
+        import capabilities
+        import config
+        return config.current_is_owner() or tool not in capabilities.owner_only_tools()
+    except Exception:
+        return True
 
 
 def _storage_missing() -> bool:
@@ -1540,6 +1953,10 @@ def execute_tool(name: str, params: dict) -> str:
     handler = _DISPATCH.get(key)
     if handler is None:
         return f"不明なツールです：{name}"
+    # 持ち主専用の道具（副業・AI STUDIO）。HTTPの入口では require_owner で
+    # 塞いでいるが、会話の道具はそこを通らないので、ここでも塞ぐ。
+    if not _allowed_for_this_person(key):
+        return "この操作は、このアプリの持ち主だけが使えます。"
     if key in _TOOLS_THAT_PERSIST and _storage_missing():
         return _NO_STORAGE_MSG
 
@@ -1575,4 +1992,15 @@ def execute_tool(name: str, params: dict) -> str:
         audit.end(rec, out, level)
     except Exception:
         pass          # 記録が壊れても、道具の結果は返す
+    # 開いている画面へ「変わった」を流す（events.py・仕様§38）。会話で足した
+    # タスクや付箋が、開いている画面にすぐ出る。失敗した結果でも流してよい
+    # ——受けた画面は取り直すだけで、変わっていなければ何も起きない。
+    try:
+        import config
+        import events
+        kind = events.TOOL_KINDS.get(key)
+        if kind:
+            events.publish(config.current_user_id(), kind)
+    except Exception:
+        pass
     return out

@@ -73,6 +73,8 @@ KINDS = {
     "page",       # url, title, text
     "diagram",    # title, source(mermaid)
     "link",       # url, title  … 外に出来た物（Googleドキュメント等）
+    "site",       # artifact_id, title, html, app … 1枚のHTML（sandbox の枠で動かす）
+    "video",      # title, scenes[{narration,visual}], aspect … 絵コンテ（書き出しは画面で押す）
 }
 
 _items: contextvars.ContextVar = contextvars.ContextVar("present_items", default=None)
