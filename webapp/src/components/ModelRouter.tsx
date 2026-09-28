@@ -88,7 +88,7 @@ export default function ModelRouter() {
 
       {ready.length === 0 ? (
         <p className="text-[11px] leading-relaxed text-muted">
-          使えるAIがまだありません。設定 →「つなぐ」 に鍵を入れてください
+          使えるAIがまだありません。管理 → もっと →「連携」で、AIの鍵（Gemini など）を入れてください
           （GEMINI_API_KEY には無料枠があります）。
         </p>
       ) : (

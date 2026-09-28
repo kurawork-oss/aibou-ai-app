@@ -97,7 +97,7 @@ export function explain(err: unknown, what = "この操作"): string {
     return "短い時間に使いすぎました。少し待ってからもう一度お試しください。";
   }
   if (/\(50\d\)|\(503\)/.test(msg)) {
-    return "サーバー側で用意ができていません。設定 →「つなぐ」 に必要な鍵が入っているか確認してください。";
+    return "サーバー側で用意ができていません。管理 → もっと →「連携」に必要な鍵が入っているかを、設定 →「しらべる」で確かめてください。";
   }
   if (/Failed to fetch|NetworkError|Load failed|ネットワーク/i.test(msg)) {
     return "サーバーに繋がりませんでした。通信状況を確認して、もう一度お試しください。";

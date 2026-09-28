@@ -104,13 +104,15 @@ export default function MemorySettings() {
        理由を言う。理由なく消えると「保存できないアプリ」に見える。 */
     const secret = secretReason(text);
     if (secret) {
-      setNote(`⚠ ${secret}。記憶ではなく、設定 →「つなぐ」 に入れてください。`);
+      setNote(`⚠ ${secret}。記憶ではなく、管理 → もっと →「連携」の、その連携の欄に入れてください。`);
       return;
     }
     setBusy(true);
     setNote("");
     await memory.add(text, { source: "me", kind: "fact", importance: 1 });
-    setDraft("");
+    // 覚えている間に次を打ち始めていたら、それは消さない（打ったそばから
+    // 消えるように見える。機械が混んでいるとき、テストでも実際に踏んだ）
+    setDraft((d) => (d.trim() === text ? "" : d));
     await load();
     setBusy(false);
   };
