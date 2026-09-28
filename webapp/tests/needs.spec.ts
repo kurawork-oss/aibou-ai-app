@@ -25,7 +25,10 @@ test("403 は管理者専用だと伝える", () => {
 });
 
 test("503 は鍵の確認へ誘導する", () => {
-  expect(explain(new Error("Forge failed (503)"))).toContain("つなぐ");
+  // 鍵を入れる場所は「連携」の画面（設定の「つなぐ」は機能の入り切りと手元のPC）
+  const m = explain(new Error("Forge failed (503)"));
+  expect(m).toContain("「連携」");
+  expect(m).toContain("「しらべる」");
 });
 
 test("429 は待つように伝える", () => {
