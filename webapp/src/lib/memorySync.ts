@@ -119,7 +119,14 @@ export function syncBlockedReason(): string | null {
    同じ記憶を2回上げて往復が倍になる。走っている物があれば、それを待つ。 */
 let inFlight: Promise<SyncOutcome> | null = null;
 
-export function syncMemory(): Promise<SyncOutcome> {
+export function syncMemory(opts: { fresh?: boolean } = {}): Promise<SyncOutcome> {
+  if (inFlight && opts.fresh) {
+    /* 人が「いま揃える」を押したとき。走っている回（開いたときの自動の回など）は、
+       押す**前に**集め終わっていることがある——押す直前に覚えた物がその回に
+       入っておらず、「すでに揃っています」と出たのに、実は上がっていなかった。
+       走っている回が終わるのを待ってから、もう1回まわす。 */
+    return inFlight.catch(() => null).then(() => syncMemory());
+  }
   if (!inFlight) {
     inFlight = run().finally(() => { inFlight = null; });
   }

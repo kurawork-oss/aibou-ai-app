@@ -77,7 +77,8 @@ export default function MemorySettings() {
   const runSync = useCallback(async (manual: boolean) => {
     if (blocked) { setSync({ ok: false, pushed: 0, applied: 0, more: false, reason: blocked }); return; }
     setSyncing(true);
-    const out = await syncMemory();
+    // 押したときは、走っている回に相乗りせず、押した時点の物まで運ぶ
+    const out = await syncMemory({ fresh: manual });
     setSyncing(false);
     setSync(out);
     // 受け取った物があるときだけ読み直す（毎回だと一覧がちらつく）
