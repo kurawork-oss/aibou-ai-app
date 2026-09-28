@@ -13,8 +13,7 @@
  * こちらで見るのは**端末側**——本当に IndexedDB へ入るか、本当に
  * 送り出すか、繋がっていないときに嘘をつかないか。
  *
- * 「2台目の端末」は、IndexedDB と合流の目印を消して作る。
- * 新しい端末で同じアカウントに入った状態と、中身は同じ。
+ * 「2台目の端末」は、別のブラウザの入れ物（何も持っていない所）で開いて作る。
  */
 
 import { test, expect, type Page } from "@playwright/test";
@@ -82,21 +81,6 @@ async function remember(page: Page, text: string) {
   await page.getByLabel("覚えておいてほしいこと").fill(text);
   await page.getByRole("button", { name: "覚える" }).click();
   await expect(page.getByText(text, { exact: true })).toBeVisible({ timeout: 5_000 });
-}
-
-/** この端末を「新しい端末」にする（記憶も、どこまで合流したかも捨てる）。 */
-async function becomeNewDevice(page: Page) {
-  await page.evaluate(async () => {
-    localStorage.removeItem("forge_mem_sync_at");
-    localStorage.removeItem("forge_mem_sync_ran");
-    await new Promise<void>((done) => {
-      const req = indexedDB.deleteDatabase("forge-memory");
-      req.onsuccess = () => done();
-      req.onerror = () => done();
-      req.onblocked = () => done();
-      setTimeout(done, 2000);
-    });
-  });
 }
 
 async function setup(page: Page, server: ReturnType<typeof memoryServer>): Promise<Backend> {
@@ -168,9 +152,15 @@ test("サーバーが覚えていることが、この端末にも入る", async
     .toBeVisible({ timeout: 10_000 });
 });
 
-test("2台目の端末が、空のままにならない", async ({ page }) => {
+test("2台目の端末が、空のままにならない", async ({ page, browser }) => {
   /* この一本が、合流を足した理由そのもの。
-     1台目で覚える → 端末の中身を捨てる（＝新しい端末）→ 戻ってくるか。 */
+     1台目で覚える → 何も持っていない別の端末で開く → 戻ってくるか。
+
+     以前は同じタブの中身を捨てて「新しい端末」にしていた。ところが捨てた
+     あと再読込までの間に、1台目のタブに残っていた合流のタイマーが走ると、
+     「ここまで揃えた」の目印を書き戻してしまい、新しい端末が何も受け取らない
+     ——本物の2台目では起きない、テストだけの取り違えで、混んでいると落ちた。
+     本物と同じく、別の端末（別のブラウザの入れ物）で開く。 */
   const server = memoryServer();
   await setup(page, server);
   await page.goto("/");
@@ -184,17 +174,23 @@ test("2台目の端末が、空のままにならない", async ({ page }) => {
     expect(server.all().length).toBeGreaterThanOrEqual(2);
   }).toPass({ timeout: 10_000 });
 
-  await becomeNewDevice(page);
-  await page.reload({ waitUntil: "domcontentloaded" });
-  await enterApp(page);
-  await openMemory(page);
-
-  /* 開いてから揃えに行くのはタイマー（memorySync.syncOnBoot）＋往復1回。
-     全部のテストを同時に流して機械が混んでいると、10秒では足りないことが
-     あった（単独では毎回通る）。待つ時間だけ延ばし、確かめる中身は変えない。 */
-  await expect(page.getByText("猫を飼っている。名前はミケ", { exact: true }))
-    .toBeVisible({ timeout: 20_000 });
-  await expect(page.getByText("健康診断は毎年10月", { exact: true })).toBeVisible();
+  const other = await browser.newContext({
+    baseURL: test.info().project.use.baseURL,
+    viewport: { width: 390, height: 844 },
+    locale: "ja-JP",
+  });
+  try {
+    const second = await other.newPage();
+    await setup(second, server);
+    await second.goto("/");
+    await enterApp(second);
+    await openMemory(second);
+    await expect(second.getByText("猫を飼っている。名前はミケ", { exact: true }))
+      .toBeVisible({ timeout: 20_000 });
+    await expect(second.getByText("健康診断は毎年10月", { exact: true })).toBeVisible();
+  } finally {
+    await other.close();
+  }
 });
 
 test("降りてきた記憶は、会話のときにも思い出せる", async ({ page }) => {
@@ -298,7 +294,16 @@ test("揃ったときは、上げた数と受け取った数を出す", async ({
   await enterApp(page);
   await openMemory(page);
 
+  /* 開いたときの合流が終わってから覚える。先に覚えると、開いたときの合流が
+     それを上げてしまい、押したときには「すでに揃っています」になる。 */
+  await expect(page.getByText(/揃っています|件を上げ/).first()).toBeVisible({ timeout: 15_000 });
   await remember(page, "パスワードマネージャは 1Password");
+  /* 押す直前に、別の端末で覚えた物をサーバーに置く。開いてすぐ走る合流
+     （syncOnBoot）が先に上げてしまっても、押した回には必ず受け取る物がある
+     ——混んでいるときだけ順番が入れ替わって落ちた。 */
+  const now = Date.now() + 1000;
+  server.rows.set("other-1", { id: "other-1", text: "別の端末で覚えたこと", kind: "fact",
+                               importance: 0, createdAt: now, updatedAt: now });
   await page.getByRole("button", { name: "いま揃える" }).click();
   await expect(page.getByText(/件を上げ、.*件を受け取りました/)).toBeVisible({ timeout: 10_000 });
 });
