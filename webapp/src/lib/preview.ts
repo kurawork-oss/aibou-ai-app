@@ -48,3 +48,41 @@ export function previewDoc(html: string): string {
  *  許可されるのはJSで処理する送信だけ。
  */
 export const PREVIEW_SANDBOX = "allow-scripts allow-forms allow-modals allow-popups";
+
+const escAttr = (s: string) =>
+  s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+/**
+ * 別タブで開くときの外枠。**生成物を、このアプリと同じ出どころで動かさない。**
+ *
+ * 以前は生成HTMLをそのまま blob: にして別タブで開いていた。blob: のURLは
+ * 作ったページ（このアプリ）と同じ出どころになるので、生成物の中の
+ * スクリプトは、このアプリのログイン情報（localStorage のセッション）や
+ * 設定を読めた。opener を切っていない入口では、元のタブの画面まで触れた。
+ * 生成物はAIが書いた物で、人が中身を確かめてから開くわけではない。
+ *
+ * そこで外枠にはスクリプトを1行も置かず、生成物はその中の sandbox の枠
+ * （allow-same-origin 無し＝不透明な出どころ）で動かす。プレビューと同じ条件。
+ * 枠の中の localStorage はメモリ版（previewDoc）なので、保存は再読込で消える。
+ * 残したいときはダウンロードして、手元で開く。
+ */
+export function sandboxedTabDoc(html: string, title = "プレビュー"): string {
+  const t = escAttr(title);
+  return `<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8">`
+    + `<meta name="viewport" content="width=device-width, initial-scale=1">`
+    + `<title>${t}</title>`
+    + `<style>html,body{margin:0;height:100%;background:#fff}`
+    + `iframe{display:block;border:0;width:100%;height:100%}</style></head>`
+    + `<body><iframe title="${t}" sandbox="${PREVIEW_SANDBOX}" srcdoc="${escAttr(previewDoc(html))}"></iframe>`
+    + `</body></html>`;
+}
+
+/** 生成したHTMLを別タブで開く（外枠＋sandbox の枠。opener も渡さない）。 */
+export function openSandboxedTab(html: string, title = "プレビュー"): void {
+  if (typeof window === "undefined" || !html) return;
+  const url = URL.createObjectURL(new Blob([sandboxedTabDoc(html, title)],
+    { type: "text/html;charset=utf-8" }));
+  window.open(url, "_blank", "noopener,noreferrer");
+  // すぐ捨てると開く前に消える。読み込む余裕をとってから捨てる
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}

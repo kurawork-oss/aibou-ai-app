@@ -56,6 +56,7 @@ ALWAYS = frozenset({
     "local_list", "local_read", "local_write", "local_append", "obsidian_note",
     "browser_open", "browser_act",
     "recipe_run", "recipe_save", "recipe_delete",
+    "screen_look",
 })
 
 #: どこから頼まれたか（画面に出す言葉）

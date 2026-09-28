@@ -15,7 +15,7 @@
 import { useState } from "react";
 import { lpGenerate, API_URL } from "@/lib/api";
 import { addToArchive } from "@/components/AppArchive";
-import { previewDoc, PREVIEW_SANDBOX } from "@/lib/preview";
+import { previewDoc, PREVIEW_SANDBOX, openSandboxedTab } from "@/lib/preview";
 
 const STYLES = [
   { key: "modern", label: "モダン" },
@@ -109,14 +109,11 @@ export default function LpBuilder({ kind = "lp" }: { kind?: "lp" | "app" }) {
     URL.revokeObjectURL(url);
   };
 
-  /** 別タブで開く（アプリはiframeのsandboxを外した素の環境でも確認したい）。 */
-  const openInTab = () => {
-    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    window.open(url, "_blank");
-    // 開いた側が読み終わるまで少し猶予を持たせて解放する
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
-  };
+  /** 別タブで開く。大きな画面で確かめたいとき用。
+   *  以前は sandbox を外した素の環境（このアプリと同じ出どころ・opener 付き）で
+   *  開いていて、生成物のスクリプトがこのアプリのログイン情報まで読めた。
+   *  いまはプレビューと同じ sandbox の枠の中で開く（preview.ts）。 */
+  const openInTab = () => openSandboxedTab(html, title || t.filename);
 
   const save = async () => {
     setBusy(true);

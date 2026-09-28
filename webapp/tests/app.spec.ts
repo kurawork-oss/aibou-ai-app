@@ -840,7 +840,7 @@ test("ARCHIVE renders archive UI", async ({ page }) => {
   await goMode(page, "ARCHIVE");
   /* 以前は /ARCHIVE/ で見ていたが、当たっていたのは消えかけの「Modes」の札だった
      （画面そのものには ARCHIVE の字は無い）。画面の中身で見る。 */
-  await expect(page.getByText("ここまでに作ったアプリが残ります")).toBeVisible({ timeout: 5_000 });
+  await expect(page.getByText(/ここまでに作った物が残ります/)).toBeVisible({ timeout: 5_000 });
 });
 
 test("AUTO renders autopilot UI", async ({ page }) => {

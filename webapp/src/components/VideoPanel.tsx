@@ -18,6 +18,7 @@ import {
   videoGenerate, videoStoryboard, videoCaps, API_URL,
   type VideoScene, type VideoAspect,
 } from "@/lib/api";
+import { base64ToBlob } from "@/lib/blob";
 
 const FALLBACK_ASPECTS: VideoAspect[] = [
   { key: "16:9", w: 1280, h: 720, label: "横長（YouTube）" },
@@ -39,13 +40,6 @@ const EXAMPLES = [
 ];
 
 /** base64のMP4をBlobにする（大きな動画をdata:URLでDOMに載せないため）。 */
-function base64ToBlob(b64: string, mime: string): Blob {
-  const bin = atob(b64);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
-  return new Blob([bytes], { type: mime });
-}
-
 export default function VideoPanel() {
   const [topic, setTopic] = useState("");
   const [style, setStyle] = useState("");

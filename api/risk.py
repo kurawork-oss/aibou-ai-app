@@ -104,6 +104,8 @@ LEVELS: Dict[str, int] = {
 
     # ── 2 外のサービスに残る ──────────────────────────────────────
     "local_read": 2,
+    # 画面の写しがAIへ渡る（local_read と同じ重さ）
+    "screen_look": 2,
     "local_write": 2,
     "local_append": 2,
     "obsidian_note": 2,
@@ -134,6 +136,7 @@ LABELS: Dict[int, str] = {
 # 確認のときに添える一言（何が起きるのかを具体的に）
 WHY: Dict[str, str] = {
     "local_read": "このファイルの中身がAIへ渡ります。",
+    "screen_look": "いまの画面の写しがAIへ渡ります（映っている物ぜんぶ）。",
     "browser_open": "ログイン済みの画面の中身が、AIへ渡ります。",
     "browser_act": ("あなたのブラウザで、あなたとして操作します。"
                     "押した先が送信や購入だった場合、取り消せません。"),

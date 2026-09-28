@@ -278,6 +278,10 @@ SCHEMAS: Dict[str, Dict[str, Any]] = {
         "name": ("str", True, "流すワークフローの名前（一部でよい）"),
         "input": ("str", False, "最初の手順に渡す入力"),
     }},
+    "screen_look": {"fields": {
+        "question": ("str", False, "画面について知りたいこと"),
+        "device": ("str", False, "どのパソコンか（台の名前。繋いでいる台が1つならいらない）"),
+    }},
 }
 
 

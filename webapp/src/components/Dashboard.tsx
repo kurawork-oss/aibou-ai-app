@@ -25,6 +25,7 @@ import Tilt3D from "@/components/Tilt3D";
 import NeedsNotice from "@/components/NeedsNotice";
 import PendingApprovals from "@/components/PendingApprovals";
 import Whiteboard from "@/components/Whiteboard";
+import { useLive } from "@/lib/live";
 import FlowBuilder from "@/components/FlowBuilder";
 import StepRunnersNote from "@/components/StepRunnersNote";
 import { STEP_META } from "@/lib/flowSteps";
@@ -117,6 +118,8 @@ function AutomationBoard({ isOwner }: { isOwner: boolean | null }) {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+  // 会話で作った自動化を、開いたまま受け取る（仕様§38）
+  useLive(["automations"], () => void load());
 
   // Natural language → automation (via the evolve engine, with a safe fallback).
   const createFromNL = async (text: string) => {

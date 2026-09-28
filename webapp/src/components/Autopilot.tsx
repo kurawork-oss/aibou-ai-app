@@ -18,6 +18,7 @@ import {
   type Mission,
 } from "@/lib/api";
 import { explain } from "@/lib/needs";
+import { useLive } from "@/lib/live";
 import StepRunnersNote from "@/components/StepRunnersNote";
 
 const STATUS_COLOR: Record<string, string> = {
@@ -49,6 +50,8 @@ export default function Autopilot({ isOwner = null }: { isOwner?: boolean | null
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+  // 会話で作った・進めたゴールを、開いたまま受け取る（仕様§38）
+  useLive(["missions"], () => void load());
 
   const create = async () => {
     if (!goal.trim() || creating) return;

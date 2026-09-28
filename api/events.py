@@ -88,13 +88,23 @@ def _put(loop, q, item) -> None:
         pass                                     # そのループはもう閉じている
 
 
-def publish(user: str, kind: str) -> int:
-    """その人の開いている画面へ「kind が変わった」を流す。流した本数を返す。"""
+def publish(user: str, kind: str, source: str = "") -> int:
+    """その人の開いている画面へ「kind が変わった」を流す。流した本数を返す。
+
+    source … 書き込んだタブの名前（画面が X-AIbou-Tab で送ってくる）。
+    そのタブは、もう新しい物を持っているので読み直さない（ボードは自分の
+    保存を聞いて読み直すと、書いている途中の手元が巻き戻る）。
+    会話の道具から来た変化には付けない——会話したタブでも、隣に開いている
+    ボードなどは読み直したい。
+    """
     if kind not in KINDS:
         return 0
     with _lock:
         subs = list(_subs.get(_key(user), []))
     ev = {"kind": kind, "at": round(time.time(), 3)}
+    src = (source or "").strip()[:40]
+    if src:
+        ev["from"] = src
     for loop, q in subs:
         _put(loop, q, ev)
     return len(subs)

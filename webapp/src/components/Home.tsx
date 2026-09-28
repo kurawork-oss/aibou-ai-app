@@ -14,6 +14,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import * as alwaysAllow from "@/lib/alwaysAllow";
 import { useApproval } from "@/lib/approvalPref";
+import { useLive } from "@/lib/live";
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ClipboardEvent } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -105,6 +106,9 @@ export default function Home({
   }, []);
 
   useEffect(() => { void refresh(); }, [refresh]);
+  // 計器・予定・通知・作った物は、どこで変わっても開いたまま揃える（仕様§38）
+  useLive(["tasks", "agenda", "notifications", "artifacts", "missions", "automations", "income"],
+    () => void refresh());
 
   const scrollTo = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "center" });
   const dials: { label: string; value: number; onClick: () => void }[] = summary

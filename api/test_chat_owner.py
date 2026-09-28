@@ -209,3 +209,28 @@ def test_ニュースレターは下書きまで_送らない(monkeypatch):
     out, made = _run("newsletter_draft", {"subject": "9月号", "topic": "秋の新商品"})
     assert "下書きを作りました" in out and "送っていません" in out
     assert made[0]["content"] == "秋の新商品です。"
+
+
+def test_流れで返す会話の中の道具にも_持ち主かどうかが届く(owner_is_set, live):
+    """会話（/chat・/agent/act）は流れ（SSE）で返し、道具はその流れの途中で
+    ワーカースレッドで動く。入口の依存関係で置いた「持ち主か」が、そこまで
+    届いていること（FastAPI の版によって、流す前に片付けられることがある）。"""
+    import asyncio
+
+    from fastapi import Depends
+    from fastapi.responses import StreamingResponse
+
+    import main
+
+    if not any(getattr(r, "path", "") == "/_probe/owner-stream" for r in app.routes):
+        @app.get("/_probe/owner-stream")
+        async def _probe(_auth: None = Depends(main.require_auth)):
+            async def gen():
+                loop = asyncio.get_event_loop()
+                yield str(await loop.run_in_executor(None, config.current_is_owner))
+            return StreamingResponse(gen())
+
+    emp = {"Authorization": f"Bearer {token_for('emp-1', 'emp@example.com')}"}
+    boss = {"Authorization": f"Bearer {token_for('boss-1', 'boss@example.com')}"}
+    assert live.get("/_probe/owner-stream", headers=emp).text == "False"
+    assert live.get("/_probe/owner-stream", headers=boss).text == "True"

@@ -22,6 +22,12 @@ import {
   artifactGet, artifactDownload, artifactUpdate, slidesToGoogle, API_URL,
   type ArtifactMeta, type ArtifactFull, type SlideDeck, type Slide,
 } from "@/lib/api";
+import { openSandboxedTab, previewDoc, PREVIEW_SANDBOX } from "@/lib/preview";
+
+/** 1枚のHTML（LP・アプリ）か。中身を文として見せず、sandbox の枠で動かす。 */
+export function isHtmlArtifact(meta: { kind: string; mime?: string }): boolean {
+  return meta.kind === "site" || meta.kind === "webapp" || (meta.mime || "").startsWith("text/html");
+}
 
 /* ── CSV parse ──────────────────────────────────────────────────── */
 function parseCsv(text: string): string[][] {
@@ -109,6 +115,8 @@ export default function ArtifactViewer({ meta, onClose }: { meta: ArtifactMeta; 
   }, [onClose, present]);
 
   const rows = useMemo(() => (meta.kind === "spreadsheet" && full ? parseCsv(full.content) : null), [meta.kind, full]);
+  const html = isHtmlArtifact(meta);
+  const siteDoc = useMemo(() => (html && full ? previewDoc(full.content) : ""), [html, full]);
   const theme = getTheme(deck?.theme);
 
   const setTheme = async (name: string) => {
@@ -142,7 +150,8 @@ export default function ArtifactViewer({ meta, onClose }: { meta: ArtifactMeta; 
     } catch { setNote("⚠ 失敗しました"); } finally { setBusy(false); }
   };
 
-  const kindLabel = meta.kind === "slides" ? "SLIDES" : meta.kind === "spreadsheet" ? "SPREADSHEET" : "DOCUMENT";
+  const kindLabel = meta.kind === "slides" ? "SLIDES" : meta.kind === "spreadsheet" ? "SPREADSHEET"
+    : html ? (meta.kind === "webapp" ? "APP" : "PAGE") : "DOCUMENT";
 
   return createPortal(
     <>
@@ -211,6 +220,10 @@ export default function ArtifactViewer({ meta, onClose }: { meta: ArtifactMeta; 
                   </button>
                 ))}
               </div>
+            ) : html ? (
+              /* 生成したHTMLは、このアプリと同じ出どころで動かさない（preview.ts） */
+              <iframe title={meta.title} sandbox={PREVIEW_SANDBOX} srcDoc={siteDoc}
+                className="h-[65vh] w-full rounded-forge border border-panel bg-white" />
             ) : rows ? (
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse text-[12px]">
@@ -233,7 +246,11 @@ export default function ArtifactViewer({ meta, onClose }: { meta: ArtifactMeta; 
           {/* Footer */}
           <div className="flex flex-wrap items-center gap-2 border-t border-panel p-3">
             {deck && <button type="button" onClick={() => setPresent(0)} className="rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] px-3 py-1.5 text-[10px] tracking-[0.12em] text-fg-strong shadow-glow label-mono">▶ 発表</button>}
-            <button type="button" onClick={exportPdf} className="rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] px-3 py-1.5 text-[10px] tracking-[0.12em] text-fg-strong label-mono">⎙ PDFで保存</button>
+            {html ? (
+              full && <button type="button" onClick={() => openSandboxedTab(full.content, meta.title)} className="rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] px-3 py-1.5 text-[10px] tracking-[0.12em] text-fg-strong label-mono">別のタブで大きく開く ↗</button>
+            ) : (
+              <button type="button" onClick={exportPdf} className="rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] px-3 py-1.5 text-[10px] tracking-[0.12em] text-fg-strong label-mono">⎙ PDFで保存</button>
+            )}
             {deck && API_URL && <button type="button" onClick={() => void toGoogleSlides()} disabled={busy} className="rounded-forge border border-panel px-3 py-1.5 text-[10px] tracking-[0.12em] text-fg-strong disabled:opacity-40 label-mono">{busy ? "…" : "Googleスライド ↗"}</button>}
             <button type="button" onClick={() => void artifactDownload(meta)} className="rounded-forge border border-panel px-3 py-1.5 text-[10px] tracking-[0.12em] text-muted transition hover:text-fg-strong label-mono">⭳ ダウンロード</button>
             {note && <span className="ml-auto text-[10px]" style={{ color: note.startsWith("✓") ? "#60d394" : note.startsWith("⚠") ? "#ff9b9b" : "var(--muted)" }}>{note}</span>}

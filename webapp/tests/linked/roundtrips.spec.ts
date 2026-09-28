@@ -24,8 +24,9 @@ import { enterApp, mockBackend, openManage, type Backend } from "./backend";
  *
  *   /health      … 寝ているサーバーを起こすのが役目。何度でも叩く
  *   /memory/sync … 記憶の合流。開いた数秒後にタイマーで1回走る
+ *   /events      … 変わったことを受ける流れ（lib/live.ts）。タブに1本、開きっぱなし
  */
-const BACKGROUND = ["/health", "/memory/sync"];
+const BACKGROUND = ["/health", "/memory/sync", "/events"];
 const isBackground = (path: string) => BACKGROUND.some((p) => path.startsWith(p));
 
 /** 最初の1本から数えて、どれだけ同時に飛んでいるか。 */

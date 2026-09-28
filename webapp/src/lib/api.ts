@@ -87,8 +87,20 @@ export interface IncomeSummary {
  * そこで、確実に通る資格情報があるならそれを Authorization に残し、
  * 本人確認は別のヘッダで渡す。サーバーの設定がどの段階でも動く。
  */
+/**
+ * このタブの名前（開くたびに変わる）。書き込みに付けて送ると、サーバーが
+ * 「変わった」を流すときに添える（api/events.py）。自分が書いた変化で
+ * 自分の画面を読み直さないために使う（書いた画面は、もう新しい物を持っている）。
+ */
+export const TAB_ID: string = (() => {
+  try {
+    if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID().slice(0, 12);
+  } catch { /* 下へ */ }
+  return Math.random().toString(36).slice(2, 14);
+})();
+
 export function authHeaders(extra?: Record<string, string>): Record<string, string> {
-  const headers: Record<string, string> = { ...(extra || {}) };
+  const headers: Record<string, string> = { ...(extra || {}), "X-AIbou-Tab": TAB_ID };
   const jwt = getAccessToken();
 
   if (API_TOKEN) {
@@ -570,7 +582,8 @@ export function codeGenerateStream(
  * 案内するだけだった。
  */
 export interface MadeItem {
-  kind: "image" | "document" | "slides" | "table" | "search" | "page" | "diagram" | "link";
+  kind: "image" | "document" | "slides" | "table" | "search" | "page" | "diagram" | "link"
+    | "site" | "video";
   title?: string;
   /** image / page / link */
   url?: string;
@@ -589,6 +602,12 @@ export interface MadeItem {
   source?: string;
   /** link … どこに出来たか（Googleドキュメント等） */
   where?: string;
+  /** site … 1枚で完結するHTML（sandbox の枠で動かす）。app はアプリか */
+  html?: string;
+  app?: boolean;
+  /** video … 絵コンテと画面の比率（書き出しは画面で押す） */
+  scenes?: { narration: string; visual?: string }[];
+  aspect?: string;
 }
 
 export interface AgentEvent {

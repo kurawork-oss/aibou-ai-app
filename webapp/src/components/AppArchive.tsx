@@ -19,11 +19,28 @@
  * 「作ったもの」の置き場を2つ持つと、どちらを見ればいいか分からなくなるので、
  * すでにある artifacts に寄せた（新しい表は作らない）。
  * 以前は localStorage だけだったので、端末を変えると作ったアプリが消えていた。
+ *
+ * アプリ以外（資料・スライド・表・画像・ページ）もここに並べる。以前は「今日」の
+ * 生成物にしか出ず、会話の隣の「閉じても「管理 → ファイル」に残ります」を押すと、
+ * 押した先に無かった。入口の名前は「ファイル（作った物）」なので、作った物は全部ここ。
  */
 
 import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useState } from "react";
-import { API_URL, artifactCreate, artifactGet, artifactsList, artifactDelete } from "@/lib/api";
+import ArtifactViewer from "@/components/ArtifactViewer";
+import {
+  API_URL, artifactCreate, artifactGet, artifactsList, artifactDelete, type ArtifactMeta,
+} from "@/lib/api";
+import { openSandboxedTab } from "@/lib/preview";
+import { useLive } from "@/lib/live";
+
+/** アプリの一覧に入れる種類（それ以外は「作った物」の側に並べる）。 */
+const APP_KINDS = new Set(["webapp", "app"]);
+
+const MADE_LABEL: Record<string, string> = {
+  document: "ドキュメント", spreadsheet: "表", slides: "スライド", image: "画像",
+  site: "ページ", storyboard: "絵コンテ",
+};
 
 interface ArchiveApp {
   id: string;
@@ -93,12 +110,12 @@ export function addToArchive(
   }
 }
 
-/** HTMLを別タブで開いて、そのまま動かす。 */
-function openHtml(code: string) {
-  const url = URL.createObjectURL(new Blob([code], { type: "text/html;charset=utf-8" }));
-  window.open(url, "_blank", "noopener");
-  // すぐ revoke すると開く前に消える。読み込む余裕をとってから捨てる
-  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+/** HTMLを別タブで開いて動かす。
+ *  以前は blob: でそのまま開いていて、このアプリと同じ出どころで動いた
+ *  （生成物のスクリプトが、ログイン情報の入った localStorage を読めた）。
+ *  いまはプレビューと同じ sandbox の枠の中で開く（preview.ts）。 */
+function openHtml(code: string, title = "アプリ") {
+  openSandboxedTab(code, title);
 }
 
 function download(filename: string, content: string, mime = "text/plain") {
@@ -113,6 +130,8 @@ function download(filename: string, content: string, mime = "text/plain") {
 
 export default function AppArchive() {
   const [apps, setApps] = useState<ArchiveApp[]>([]);
+  const [made, setMade] = useState<ArtifactMeta[]>([]);
+  const [opened, setOpened] = useState<ArtifactMeta | null>(null);
   const [search, setSearch] = useState("");
   const [viewingId, setViewingId] = useState<string | null>(null);
 
@@ -122,13 +141,18 @@ export default function AppArchive() {
 
   // 他の端末で作ったものを取り込む。書くだけだと片道で、
   // 「保存されているのに、この端末では見えない」ことになる。
+  // 開いている間に会話や別の端末で作った物も、同じ口で取り直す（仕様§38）。
+  const [syncs, setSyncs] = useState(0);
+  useLive(["artifacts"], () => setSyncs((n) => n + 1));
   useEffect(() => {
     if (!API_URL) return;
     let alive = true;
     artifactsList()
       .then((items) => {
         if (!alive) return;
-        const mine = items.filter((a) => a.kind === "webapp" || a.kind === "app");
+        // 同じ1回の読み込みで、アプリ以外の作った物も受け取る（往復を増やさない）
+        setMade(items.filter((a) => !APP_KINDS.has(a.kind)));
+        const mine = items.filter((a) => APP_KINDS.has(a.kind));
         if (mine.length === 0) return;
         setApps((prev) => {
           const known = new Set(prev.map((a) => a.name + a.createdAt.slice(0, 10)));
@@ -152,7 +176,7 @@ export default function AppArchive() {
       })
       .catch(() => { /* 取れなくても手元の分は見られる */ });
     return () => { alive = false; };
-  }, []);
+  }, [syncs]);
 
   /** 本文が手元に無いもの（他の端末で作った）を取りに行く。 */
   const fetchCode = useCallback(async (app: ArchiveApp): Promise<string> => {
@@ -197,12 +221,36 @@ export default function AppArchive() {
     <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto pb-2">
       <div className="panel p-3">
         <p className="text-[11px] leading-relaxed text-muted">
-          ここまでに作ったアプリが残ります。<span className="text-fg">HTML</span> のものは
-          「開く」でそのまま動かせます。
+          ここまでに作った物が残ります（資料・スライド・表・画像・ページ・アプリ）。
+          <span className="text-fg">HTML</span> のアプリは「開く」でそのまま動かせます。
           <span className="text-muted/70"> Python（Streamlit）の古い生成物は、
           ダウンロードして手元で <code className="text-[#9fe7ff]">streamlit run</code> が必要です。</span>
         </p>
       </div>
+
+      {made.length > 0 && (
+        <section aria-label="作った物" className="panel p-3">
+          <div className="mb-2 text-[10px] tracking-[0.2em] text-muted label-mono">
+            作った物（{made.length}）
+          </div>
+          <ul className="flex flex-col gap-1.5">
+            {made.map((a) => (
+              <MadeRow key={a.id} item={a}
+                onOpen={() => setOpened(a)}
+                onDelete={() => {
+                  if (!window.confirm(`「${a.title}」を削除しますか？（元に戻せません）`)) return;
+                  setMade((prev) => prev.filter((x) => x.id !== a.id));
+                  void artifactDelete(a.id).catch(() => {});
+                }} />
+            ))}
+          </ul>
+        </section>
+      )}
+      <AnimatePresence>
+        {opened && <ArtifactViewer meta={opened} onClose={() => setOpened(null)} />}
+      </AnimatePresence>
+
+      <div className="px-1 text-[10px] tracking-[0.2em] text-muted label-mono">アプリ</div>
 
       {apps.length > 0 && (
         <input
@@ -259,7 +307,7 @@ export default function AppArchive() {
                   {kindOf(app) === "html" && (
                     <button
                       type="button"
-                      onClick={() => void fetchCode(app).then((c) => c && openHtml(c))}
+                      onClick={() => void fetchCode(app).then((c) => c && openHtml(c, app.name))}
                       className="rounded-forge border px-2 py-1 text-[10px] tracking-[0.12em] label-mono"
                       style={{ borderColor: "var(--accent)", color: "var(--fg-strong)", background: "var(--btn-bg)" }}
                     >
@@ -331,5 +379,39 @@ export default function AppArchive() {
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+/** 作った物の1行。画像は外のURLを開き、それ以外は中で開く。 */
+function MadeRow({ item, onOpen, onDelete }:
+  { item: ArtifactMeta; onOpen: () => void; onDelete: () => void }) {
+  const isImage = item.kind === "image" && /^https?:\/\//.test(item.url || "");
+  const label = MADE_LABEL[item.kind] ?? item.kind;
+  return (
+    <li className="flex items-center gap-2 rounded-forge border border-panel p-2">
+      {isImage ? (
+        <a href={item.url} target="_blank" rel="noopener noreferrer"
+           className="block h-9 w-9 shrink-0 overflow-hidden rounded border border-panel">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={item.url} alt={item.title} className="h-full w-full object-cover" />
+        </a>
+      ) : (
+        <span className="shrink-0 text-[10px] text-muted label-mono">{label}</span>
+      )}
+      <span className="min-w-0 flex-1 truncate text-[12px] text-fg">{item.title}</span>
+      {isImage ? (
+        <a href={item.url} target="_blank" rel="noopener noreferrer"
+           className="shrink-0 rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] px-2 py-1 text-[10px] text-fg-strong label-mono">
+          開く ↗
+        </a>
+      ) : (
+        <button type="button" onClick={onOpen}
+          className="shrink-0 rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] px-2 py-1 text-[10px] text-fg-strong label-mono">
+          開く
+        </button>
+      )}
+      <button type="button" onClick={onDelete} aria-label={`${item.title}を削除`}
+        className="shrink-0 text-[10px] text-[#ff8888]">✕</button>
+    </li>
   );
 }

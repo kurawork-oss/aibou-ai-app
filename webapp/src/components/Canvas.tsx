@@ -40,7 +40,9 @@ import { AnimatePresence, motion } from "framer-motion";
 
 import Markdown from "@/components/Markdown";
 import SlideView, { getTheme } from "@/components/SlideView";
-import type { MadeItem } from "@/lib/api";
+import { videoCaps, videoGenerate, type MadeItem } from "@/lib/api";
+import { base64ToBlob, downloadText, safeName } from "@/lib/blob";
+import { openSandboxedTab, previewDoc, PREVIEW_SANDBOX } from "@/lib/preview";
 
 /** 手元に残す数。これを超えたら古い物から落とす（保存済みなので消えない）。 */
 export const KEEP = 12;
@@ -67,11 +69,14 @@ const LABEL: Record<MadeItem["kind"], string> = {
   page: "ページ",
   diagram: "図",
   link: "リンク",
+  site: "ページ・アプリ",
+  video: "動画の絵コンテ",
 };
 
 const ICON: Record<MadeItem["kind"], string> = {
   image: "🖼", document: "📄", slides: "📊", table: "📋",
   search: "🔍", page: "🌐", diagram: "🗺", link: "🔗",
+  site: "🪧", video: "🎬",
 };
 
 export default function Canvas({
@@ -276,7 +281,136 @@ function Body({ item }: { item: MadeItem }) {
 
     case "diagram":
       return <Diagram source={item.source || ""} />;
+
+    case "site":
+      return <SitePreview item={item} />;
+
+    case "video":
+      return <VideoPlan item={item} />;
   }
+}
+
+/**
+ * 1枚のHTML（LP・アプリ）を、その場で動かして見せる。
+ *
+ * 枠は sandbox（allow-same-origin 無し）。生成物のスクリプトは、この
+ * アプリのログイン情報にも画面にも触れない（preview.ts）。別タブで
+ * 開くときも同じ枠の中で開く。
+ */
+function SitePreview({ item }: { item: MadeItem }) {
+  const html = item.html || "";
+  const doc = useMemo(() => previewDoc(html), [html]);
+  if (!html) return <p className="text-[12px] text-muted">中身がありません。</p>;
+  const name = safeName(item.title || "", item.app ? "app" : "page");
+  return (
+    <div className="flex h-full min-h-[60vh] flex-col gap-2">
+      <iframe
+        title={item.title || "プレビュー"}
+        sandbox={PREVIEW_SANDBOX}
+        srcDoc={doc}
+        className="min-h-[55vh] w-full flex-1 rounded-forge border border-panel bg-white"
+      />
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => openSandboxedTab(html, item.title || "プレビュー")}
+          className="inline-flex min-h-[44px] items-center rounded-forge border border-panel px-3 text-[12px] text-[var(--accent)] transition hover:border-[var(--line)]"
+        >
+          別のタブで大きく開く ↗
+        </button>
+        <button
+          type="button"
+          onClick={() => downloadText(`${name}.html`, html, "text/html;charset=utf-8")}
+          className="inline-flex min-h-[44px] items-center rounded-forge border border-panel px-3 text-[12px] text-muted transition hover:text-fg-strong"
+        >
+          ⭳ ダウンロード
+        </button>
+      </div>
+      {item.app && (
+        <p className="text-[11px] leading-relaxed text-muted">
+          枠の中で入れた値は、閉じると消えます。ずっと使うときはダウンロードして開いてください。
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * 動画の絵コンテ。書き出しはここで押す。
+ *
+ * 書き出しはシーン数×十数秒かかり、置き場によっては使えない（ffmpeg が要る）。
+ * 会話の中で待たせると会話ごと止まるので、道具は絵コンテまでにしてある。
+ */
+function VideoPlan({ item }: { item: MadeItem }) {
+  const scenes = item.scenes || [];
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => () => { if (url) URL.revokeObjectURL(url); }, [url]);
+
+  const render = async () => {
+    if (busy || !scenes.length) return;
+    setBusy(true);
+    setNote("書き出し中…（シーン数×十数秒かかります）");
+    try {
+      const caps = await videoCaps().catch(() => null);
+      if (caps && !caps.available) {
+        setNote("この置き場では動画を書き出せません（ffmpeg が要ります）。"
+          + "絵コンテは「つくる」→「素材」→ VIDEO に貼って使えます。");
+        return;
+      }
+      const r = await videoGenerate(scenes, "", { aspect: item.aspect || "16:9", subtitles: true });
+      if (r.error || !r.video_base64) {
+        setNote(`⚠ ${r.error ?? "動画を書き出せませんでした"}`);
+        return;
+      }
+      setUrl(URL.createObjectURL(base64ToBlob(r.video_base64, "video/mp4")));
+      setNote("✓ 書き出しました");
+    } catch (e) {
+      setNote(`⚠ ${e instanceof Error ? e.message : "書き出しに失敗しました"}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      <ol className="flex flex-col gap-2">
+        {scenes.map((sc, i) => (
+          <li key={i} className="rounded-forge border border-panel p-2.5">
+            <div className="text-[10px] text-muted label-mono">シーン {i + 1}</div>
+            <p className="mt-0.5 text-[12px] leading-relaxed text-fg">{sc.narration}</p>
+            {sc.visual && <p className="mt-1 text-[11px] leading-relaxed text-muted">画: {sc.visual}</p>}
+          </li>
+        ))}
+      </ol>
+      {url ? (
+        <div className="flex flex-col gap-2">
+          <video src={url} controls className="w-full rounded-forge border border-panel" />
+          <a href={url} download={`${safeName(item.title || "", "video")}.mp4`}
+             className="inline-flex min-h-[44px] items-center self-start rounded-forge border border-panel px-3 text-[12px] text-muted transition hover:text-fg-strong">
+            ⭳ ダウンロード
+          </a>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => void render()}
+          disabled={busy || !scenes.length}
+          className="min-h-[44px] self-start rounded-forge border px-4 text-[12px] transition disabled:opacity-40"
+          style={{ borderColor: "var(--accent)", color: "var(--fg-strong)", background: "var(--btn-bg)" }}
+        >
+          {busy ? "書き出し中…" : `動画にする（${item.aspect || "16:9"}）`}
+        </button>
+      )}
+      {note && (
+        <p role="status" className="text-[11px] leading-relaxed"
+           style={{ color: note.startsWith("✓") ? "#60d394" : note.startsWith("⚠") ? "#ff9b9b" : "var(--muted)" }}>
+          {note}
+        </p>
+      )}
+    </div>
+  );
 }
 
 /** 外のページを開く。新しいタブで開き、元のタブは渡さない。 */

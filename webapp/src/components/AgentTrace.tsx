@@ -78,6 +78,7 @@ export const TOOL_LABELS: Record<string, string> = {
   seo_pages: "SEOページを作る",
   newsletter_draft: "ニュースレターを書く",
   run_workflow: "ワークフローを流す",
+  screen_look: "手元の画面を見る",
 };
 
 export type AgentStep =

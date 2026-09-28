@@ -34,6 +34,7 @@ import {
 } from "@/lib/api";
 import Markdown from "@/components/Markdown";
 import { explain } from "@/lib/needs";
+import { useLive } from "@/lib/live";
 
 export default function Vault() {
   const [notebooks, setNotebooks] = useState<VaultNotebook[]>([]);
@@ -151,6 +152,8 @@ export default function Vault() {
   }, []);
 
   useEffect(() => { void loadDocs(selectedId); }, [selectedId, loadDocs]);
+  // 会話で「ノートに保存」した物・別の端末で入れた資料を、開いたまま受け取る（仕様§38）
+  useLive(["vault"], () => { void refresh(); void loadDocs(selectedId); });
 
   /** 資料を1件消す（間違って入れた資料が根拠に混ざり続けないように）。 */
   const removeDoc = async (title: string) => {

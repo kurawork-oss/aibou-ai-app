@@ -138,7 +138,7 @@ async def _lifespan(_app: "FastAPI"):
 
 # サーバー側のビルド目印。/diagnose で返す。
 # 「直したはずなのに直らない」ときに、デプロイが届いているかを一目で確かめる。
-APP_VERSION = "2026.09.24 · api-r19 TIDY"
+APP_VERSION = "2026.09.28 · api-r20 CHAT-REACH"
 
 app = FastAPI(
     title="AIbou Brain API",
@@ -195,7 +195,7 @@ class _ChangeSignals:
             headers = {k.decode("latin-1").lower(): v.decode("latin-1")
                        for k, v in (scope.get("headers") or [])}
             claims = _identity_claims(headers.get("authorization"), headers.get("x-supabase-token"))
-            events.publish(str(claims.get("sub") or ""), kind)
+            events.publish(str(claims.get("sub") or ""), kind, headers.get("x-aibou-tab") or "")
         except Exception:
             pass
 

@@ -12,6 +12,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useRef, useEffect, useState, useCallback, type PointerEvent as ReactPointerEvent } from "react";
 import { listTasks, createTask, updateTask, deleteTask, type Task } from "@/lib/api";
 import { explain } from "@/lib/needs";
+import { useLive } from "@/lib/live";
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   pending: { label: "PENDING", color: "#8b8f97" },
@@ -104,8 +105,10 @@ export default function Tasks() {
     try { localStorage.setItem("forge_tasks_view", view); } catch { /* ignore */ }
   }, [view]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (quiet = false) => {
+    // ほかの所で変わって読み直すときは、読み込み中の表示を出さない
+    // （一覧が一瞬消えてから戻るのは、見ている人には「消えた」に見える）
+    if (!quiet) setLoading(true);
     setError(null);
     try {
       const items = await listTasks(view === "kanban" ? undefined : filter || undefined);
@@ -120,6 +123,9 @@ export default function Tasks() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // 会話で足したタスク・別の端末で変えたタスクを、開いたまま受け取る（仕様§38）
+  useLive(["tasks"], () => void load(true));
 
   const handleCreate = async () => {
     if (!newTitle.trim()) return;
@@ -492,7 +498,7 @@ export default function Tasks() {
                               <button
                                 key={key}
                                 type="button"
-                                onClick={() => { void updateTask(task.id, { priority: key }).then(load); }}
+                                onClick={() => { void updateTask(task.id, { priority: key }).then(() => load()); }}
                                 className="rounded-forge px-2 py-0.5 text-[9px] label-mono"
                                 style={{
                                   border: `1px solid ${(task.priority || "mid") === key ? meta.color : "rgba(197,198,199,0.2)"}`,
@@ -505,7 +511,7 @@ export default function Tasks() {
                             <input
                               type="date"
                               defaultValue={task.due || ""}
-                              onChange={(e) => { void updateTask(task.id, { due: e.target.value }).then(load); }}
+                              onChange={(e) => { void updateTask(task.id, { due: e.target.value }).then(() => load()); }}
                               aria-label="期限を変更"
                               className="rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-2 py-0.5 text-[10px] text-fg-strong focus:outline-none"
                             />

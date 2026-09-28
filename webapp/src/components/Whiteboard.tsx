@@ -20,6 +20,14 @@ import {
   createTask, API_URL,
   type BoardData, type BoardNode, type BoardEdge, type BoardMeta,
 } from "@/lib/api";
+import { useLive } from "@/lib/live";
+
+/** 手元に無い物だけ足す（同じ id は手元を残す）。 */
+function addMissing<T extends { id: string }>(cur: T[], remote: T[]): T[] {
+  const have = new Set(cur.map((x) => x.id));
+  const extra = remote.filter((x) => !have.has(x.id));
+  return extra.length ? [...cur, ...extra] : cur;
+}
 
 const LS_V1 = "forge_board_v1";
 const LS_V2 = "forge_boards_v2";
@@ -223,6 +231,32 @@ export default function Whiteboard() {
       setLoaded(true);
     })();
   }, [refreshMetas, loadBoard]);
+
+  /* ── ほかの所での変化（会話で貼った付箋・別の端末） ──
+     手元に書きかけが無ければ、そのまま読み直す。書きかけがあるときは
+     消さずに、向こうで増えた物だけ足す。保存はボード全体の上書きなので、
+     手元の古い中身のまま保存すると、会話で貼った付箋が消える。 */
+  const busyRef = useRef(false);
+  busyRef.current = saveState === "saving" || editing !== null;
+  const onExternalChange = useCallback(async () => {
+    if (!online) return;
+    void refreshMetas();
+    const bid = latest.current.boardId;
+    if (!bid) return;
+    let d: BoardData;
+    try { d = await boardGetById(bid); } catch { return; }
+    if (latest.current.boardId !== bid) return;         // 読んでいる間にボードを替えた
+    if (!busyRef.current) {
+      skipSave.current = true;
+      setNodes(d.nodes);
+      setEdges(d.edges);
+      setTimeout(() => { skipSave.current = false; }, 60);
+    } else {
+      setNodes((cur) => addMissing(cur, d.nodes));
+      setEdges((cur) => addMissing(cur, d.edges));
+    }
+  }, [online, refreshMetas]);
+  useLive(["board"], () => void onExternalChange());
 
   /* ── debounced save ── */
   useEffect(() => {

@@ -69,6 +69,14 @@ def test_開いている人にだけ_変わったと届く(loop):
     assert set(got[0]) == {"kind", "at"}, "中身を流している"
 
 
+def test_書いたタブの名前を添える_会話の道具からは添えない(loop):
+    q = loop.run_until_complete(_sub("alice"))
+    events.publish("alice", "board", "tab-1")
+    events.publish("alice", "board")
+    got = _drain(loop, q)
+    assert got[0]["from"] == "tab-1" and "from" not in got[1]
+
+
 async def _sub(user):
     return events.subscribe(user)
 
@@ -135,7 +143,7 @@ def test_変える道具は_どれも何が変わるかを持っている():
     # 外に残す物・手元のパソコン・手順は、画面の中身ではないので対象外
     outside = {"drive_upload", "google_doc", "google_sheet", "create_google_slides",
                "notion_add", "send_email", "local_list", "local_write", "local_append",
-               "local_read", "obsidian_note", "browser_open", "browser_act",
+               "local_read", "obsidian_note", "screen_look", "browser_open", "browser_act",
                "recipe_run", "recipe_save", "recipe_delete", "run_workflow"}
     missing = sorted(changing - outside - set(events.TOOL_KINDS))
     assert not missing, f"変わった種類が決まっていない道具: {missing}"
@@ -158,9 +166,12 @@ def test_画面からの書き込みも_その人に届く(loop, signed_in, monk
     mine = loop.run_until_complete(_sub("alice"))
     other = loop.run_until_complete(_sub("bob"))
     r = TestClient(app).post("/tasks", json={"title": "牛乳を買う"},
-                             headers={"Authorization": f"Bearer {token_for('alice')}"})
+                             headers={"Authorization": f"Bearer {token_for('alice')}",
+                                      "X-AIbou-Tab": "phone-1"})
     assert r.status_code < 400, r.text
-    assert [e["kind"] for e in _drain(loop, mine)] == ["tasks"]
+    got = _drain(loop, mine)
+    assert [e["kind"] for e in got] == ["tasks"]
+    assert got[0]["from"] == "phone-1"          # 書いたタブは読み直さない
     assert _drain(loop, other) == [], "他人の画面に流れている"
 
 
