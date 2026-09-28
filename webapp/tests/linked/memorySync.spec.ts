@@ -78,9 +78,14 @@ async function openMemory(page: Page) {
 }
 
 async function remember(page: Page, text: string) {
-  await page.getByLabel("覚えておいてほしいこと").fill(text);
+  const input = page.getByLabel("覚えておいてほしいこと");
+  await input.fill(text);
   await page.getByRole("button", { name: "覚える" }).click();
   await expect(page.getByText(text, { exact: true })).toBeVisible({ timeout: 5_000 });
+  /* 覚え終わる（入力欄が空に戻る）まで待つ。同じ文をもう一度覚えるときは、
+     文が**もう見えている**ので上の待ちがすぐ抜ける。そのまま次を打つと、
+     前の保存が終わった所で入力欄が空にされ、押せないボタンを押し続けた。 */
+  await expect(input).toHaveValue("", { timeout: 5_000 });
 }
 
 async function setup(page: Page, server: ReturnType<typeof memoryServer>): Promise<Backend> {
