@@ -197,6 +197,34 @@ async function put(item: MemoryItem): Promise<boolean> {
   return ok !== null;
 }
 
+/* ── 書いている最中の数 ───────────────────────────────────────────
+ * 合流（memorySync）は「前回の目印より後に変わった物」を送る。記憶の時刻は
+ * 書く**前**に付けるので、合流が目印を置いたあとに書き終わる物がありうる。
+ * その物は目印より前の時刻を持つので、次の合流でも「もう送った」扱いになり、
+ * **二度と上がらない**（開いた直後の合流と、覚えた操作が重なると実際に起きた）。
+ * 合流は、書いている最中の物が書き終わるのを待ってから集める。 */
+let writing = 0;
+let settledWaiters: Array<() => void> = [];
+
+async function tracked<T>(fn: () => Promise<T>): Promise<T> {
+  writing += 1;
+  try {
+    return await fn();
+  } finally {
+    writing -= 1;
+    if (writing === 0) {
+      const waiters = settledWaiters;
+      settledWaiters = [];
+      waiters.forEach((w) => w());
+    }
+  }
+}
+
+/** いま書いている最中の記憶が、全部書き終わるまで待つ。 */
+export function writesSettled(): Promise<void> {
+  return writing === 0 ? Promise.resolve() : new Promise((resolve) => { settledWaiters.push(resolve); });
+}
+
 export interface AddOptions {
   kind?: MemoryKind;
   importance?: number;
@@ -212,7 +240,11 @@ export interface AddOptions {
  * 同じ文がすでにあれば**増やさずに触れ直す**。会話のたびに同じことを
  * 言われると、同じ記憶が何十件も積まれて、思い出す側が埋まってしまう。
  */
-export async function add(text: string, opts: AddOptions = {}): Promise<MemoryItem | null> {
+export function add(text: string, opts: AddOptions = {}): Promise<MemoryItem | null> {
+  return tracked(() => addNow(text, opts));
+}
+
+async function addNow(text: string, opts: AddOptions): Promise<MemoryItem | null> {
   const body = (text || "").trim();
   if (!body) return null;
 
@@ -251,7 +283,11 @@ export async function add(text: string, opts: AddOptions = {}): Promise<MemoryIt
   return item;
 }
 
-export async function update(id: string, patch: Partial<MemoryItem>): Promise<MemoryItem | null> {
+export function update(id: string, patch: Partial<MemoryItem>): Promise<MemoryItem | null> {
+  return tracked(() => updateNow(id, patch));
+}
+
+async function updateNow(id: string, patch: Partial<MemoryItem>): Promise<MemoryItem | null> {
   const rows = await allRaw();
   const cur = rows.find((r) => r.id === id);
   if (!cur) return null;
@@ -273,11 +309,13 @@ export async function update(id: string, patch: Partial<MemoryItem>): Promise<Me
  * 伝える必要がある。中身を空にするのは、消したのに端末へ文が残るのを
  * 避けるため（消したい理由は、たいてい中身のほうにある）。
  */
-export async function remove(id: string): Promise<boolean> {
-  const rows = await allRaw();
-  const cur = rows.find((r) => r.id === id);
-  if (!cur) return false;
-  return put({ ...cur, text: "", deletedAt: Date.now(), updatedAt: Date.now() });
+export function remove(id: string): Promise<boolean> {
+  return tracked(async () => {
+    const rows = await allRaw();
+    const cur = rows.find((r) => r.id === id);
+    if (!cur) return false;
+    return put({ ...cur, text: "", deletedAt: Date.now(), updatedAt: Date.now() });
+  });
 }
 
 /** 端末の記憶を全部消す（墓標も残さない＝完全に無かったことにする）。 */
@@ -340,7 +378,10 @@ async function prune(): Promise<void> {
  */
 export async function changedSince(ts: number): Promise<MemoryItem[]> {
   const rows = await allRaw();
-  return rows.filter((r) => (r.updatedAt || 0) > ts);
+  /* 目印と同じ時刻の物も入れる。時刻はミリ秒単位なので、目印を置いたのと
+     同じ1ミリ秒に書かれた物が、どちらの回にも入らずに落ちることがある。
+     同じ物を2回送っても、サーバーは新しいほうを残すだけなので害は無い。 */
+  return rows.filter((r) => (r.updatedAt || 0) >= ts);
 }
 
 /**

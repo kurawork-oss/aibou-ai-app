@@ -121,6 +121,7 @@ test("使えるAIが1つも無ければ、何をすればいいか言う", async
   } }));
   await enterApp(page);
   await openBasic(page);
-  await expect(page.getByText(/「つなぐ」 に鍵を入れて/)).toBeVisible();
+  // 鍵を入れる場所は「連携」の画面（設定の「つなぐ」は機能の入り切りと手元のPC）
+  await expect(page.getByText(/「連携」で、AIの鍵/)).toBeVisible();
   await expect(page.getByText(/無料枠があります/)).toBeVisible();
 });

@@ -142,6 +142,10 @@ async function run(): Promise<SyncOutcome> {
       /* 端末側の目印は、**集める前**の時刻で置く。集めたあとの時刻にすると、
          往復の最中に覚えたことが「送った扱い」になって落ちる。 */
       const deviceAt = Date.now();
+      /* 目印より前の時刻を持ったまま、まだ書いている最中の物がありうる
+         （時刻は書く前に付く）。書き終わるのを待ってから集めないと、その物は
+         この回にも次の回にも入らず、二度と上がらない（memory.writesSettled）。 */
+      await memory.writesSettled();
       /* 送るのは「前回より後に変わったぶん」だけ。はじめては 0 なので
          全部送ることになる——それが2台目の端末を空でなくする道。 */
       const mine = await memory.changedSince(sent);
