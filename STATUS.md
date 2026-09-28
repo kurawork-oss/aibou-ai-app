@@ -14,12 +14,16 @@
 
 | 何を | どこで | 本数 |
 |---|---|---|
-| サーバー側の機能ぜんぶ | `api/test_*.py` | 1,598 |
-| 画面（接続なし・ふだんのUI） | `webapp/tests/*.spec.ts` | 611 |
-| 画面（接続あり・繋がっているときだけ動く所） | `webapp/tests/linked/` | 156 |
+| サーバー側の機能ぜんぶ | `api/test_*.py` | 1,671 |
+| 画面（接続なし・ふだんのUI） | `webapp/tests/*.spec.ts` | 617 |
+| 画面（接続あり・繋がっているときだけ動く所） | `webapp/tests/linked/` | 165 |
 | 確認の門（会話・実行・承認ボタン・通知。通した重さを超えない） | `api/test_gate.py` ＋ `webapp/tests/linked/chatGate.spec.ts` | 16 + 7 |
 | 連携の入口（ログインを求める構成でも開く・札は1回きり） | `api/test_connect_ticket.py` ＋ `webapp/tests/linked/connect.spec.ts` | 11 + 2 |
 | 無くなった画面の名前で案内しない（画面の文・サーバーの文） | `webapp/tests/oneReason.spec.ts` ＋ `api/test_screen_names.py` | 1 + 2 |
+| 画面でしかできなかったことを会話から（資料・ゴール・LP・アプリ・動画・SNS案・副業の下書き・ワークフロー・画面を見る） | `api/test_chat_reach.py`・`test_chat_make.py`・`test_screen_look.py` ＋ `webapp/tests/linked/chatMakes.spec.ts` | 38 + 5 |
+| 持ち主専用の道具は、会話からも持ち主だけ | `api/test_chat_owner.py` | 13 |
+| 変わったことが開いている画面にすぐ出る（§38） | `api/test_events.py` ＋ `webapp/tests/linked/live.spec.ts` | 14 + 4 |
+| 生成したHTMLを、このアプリと同じ出どころで動かさない | `webapp/tests/generatedHtml.spec.ts` | 3 |
 | 本番の置き場に、流すSQLが全部入っているか | `api/test_deploy_bundle.py` | 3 |
 | 決まった手順（保存・流す・止める・パスワードを入れない） | `api/test_recipes.py` ほか2つ ＋ `webapp/tests/linked/recipes.spec.ts` | 72 + 8 |
 | 操作の記録（入口ごとに残る・確認の有無・本文を残さない） | `api/test_audit_log.py` ＋ `webapp/tests/linked/auditLog.spec.ts` | 21 + 3 |
@@ -48,9 +52,9 @@
 実行:
 
 ```bash
-cd api    && python -m pytest -q      # 1,598
-cd webapp && npx playwright test --project=chromium          # 611（接続なし）
-cd webapp && npx playwright test --project=chromium-linked   # 156（接続あり。上と同時に流さない）
+cd api    && python -m pytest -q      # 1,671
+cd webapp && npx playwright test --project=chromium          # 617（接続なし）
+cd webapp && npx playwright test --project=chromium-linked   # 165（接続あり。上と同時に流さない）
 cd webapp && npx tsc --noEmit && npm run lint
 ```
 
@@ -1008,6 +1012,10 @@ AIに画面を見せて判断させる仕事ではない。一度うまくいっ
   最中の物が書き終わるのを待ってから集める（`tests/memoryWrites.spec.ts`）
 - **「覚える」を押したあと、続けて打った文が消えていた** — 保存が終わった時点で
   入力欄を空にしていた。→ 保存した文と同じときだけ空にする
+- **「いま揃える」を押しても、押す直前に覚えた物が上がらないことがあった** —
+  開いたときの自動の合流が走っている最中だと、その回の結果をそのまま返していた
+  （その回は押す前に集め終わっている）。「すでに揃っています」と出るのに、実際は
+  次の回まで上がっていなかった。→ 押したときは、走っている回を待ってからもう1回まわす
 - **会話モードで、新しい頼み方に道具を積んでいなかった** — 会話モードは、行動の
   合図がある発言にだけ道具の説明書を積む（`toolgate.py`）。「ゴールを進めて」
   「規程だと有給は何日？」「いまの画面のエラーは何？」は合図に当たらず、AIは
