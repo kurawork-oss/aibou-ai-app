@@ -1225,3 +1225,39 @@ html[data-skin="custom"] {
     scroll-behavior: auto !important;
   }
 }
+
+/* =====================================================================
+   スマホの幅（sm 未満）でだけ効く読みやすさ
+   ---------------------------------------------------------------------
+   測ると、スマホで見えている文字の 57〜94% が 12px 未満だった（画面の
+   ほとんどを 9〜11px で組んでいる）。机の画面で情報を詰めるための大きさで、
+   手に持つ距離では読めない。1つずつ書き換えると千か所を超えるので、
+   スマホの幅のときだけ一段ずつ上げる。字間も詰める（大きくした字を
+   広い字間のまま並べると、狭い所で枠から出る）。
+   ===================================================================== */
+@media (max-width: 639px) {
+  .text-\[8px\] { font-size: 10px; }
+  .text-\[9px\] { font-size: 11px; }
+  .text-\[10px\] { font-size: 12px; }
+  .text-\[11px\] { font-size: 13px; }
+  .text-\[12px\] { font-size: 14px; }
+
+  .label-mono { letter-spacing: 0.08em; }
+  .tracking-\[0\.12em\], .tracking-\[0\.14em\], .tracking-\[0\.15em\],
+  .tracking-\[0\.16em\], .tracking-\[0\.18em\], .tracking-\[0\.2em\],
+  .tracking-\[0\.22em\], .tracking-\[0\.24em\], .tracking-\[0\.28em\],
+  .tracking-\[0\.3em\], .tracking-\[0\.4em\] { letter-spacing: 0.08em; }
+}
+
+/* 入力欄は 16px 未満だと、iPhone は触った瞬間に画面を拡大して戻さない。
+   打つたびに拡大して、横にずれた画面を指で戻すことになっていた
+   （会話の入力欄を含め、全部の入力欄が 14px だった）。
+   スマホを横にすると幅は広くなるが、拡大は起きる。だから幅だけでなく
+   「指で触る端末」でも効かせる。 */
+@media (max-width: 639px), (hover: none) and (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]),
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}

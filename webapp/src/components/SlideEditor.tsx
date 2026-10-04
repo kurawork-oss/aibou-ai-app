@@ -18,6 +18,7 @@ import {
   slideLayouts, slideRevise, imageGenerate, API_URL,
   type Slide, type SlideDeck, type SlideLayoutDef,
 } from "@/lib/api";
+import { enterSubmits } from "@/lib/enterKey";
 
 /** バックエンドに繋がらない時でも編集できるようにするフォールバック定義。 */
 const FALLBACK_LAYOUTS: SlideLayoutDef[] = [
@@ -278,7 +279,7 @@ export default function SlideEditor({
               <input
                 value={instruction}
                 onChange={(e) => setInstruction(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && void reviseWithAi()}
+                onKeyDown={(e) => enterSubmits(e) && void reviseWithAi()}
                 placeholder="例：もっと短く力強く／数字を入れて／引用にして"
                 className="min-w-0 flex-1 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-2.5 py-1.5 text-[12px] text-fg-strong focus:border-[var(--line)] focus:outline-none" />
               <button type="button" onClick={() => void reviseWithAi()} disabled={!!busy || !instruction.trim()}

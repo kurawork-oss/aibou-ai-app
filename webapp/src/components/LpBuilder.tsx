@@ -128,10 +128,13 @@ export default function LpBuilder({ kind = "lp" }: { kind?: "lp" | "app" }) {
   }
 
   return (
-    /* min-w-0 が無いと grid の子が内容幅まで広がり、スマホ幅で横にはみ出す。 */
-    <div className="grid h-full min-h-0 gap-3 lg:grid-cols-[22rem_1fr]">
+    /* min-w-0 が無いと grid の子が内容幅まで広がり、スマホ幅で横にはみ出す。
+       スマホ（1列）では、全体を1本のスクロールにする。左右それぞれに
+       スクロールを持たせると、縦に2つ重ねたときに上の欄が 180px ほどに
+       潰れ、「作る」ボタンが欄の中でスクロールしないと出てこなかった。 */
+    <div className="grid h-full min-h-0 content-start gap-3 overflow-y-auto lg:content-normal lg:grid-cols-[22rem_1fr] lg:overflow-visible">
       {/* ── 左：指示 ── */}
-      <div className="flex min-h-0 min-w-0 flex-col gap-2 overflow-y-auto">
+      <div className="flex min-w-0 flex-col gap-2 lg:min-h-0 lg:overflow-y-auto">
         <div className="panel p-3">
           <div className="mb-1.5 text-[10px] tracking-[0.2em] text-muted label-mono">
             {html ? `${t.heading} — 修正指示` : `${t.heading} — 何を作りますか？`}
@@ -195,8 +198,8 @@ export default function LpBuilder({ kind = "lp" }: { kind?: "lp" | "app" }) {
         )}
       </div>
 
-      {/* ── 右：プレビュー ── */}
-      <div className="flex min-h-0 min-w-0 flex-col gap-2">
+      {/* ── 右：プレビュー ── スマホでは下に続く。見られる高さを残す */}
+      <div className="flex min-h-[70dvh] min-w-0 flex-col gap-2 lg:min-h-0">
         <div className="flex items-center gap-1.5">
           <div className="flex overflow-hidden rounded-forge border border-panel">
             {(["preview", "code"] as const).map((v) => (

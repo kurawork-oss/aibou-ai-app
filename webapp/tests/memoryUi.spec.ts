@@ -189,7 +189,7 @@ test("会話のかけらは、記憶に入れない", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
 
-  const input = page.getByPlaceholder(/にメッセージ/);
+  const input = page.getByPlaceholder(/メッセージ…$/);
   for (const text of ["ありがとう", "これ直して", "どう？", "了解"]) {
     await input.fill(text);
     await input.press("Enter");
@@ -214,7 +214,7 @@ test("「覚えて」と言えば、会話からでも強く覚える", async ({
   await page.goto("/");
   await enterApp(page);
 
-  const input = page.getByPlaceholder(/にメッセージ/);
+  const input = page.getByPlaceholder(/メッセージ…$/);
   await input.fill("火曜の午後は打ち合わせ。覚えておいて");
   await input.press("Enter");
   await page.waitForTimeout(1200);
@@ -232,7 +232,7 @@ test("会話で話した内容も、端末に残る", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
 
-  const input = page.getByPlaceholder(/にメッセージ/);
+  const input = page.getByPlaceholder(/メッセージ…$/);
   await input.fill("来月の沖縄旅行が楽しみだ");
   await input.press("Enter");
   await page.waitForTimeout(1200);       // 接続先が無いので返事は失敗する

@@ -22,7 +22,7 @@ async function enterApp(page: Page) {
   await page.waitForSelector("text=ENTER", { timeout: 10_000 });
   await page.click("text=ENTER");
   const offlineBtn = page.getByText("ENTER OFFLINE");
-  const hudH1 = page.getByText("THE FORGE OS").first();
+  const hudH1 = page.getByRole("heading", { name: /THE FORGE OS/ }).first();
   await Promise.race([
     offlineBtn.waitFor({ timeout: 8_000 }).then(() => offlineBtn.click()),
     hudH1.waitFor({ timeout: 10_000 }),

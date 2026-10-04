@@ -21,6 +21,7 @@ import {
   type BoardData, type BoardNode, type BoardEdge, type BoardMeta,
 } from "@/lib/api";
 import { useLive } from "@/lib/live";
+import { isComposingKey } from "@/lib/enterKey";
 
 /** 手元に無い物だけ足す（同じ id は手元を残す）。 */
 function addMissing<T extends { id: string }>(cur: T[], remote: T[]): T[] {
@@ -848,7 +849,7 @@ export default function Whiteboard() {
                       autoFocus
                       defaultValue={n.text}
                       onBlur={(e) => commitText(n.id, e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") (e.target as HTMLInputElement).blur(); }}
+                      onKeyDown={(e) => { if (!isComposingKey(e) && (e.key === "Enter" || e.key === "Escape")) (e.target as HTMLInputElement).blur(); }}
                       className="w-full bg-transparent text-[11px] tracking-[0.12em] text-fg-strong focus:outline-none label-mono"
                     />
                   ) : (

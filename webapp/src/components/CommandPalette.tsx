@@ -24,6 +24,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { CommandItem } from "@/lib/api";
+import { isComposingKey } from "@/lib/enterKey";
 
 /**
  * 打った字で絞る。前方一致を上に、含むものを下に。
@@ -78,6 +79,9 @@ export default function CommandPalette({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // 変換中のキーは、変換のもの（矢印は候補選び、Enter は確定）。
+      // 一覧の操作として拾うと、確定のつもりで候補を選んでしまう。
+      if (isComposingKey(e)) return;
       if (!hits.length) return;
       if (e.key === "ArrowDown") { e.preventDefault(); setSel((v) => (v + 1) % hits.length); }
       else if (e.key === "ArrowUp") { e.preventDefault(); setSel((v) => (v - 1 + hits.length) % hits.length); }

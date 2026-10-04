@@ -25,6 +25,7 @@ import {
   type ScheduleItem,
   type KeepaliveStatus,
 } from "@/lib/api";
+import { enterSubmits } from "@/lib/enterKey";
 
 export default function IntegrationsSettings() {
   if (!API_URL) {
@@ -206,7 +207,7 @@ function SchedulerPanel() {
         />
         <input
           value={instruction} onChange={(e) => setInstruction(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && void add()}
+          onKeyDown={(e) => enterSubmits(e) && void add()}
           placeholder="例：AIニュースを検索してメールで送る"
           className="min-w-0 flex-1 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-2 py-1.5 text-[12px] text-fg-strong placeholder:text-muted focus:outline-none"
         />

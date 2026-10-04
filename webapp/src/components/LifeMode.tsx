@@ -28,6 +28,8 @@ import {
   type LifeCategory,
 } from "@/lib/api";
 import type { ChatSettings } from "@/components/Chat";
+import { enterSends } from "@/lib/enterKey";
+import { usePhone } from "@/lib/usePhone";
 
 const LS_MSGS = "forge_life_msgs";
 const MSG_LIMIT = 60;
@@ -74,6 +76,12 @@ export default function LifeMode({ settings }: { settings: ChatSettings }) {
   /* ── 相談チャット ── */
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
+  const phone = usePhone();
+  /* スマホでは「経験の箱」を見出しだけにして、押すと開く。開いたままだと、
+     会話の欄が縦 150px ほどに潰れて、相談の画面なのに相談が読めなかった
+     （iPhone SE。箱と会話で高さを半分ずつ分けていた）。 */
+  const [boxOpen, setBoxOpen] = useState(false);
+  const showBox = !phone || boxOpen;
   const [streaming, setStreaming] = useState(false);
   const cancelRef = useRef<(() => void) | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -111,7 +119,9 @@ export default function LifeMode({ settings }: { settings: ChatSettings }) {
 
   useEffect(() => {
     const el = scrollRef.current;
-    if (!el) return;
+    // まだ何も話していないとき（説明だけのとき）は、下へ送らない。送ると
+    // 説明の頭（LIFE PARTNER・何をする所か）が欄の上に隠れていた（iPhone SE）。
+    if (!el || msgs.length === 0) return;
     const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 160;
     if (nearBottom) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [msgs]);
@@ -155,9 +165,9 @@ export default function LifeMode({ settings }: { settings: ChatSettings }) {
     ).cancel;
   };
 
+  // Enter で送る（変換の確定・指で打つ端末の改行は除く。lib/enterKey.ts）
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.nativeEvent.isComposing) return;
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (enterSends(e)) {
       e.preventDefault();
       send();
     }
@@ -252,7 +262,8 @@ export default function LifeMode({ settings }: { settings: ChatSettings }) {
   const canExtract = msgs.filter((m) => m.role === "user").length > 0 && !streaming;
 
   return (
-    <div className="grid h-full min-h-0 gap-3 pb-2 lg:grid-cols-[1fr_minmax(20rem,24rem)]">
+    <div className={`grid h-full min-h-0 gap-3 pb-2 lg:grid-cols-[1fr_minmax(20rem,24rem)] ${
+      phone ? "grid-rows-[minmax(0,1fr)_auto]" : ""}`}>
       {/* ── LEFT: 相談チャット ── */}
       <div className="flex min-h-0 flex-col">
         <div ref={scrollRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-1 py-2" aria-live="polite">
@@ -347,7 +358,8 @@ export default function LifeMode({ settings }: { settings: ChatSettings }) {
               onKeyDown={onKeyDown}
               onPaste={onPasteImage}
               rows={1}
-              placeholder="人生でも、お金でも、なんでも相談… (スクショはCtrl+Vで貼付)"
+              /* キーボードの案内（Ctrl+V）はスマホには当てはまらず、長くて2行目が切れていた */
+              placeholder={phone ? "なんでも相談…" : "人生でも、お金でも、なんでも相談… (スクショはCtrl+Vで貼付)"}
               className="max-h-32 min-h-[40px] flex-1 resize-none bg-transparent px-2 py-2 text-sm text-fg-strong placeholder:text-muted focus:outline-none"
               style={{ scrollbarWidth: "none" }}
             />
@@ -364,12 +376,28 @@ export default function LifeMode({ settings }: { settings: ChatSettings }) {
         </div>
       </div>
 
-      {/* ── RIGHT: 経験の箱 ── */}
-      <div className="flex min-h-0 flex-col gap-2 overflow-y-auto">
+      {/* ── RIGHT: 経験の箱 ── スマホで開いたときも、画面の半分ほどまで */}
+      <div className={`flex min-h-0 flex-col gap-2 overflow-y-auto ${phone ? "max-h-[55dvh]" : ""}`}>
+        {!showBox ? (
+          <button type="button" onClick={() => setBoxOpen(true)} aria-expanded={false}
+            className="glass-silver flex items-center justify-between gap-2 p-3 text-left">
+            <span className="text-[10px] tracking-[0.2em] text-fg-strong label-mono">📦 経験の箱</span>
+            <span className="text-[9px] tracking-[0.12em] text-muted label-mono">{entries.length} 件 · ひらく ▸</span>
+          </button>
+        ) : (
+        <>
         <div className="glass-silver p-3">
           <div className="flex items-center justify-between">
             <span className="text-[10px] tracking-[0.2em] text-fg-strong label-mono">📦 経験の箱</span>
-            <span className="text-[9px] tracking-[0.12em] text-muted label-mono">{entries.length} 件</span>
+            <span className="flex items-center gap-2">
+              <span className="text-[9px] tracking-[0.12em] text-muted label-mono">{entries.length} 件</span>
+              {phone && (
+                <button type="button" onClick={() => setBoxOpen(false)} aria-expanded
+                  className="-my-3 text-[9px] tracking-[0.12em] text-muted label-mono">
+                  とじる ▾
+                </button>
+              )}
+            </span>
           </div>
           <p className="mt-1 text-[10px] leading-relaxed text-muted">
             ここに入れた内容を、MEは相談のたびに思い出します。増えるほど理解が深まります。
@@ -470,6 +498,8 @@ export default function LifeMode({ settings }: { settings: ChatSettings }) {
               )}
             </div>
           </>
+        )}
+        </>
         )}
       </div>
     </div>

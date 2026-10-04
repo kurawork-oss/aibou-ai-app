@@ -28,6 +28,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { API_URL, authHeaders } from "@/lib/api";
+import { enterSubmits } from "@/lib/enterKey";
 
 interface Device {
   device: string;
@@ -261,7 +262,7 @@ export default function LocalAgentSettings() {
           <input
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") void pair(); }}
+            onKeyDown={(e) => { if (enterSubmits(e)) void pair(); }}
             placeholder="この台の名前（例：しごとのノート）"
             aria-label="この台の名前"
             autoFocus

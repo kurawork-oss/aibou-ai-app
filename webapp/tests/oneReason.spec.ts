@@ -49,7 +49,7 @@ async function openSettings(page: Page) {
   await page.waitForSelector("text=ENTER", { timeout: 10_000 });
   await page.click("text=ENTER");
   const offlineBtn = page.getByText("ENTER OFFLINE");
-  const hud = page.getByText("THE FORGE OS").first();
+  const hud = page.getByRole("heading", { name: /THE FORGE OS/ }).first();
   await Promise.race([
     offlineBtn.waitFor({ timeout: 8_000 }).then(() => offlineBtn.click()),
     hud.waitFor({ timeout: 10_000 }),
@@ -110,7 +110,7 @@ test("どの画面でも、同じ断り書きが2回は出ない", async ({ page
   await page.waitForSelector("text=ENTER", { timeout: 10_000 });
   await page.click("text=ENTER");
   const offlineBtn = page.getByText("ENTER OFFLINE");
-  const hud = page.getByText("THE FORGE OS").first();
+  const hud = page.getByRole("heading", { name: /THE FORGE OS/ }).first();
   await Promise.race([
     offlineBtn.waitFor({ timeout: 8_000 }).then(() => offlineBtn.click()).catch(() => {}),
     hud.waitFor({ timeout: 10_000 }).catch(() => {}),
@@ -152,7 +152,7 @@ test("使っていない呼び名で、案内していない", async ({ page }) 
   await page.waitForSelector("text=ENTER", { timeout: 10_000 });
   await page.click("text=ENTER");
   const offlineBtn = page.getByText("ENTER OFFLINE");
-  const hud = page.getByText("THE FORGE OS").first();
+  const hud = page.getByRole("heading", { name: /THE FORGE OS/ }).first();
   await Promise.race([
     offlineBtn.waitFor({ timeout: 8_000 }).then(() => offlineBtn.click()).catch(() => {}),
     hud.waitFor({ timeout: 10_000 }).catch(() => {}),
@@ -199,7 +199,7 @@ test("案内が名指しする設定タブは、実在する", async ({ page }) 
   await page.waitForSelector("text=ENTER", { timeout: 10_000 });
   await page.click("text=ENTER");
   const offlineBtn = page.getByText("ENTER OFFLINE");
-  const hud = page.getByText("THE FORGE OS").first();
+  const hud = page.getByRole("heading", { name: /THE FORGE OS/ }).first();
   await Promise.race([
     offlineBtn.waitFor({ timeout: 8_000 }).then(() => offlineBtn.click()).catch(() => {}),
     hud.waitFor({ timeout: 10_000 }).catch(() => {}),

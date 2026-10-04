@@ -14,6 +14,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useState } from "react";
 import { listKeys, setKey, deleteKey, API_URL, type ApiKeyInfo } from "@/lib/api";
 import { keyGuide } from "@/lib/keyGuides";
+import { enterSubmits } from "@/lib/enterKey";
 
 const LS_VAULT = "forge_vault_v1";
 
@@ -184,7 +185,7 @@ function OfflineVault() {
         />
         <input
           type="password" value={passConfirm} onChange={(e) => setPassConfirm(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && void createVault()}
+          onKeyDown={(e) => enterSubmits(e) && void createVault()}
           placeholder="確認のためもう一度"
           className="w-56 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2 text-center tracking-[0.2em] text-fg-strong focus:border-[var(--line)] focus:outline-none"
         />
@@ -204,7 +205,7 @@ function OfflineVault() {
         <p className="text-[11px] tracking-[0.2em] text-muted label-mono">ENTER ACCESS CODE</p>
         <input
           type="password" value={passInput} onChange={(e) => setPassInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && void unlock()}
+          onKeyDown={(e) => enterSubmits(e) && void unlock()}
           placeholder="••••"
           className="w-40 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2 text-center text-lg tracking-[0.4em] text-fg-strong focus:border-[var(--line)] focus:outline-none"
         />
@@ -270,7 +271,7 @@ function OfflineVault() {
                 <input
                   type="password" value={edits[k.name] ?? ""}
                   onChange={(e) => setEdits((p) => ({ ...p, [k.name]: e.target.value }))}
-                  onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && void saveKey(k.name, edits[k.name] ?? "")}
+                  onKeyDown={(e) => enterSubmits(e) && void saveKey(k.name, edits[k.name] ?? "")}
                   placeholder={set ? "新しい値で上書き…" : "キーを貼り付け…"}
                   className="min-w-0 flex-1 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2.5 text-sm text-fg-strong focus:border-[var(--line)] focus:outline-none"
                 />
@@ -441,7 +442,7 @@ function SupabaseVault() {
                 <input
                   type="password" value={edits[k.name] ?? ""}
                   onChange={(e) => setEdits((p) => ({ ...p, [k.name]: e.target.value }))}
-                  onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && void save(k.name, edits[k.name] ?? "")}
+                  onKeyDown={(e) => enterSubmits(e) && void save(k.name, edits[k.name] ?? "")}
                   placeholder={k.set ? "新しい値で上書き…" : "キーを貼り付け…"}
                   className="min-w-0 flex-1 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2.5 text-sm text-fg-strong focus:border-[var(--line)] focus:outline-none"
                 />

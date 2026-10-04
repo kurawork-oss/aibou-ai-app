@@ -38,6 +38,8 @@ import {
 import * as facts from "@/lib/facts";
 import * as alwaysAllow from "@/lib/alwaysAllow";
 import { useApproval } from "@/lib/approvalPref";
+import { usePhone } from "@/lib/usePhone";
+import { enterSends, enterSubmits } from "@/lib/enterKey";
 import CommandPalette, { readHashInput } from "@/components/CommandPalette";
 import Canvas, { pushItem } from "@/components/Canvas";
 import { PACKS_CHANGED } from "@/lib/shell";
@@ -1176,10 +1178,10 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
 
   const onKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
-      // Never submit mid-IME composition (Japanese conversion Enter).
-      if (e.nativeEvent.isComposing) return;
-      // Enter to send, Shift+Enter for newline.
-      if (e.key === "Enter" && !e.shiftKey) {
+      // Enter で送る。変換を確定する Enter（Safari の keyCode 229 を含む）と、
+      // 指で打つ端末の Enter（改行。送るのは ➤）は送らない。Ctrl/Cmd+Enter は
+      // どこでも送る。決まりは lib/enterKey.ts の1か所。
+      if (enterSends(e)) {
         e.preventDefault();
         void send();
       }
@@ -1188,6 +1190,13 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
   );
 
   const canSend = (input.trim().length > 0 || !!pendingImage) && !streaming;
+  /* スマホは横幅が足りない。入力欄の横に4つ並べると、打つ所が 150px ほどしか
+     残らず、案内の文字まで折り返していた。打ち始めたら声の2つを引っこめて
+     送るボタンだけにする（何も無いときは声の2つ。話して始める人のため）。 */
+  const phone = usePhone();
+  const drafting = input.trim().length > 0 || !!pendingImage;
+  const showVoice = micSupported && !(phone && drafting && !listening);
+  const showSend = !phone || drafting || streaming || !micSupported;
 
   return (
     <div
@@ -1408,15 +1417,18 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
             onKeyDown={onKeyDown}
             onPaste={onPasteImage}
             rows={1}
+            /* スマホの幅では短く。入力欄の横にボタンが並ぶので、長い案内は
+               2行目に折れて下が切れ、「AIbou にメッセー」で途切れて見えた。 */
             placeholder={listening ? "聞き取り中…"
-              : agentMode ? "やってほしいことを指示…（例：明日15時に歯医者の予定を入れて）"
-              : "AIbou にメッセージ…"}
+              : agentMode
+                ? (phone ? "やってほしいことを指示…" : "やってほしいことを指示…（例：明日15時に歯医者の予定を入れて）")
+                : (phone ? "メッセージ…" : "AIbou にメッセージ…")}
             className="max-h-32 min-h-[40px] flex-1 resize-none bg-transparent px-2 py-2 text-sm text-fg-strong placeholder:text-muted focus:outline-none"
             style={{ scrollbarWidth: "none" }}
           />
 
           {/* Mic (hands-free) */}
-          {micSupported && (
+          {showVoice && (
             <button
               type="button"
               onClick={toggleMic}
@@ -1442,7 +1454,7 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
           )}
 
           {/* Realtime voice conversation (hands-free loop) — accent so it stands out */}
-          {micSupported && (
+          {showVoice && (
             <button
               type="button"
               onClick={enterVoiceMode}
@@ -1466,7 +1478,7 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
             >
               <span className="block h-3 w-3 rounded-[2px] bg-[var(--accent)]" />
             </button>
-          ) : (
+          ) : showSend && (
             <button
               type="button"
               onClick={() => void send()}
@@ -1490,7 +1502,8 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
             <span className="text-[10px] tracking-[0.2em] text-[var(--accent)] label-mono">SPEAKING…</span>
           ) : listening ? (
             <span className="text-[10px] tracking-[0.2em] text-[var(--accent)] label-mono">LISTENING…</span>
-          ) : (
+          ) : phone ? null : (
+            /* キーボードの案内（Enter・Ctrl+V）は、スマホには当てはまらない */
             <span className="text-[10px] tracking-[0.18em] text-muted/50 label-mono">
               {micSupported ? "ENTERで送信 · 画像はCtrl+V · ハンズフリー対応" : "ENTERで送信 · 画像はCtrl+V"}
             </span>
@@ -2045,7 +2058,7 @@ function SaveRecipeRow({ savable, onSave }: {
   return (
     <div className="mb-2 flex gap-1.5">
       <input value={name} onChange={(e) => setName(e.target.value)}
-        onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
+        onKeyDown={(e) => { if (enterSubmits(e)) submit(); }}
         placeholder="手順の名前（例：朝のケース確認）" aria-label="手順の名前" autoFocus
         className="min-w-0 flex-1 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-2 py-1 text-[12px] text-fg-strong placeholder:text-muted focus:border-[var(--line)] focus:outline-none" />
       <button type="button" onClick={submit} disabled={!name.trim()}

@@ -48,6 +48,8 @@ import Markdown from "@/components/Markdown";
 import FirstRun from "@/components/FirstRun";
 import CalendarPanel from "@/components/CalendarPanel";
 import WatchPanel from "@/components/WatchPanel";
+import { usePhone } from "@/lib/usePhone";
+import { enterSubmits } from "@/lib/enterKey";
 
 type View = "chat" | "me" | "capture" | "code" | "vault" | "income" | "tasks" | "studio" | "autopilot" | "board" | "archive" | "home" | "guide" | "extend";
 
@@ -81,6 +83,7 @@ export default function Home({
   // ⑪ ロック画面のように、並び・表示/非表示・幅を自分で決められるようにする
   const [layout, setLayout] = useState<HomeLayout>(defaultLayout);
   const [editing, setEditing] = useState(false);
+  const phone = usePhone();
 
   useEffect(() => { setLayout(loadLayout()); }, []);
   const apply = (next: HomeLayout) => { setLayout(next); saveLayout(next); };
@@ -158,15 +161,20 @@ export default function Home({
     <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto pb-2">
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1"><CockpitHeader name={settings.name} /></div>
-        {/* ロック画面のように、並び・表示・幅をその場で編集する */}
+        {/* ロック画面のように、並び・表示・幅をその場で編集する。
+            スマホでは記号だけ（文字まで並べると挨拶の枠が 230px ほどに
+            潰れ、「本日の状況」が2行に折れていた）。 */}
         <button type="button" onClick={() => setEditing((v) => !v)} aria-pressed={editing}
-          className="mt-1 shrink-0 rounded-forge border px-2.5 py-1.5 text-[10px] tracking-[0.12em] label-mono"
+          aria-label={phone && !editing ? "カスタマイズ" : undefined}
+          title={phone && !editing ? "カスタマイズ（並び・表示・幅）" : undefined}
+          className={`mt-1 shrink-0 rounded-forge border px-2.5 py-1.5 label-mono ${
+            phone && !editing ? "text-[18px] leading-none" : "text-[10px] tracking-[0.12em]"}`}
           style={{
             borderColor: editing ? "var(--accent)" : "var(--panel-bd)",
             color: editing ? "var(--fg-strong)" : "var(--muted)",
             background: editing ? "var(--btn-bg)" : "transparent",
           }}>
-          {editing ? "✓ 完了" : "⌗ カスタマイズ"}
+          {editing ? "✓ 完了" : phone ? "⌗" : "⌗ カスタマイズ"}
         </button>
       </div>
 
@@ -638,7 +646,7 @@ function AgentConsole({
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && run(input)}
+            onKeyDown={(e) => enterSubmits(e) && run(input)}
             onPaste={onPasteImage}
             placeholder={offline ? "バックエンド接続後に使えます" : "指示… (📎で資料添付・スクショはCtrl+Vで貼付)"}
             disabled={offline || busy}
@@ -735,7 +743,7 @@ function AgendaPanel({
         <input
           value={text}
           onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && void add()}
+          onKeyDown={(e) => enterSubmits(e) && void add()}
           placeholder="例：明日15時に歯医者 / 金曜10時 定例MTG"
           disabled={offline}
           className="min-w-0 flex-1 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2 text-sm text-fg-strong placeholder:text-muted focus:border-[var(--line)] focus:outline-none disabled:opacity-50"

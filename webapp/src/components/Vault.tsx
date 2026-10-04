@@ -35,6 +35,8 @@ import {
 import Markdown from "@/components/Markdown";
 import { explain } from "@/lib/needs";
 import { useLive } from "@/lib/live";
+import PhoneFold from "@/components/PhoneFold";
+import { enterSubmits } from "@/lib/enterKey";
 
 export default function Vault() {
   const [notebooks, setNotebooks] = useState<VaultNotebook[]>([]);
@@ -296,6 +298,7 @@ export default function Vault() {
           <span className="text-fg-strong">入れた資料の中身だけを見て答える</span>画面です。
           ネットの一般論ではなく、その資料に書いてあることだけを言います。
         </p>
+        <PhoneFold>
         <div className="mt-2 flex flex-col gap-1 border-t border-panel pt-2 text-[10px] leading-relaxed text-muted">
           <div>▸ 社内規程・マニュアル・議事録を入れておくと、聞くだけで引ける</div>
           <div>▸ 答えるときは、資料のどこに書いてあったかも一緒に出す</div>
@@ -303,6 +306,7 @@ export default function Vault() {
             ※ 文字として入っているPDFだけ読めます。スキャンした写真だけのPDFは読めません。
           </div>
         </div>
+        </PhoneFold>
       </div>
 
       {/* Notebooks: list + create */}
@@ -373,7 +377,7 @@ export default function Vault() {
           <input
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && create()}
+            onKeyDown={(e) => enterSubmits(e) && create()}
             placeholder="新しいノートブック名"
             className="min-w-0 flex-1 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2 text-sm text-fg-strong placeholder:text-muted focus:border-[var(--line)] focus:shadow-glow focus:outline-none"
           />
@@ -497,7 +501,7 @@ export default function Vault() {
               <input
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && ask()}
+                onKeyDown={(e) => enterSubmits(e) && ask()}
                 placeholder="このノートブックに質問する…"
                 className="min-w-0 flex-1 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2 text-sm text-fg-strong placeholder:text-muted focus:border-[var(--line)] focus:shadow-glow focus:outline-none"
               />

@@ -24,6 +24,7 @@ import * as facts from "@/lib/facts";
 import {
   forgetSyncMark, lastSyncedAt, syncBlockedReason, syncMemory, type SyncOutcome,
 } from "@/lib/memorySync";
+import { enterSubmits } from "@/lib/enterKey";
 
 const IMPORTANCE = [
   { v: 0, label: "ふつう" },
@@ -192,7 +193,7 @@ export default function MemorySettings() {
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") void addOne(); }}
+          onKeyDown={(e) => { if (enterSubmits(e)) void addOne(); }}
           placeholder="覚えておいてほしいこと（例：甲殻類アレルギー）"
           aria-label="覚えておいてほしいこと"
           className="min-w-0 flex-1 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-2.5 py-2 text-sm text-fg-strong placeholder:text-muted focus:border-[var(--line)] focus:outline-none"

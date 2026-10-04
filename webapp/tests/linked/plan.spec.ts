@@ -97,6 +97,7 @@ test("持ち主でない人には、入れない AI STUDIO を案内しない", 
   be.set("/account/profile", { json: { is_owner: false, owner_only_modes: ["income"] } });
   await enterApp(page);
   await openMore(page, /^ゴール\s*分解して進める$/, seeText(page, /オートパイロット とは/));
+  await page.getByText("ほかとの違い").click();     // スマホの幅では畳んである
   await expect(page.getByText(/ボード › AUTOMATION の ?自動化/)).toBeVisible();
   await expect(page.getByText(/AI STUDIO/)).toHaveCount(0);
 });
@@ -105,6 +106,7 @@ test("持ち主には、ワークフローの場所も案内する", async ({ pa
   await mockBackend(page);
   await enterApp(page);
   await openMore(page, /^ゴール\s*分解して進める$/, seeText(page, /オートパイロット とは/));
+  await page.getByText("ほかとの違い").click();     // スマホの幅では畳んである
   await expect(page.getByText(/つくる › AI STUDIO の ?ワークフロー/)).toBeVisible();
 });
 

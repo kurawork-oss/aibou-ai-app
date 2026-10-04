@@ -26,6 +26,7 @@ import BootScreen from "@/components/BootScreen";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useCallback, useEffect, useState } from "react";
 import { syncOnBoot } from "@/lib/memorySync";
+import { usePhone } from "@/lib/usePhone";
 import { CORE_TYPES, readCoreType, setCoreType, type CoreType } from "@/lib/coreType";
 import NeedsBackend from "@/components/NeedsBackend";
 import Chat, { type ChatSettings } from "@/components/Chat";
@@ -208,6 +209,7 @@ function Hud() {
   // 使える状態になったら、まだ運んでいない画面を静かに取りに行く
   usePrefetchScreens(loaded);
   const [fullscreen, setFullscreen] = useState(false);
+  const phone = usePhone();
 
   /* ── 持ち主かどうか ───────────────────────────────────────────────
      持ち主専用モード（副業・自己進化）の表示を決める。分かるまでは隠す側に
@@ -340,6 +342,32 @@ function Hud() {
     [persist],
   );
 
+  // 右上の2つ。スマホの1列にも、広い画面の状態の列にも同じ物を置く。
+  const fullscreenButton = (
+    <button
+      type="button"
+      onClick={() => setFullscreen((f) => !f)}
+      className="grid h-8 w-8 place-items-center rounded-lg border border-panel text-muted transition hover:border-[var(--line)] hover:text-fg-strong"
+      aria-label={fullscreen ? "Restore" : "Fullscreen"}
+      title={fullscreen ? "コアを表示（元に戻す）" : "全画面（コアを隠す）"}
+      aria-pressed={fullscreen}
+      style={fullscreen ? { borderColor: "var(--accent)", color: "var(--fg-strong)" } : undefined}
+    >
+      <FullscreenIcon on={fullscreen} />
+    </button>
+  );
+  const settingsButton = (
+    <button
+      type="button"
+      onClick={() => setSettingsOpen(true)}
+      className="grid h-8 w-8 place-items-center rounded-lg border border-panel text-muted transition hover:border-[var(--line)] hover:text-fg-strong"
+      aria-label="Settings"
+      title="Settings"
+    >
+      <GearIcon />
+    </button>
+  );
+
   // Every mode uses the full width; each view manages its own internal
   // centering. Chat goes extra-wide so the history rail sits in the far-left
   // margin while the conversation stays centred.
@@ -353,39 +381,58 @@ function Hud() {
 
       {/* Chrome (status + core) stays centred/narrow even when the page is wide */}
       <div className="mx-auto w-full max-w-2xl">
-        {/* Top status row */}
-        <div className="flex items-center justify-between py-1">
-          <div className="flex items-center gap-2">
-            <StatusDot online={online} />
-            <span className="text-[10px] tracking-[0.22em] text-muted label-mono">
-              {online ? "LINK ACTIVE" : "OFFLINE"}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
+        {phone ? (
+          /* スマホ: 状態・コア・名前・ボタンを1列にまとめる。
+             以前は上の飾り（状態の列＋108pxのコア＋名前＋区切り）だけで、
+             縦の25〜37%（iPhone SE で 245px / 667px）を使っていた。
+             中身に使える高さがそのぶん削られ、タスク画面では一覧が
+             1枚目に入らなかった。コアは小さくしても、状態の動きは出る。 */
+          <div className="flex items-center gap-2.5 pb-1">
+            {!fullscreen && <CoreOrb size={40} state={coreState} />}
+            <div className="min-w-0 flex-1">
+              {/* 横幅が足りないので、見せる名前は「AIbou」だけ。システム名は
+                  読み上げの名前に残す（右の3つのボタンと並べると、
+                  「THE FORGE OS」が3段に折れていた）。 */}
+              {!fullscreen && (
+                <h1 aria-label="AIbou THE FORGE OS"
+                    className="text-glow leading-none text-fg-strong">
+                  <span className="brand-wordmark text-[17px]">AIbou</span>
+                </h1>
+              )}
+              {/* 名前より、繋がっているか・いま何をしているかのほうが要る。
+                  「LINK ACTIVE · ONLINE」は右のボタンに押されて「LINK ACTIVE…」で
+                  切れ、肝心の「いま何をしているか」が消えていた。繋がっているかは
+                  点の色で分かるので、繋がっているときは状態だけを出す。 */}
+              <div className="mt-1 flex min-w-0 items-center gap-1.5">
+                <StatusDot online={online} />
+                <span className="truncate text-[0.75rem] text-muted">
+                  {!loaded ? (online ? "LINK ACTIVE" : "OFFLINE")
+                    : online ? stateLabel(coreState)
+                    : coreState === "idle" ? "OFFLINE" : `OFFLINE · ${stateLabel(coreState)}`}
+                </span>
+              </div>
+            </div>
             <Briefing />
-            <DesktopTabs view={view} onChange={setView} />
-            <button
-              type="button"
-              onClick={() => setFullscreen((f) => !f)}
-              className="grid h-8 w-8 place-items-center rounded-lg border border-panel text-muted transition hover:border-[var(--line)] hover:text-fg-strong"
-              aria-label={fullscreen ? "Restore" : "Fullscreen"}
-              title={fullscreen ? "コアを表示（元に戻す）" : "全画面（コアを隠す）"}
-              aria-pressed={fullscreen}
-              style={fullscreen ? { borderColor: "var(--accent)", color: "var(--fg-strong)" } : undefined}
-            >
-              <FullscreenIcon on={fullscreen} />
-            </button>
-            <button
-              type="button"
-              onClick={() => setSettingsOpen(true)}
-              className="grid h-8 w-8 place-items-center rounded-lg border border-panel text-muted transition hover:border-[var(--line)] hover:text-fg-strong"
-              aria-label="Settings"
-              title="Settings"
-            >
-              <GearIcon />
-            </button>
+            {fullscreenButton}
+            {settingsButton}
           </div>
-        </div>
+        ) : (
+          /* Top status row */
+          <div className="flex items-center justify-between py-1">
+            <div className="flex items-center gap-2">
+              <StatusDot online={online} />
+              <span className="text-[10px] tracking-[0.22em] text-muted label-mono">
+                {online ? "LINK ACTIVE" : "OFFLINE"}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Briefing />
+              <DesktopTabs view={view} onChange={setView} />
+              {fullscreenButton}
+              {settingsButton}
+            </div>
+          </div>
+        )}
 
         {/* フォーカス中はコアが消えるので、戻し方を文字で出す。
             アイコン（⛶）だけだと「コアが壊れた」に見え、設定が保存される
@@ -404,8 +451,9 @@ function Hud() {
 
         {/* Core + wordmark (compact when not on chat / home). Hidden in
             fullscreen to give the active mode the whole canvas — the slim
-            status row above keeps the restore/modes/settings controls. */}
-        {!fullscreen && (
+            status row above keeps the restore/modes/settings controls.
+            スマホでは上の1列に入れたので、ここには出さない。 */}
+        {!fullscreen && !phone && (
           <>
             <header
               className="flex flex-col items-center transition-[color,opacity,transform] duration-300 ease-out motion-reduce:transition-none"
@@ -426,6 +474,7 @@ function Hud() {
             <div className="divider my-2" />
           </>
         )}
+        {phone && <div className="divider mb-2" />}
       </div>
 
       {/* Active view fills remaining space. Home & Forge own the full width
@@ -637,15 +686,18 @@ function ManageBar({ view, onChange, isOwner, packs }:
   const more = visibleSurfaces(MORE_SURFACES, { isOwner, packs });
 
   return (
-    <div className="mx-auto w-full max-w-5xl shrink-0">
-      <div className="flex flex-wrap items-center gap-1.5">
+    /* 下に少し空ける。無いと、切り替えの列と画面の最初の枠がくっついて
+       1つの塊に見えた（タスクの数字の箱が、切り替えの続きに見える）。 */
+    <div className="mx-auto mb-2 w-full max-w-5xl shrink-0">
+      {/* スマホでも1列に収める（375px で「もっと」だけ2段目に落ちていた） */}
+      <div className="flex items-center gap-1 sm:flex-wrap sm:gap-1.5">
         {MANAGE_SURFACES.map((sf) => (
           <button
             key={sf.key}
             type="button"
             onClick={() => { onChange(sf.view as View); setMoreOpen(false); }}
             title={sf.hint}
-            className="rounded-forge border px-3 py-2 text-[12px] transition"
+            className="min-h-[44px] shrink-0 rounded-forge border px-2.5 text-[13px] transition sm:px-3 sm:text-[12px]"
             style={{
               borderColor: here === sf.key ? "var(--accent)" : "var(--panel-bd)",
               color: here === sf.key ? "var(--fg-strong)" : "var(--muted)",
@@ -659,15 +711,18 @@ function ManageBar({ view, onChange, isOwner, packs }:
           type="button"
           onClick={() => setMoreOpen((v) => !v)}
           aria-expanded={moreOpen}
-          className="rounded-forge border border-panel px-3 py-2 text-[12px] text-muted transition"
+          className="min-h-[44px] shrink-0 rounded-forge border border-panel px-2.5 text-[13px] text-muted transition sm:px-3 sm:text-[12px]"
           style={{ color: here === null ? "var(--fg-strong)" : undefined }}
         >
           {moreOpen ? "▲ もっと" : "▼ もっと"}
         </button>
       </div>
 
+      {/* 開いた一覧は、それだけで縦に伸びる。小さい画面（iPhone SE）では
+          最後の「説明書」が下のナビの裏に入って押せなかったので、残りの
+          高さの中でスクロールさせる。 */}
       {moreOpen && (
-        <div className="mt-1.5 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+        <div className="mt-1.5 grid max-h-[min(60dvh,440px)] grid-cols-2 gap-1.5 overflow-y-auto overscroll-contain pb-1 sm:grid-cols-4">
           {more.map((m) => (
             <button
               key={m.key}

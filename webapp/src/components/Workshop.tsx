@@ -59,14 +59,17 @@ export default function Workshop() {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2">
-      <div className="mx-auto flex flex-wrap items-center justify-center gap-1.5">
+      {/* スマホでは横に流す1段（折り返すと2段・縦 100px を切り替えだけで使い、
+          作る欄が狭くなっていた）。中央寄せは広い画面だけ——横に送れる箱で
+          中央に寄せると、左にはみ出した分へ戻れなくなる。 */}
+      <div className="-my-1 flex items-center gap-1.5 overflow-x-auto py-1 sm:mx-auto sm:my-0 sm:flex-wrap sm:justify-center sm:overflow-visible sm:py-0">
         {tabs.map((t) => (
           <button
             key={t.key}
             type="button"
             onClick={() => setTab(t.key)}
             aria-pressed={tab === t.key}
-            className="rounded-forge border px-4 py-1.5 text-[10px] tracking-[0.16em] transition label-mono"
+            className="shrink-0 rounded-forge border px-3 py-1.5 text-[10px] tracking-[0.16em] transition label-mono sm:px-4"
             style={{
               borderColor: tab === t.key ? "var(--accent)" : "var(--panel-bd)",
               color: tab === t.key ? "var(--fg-strong)" : "var(--muted)",

@@ -13,6 +13,8 @@ import { useRef, useEffect, useState, useCallback, type PointerEvent as ReactPoi
 import { listTasks, createTask, updateTask, deleteTask, type Task } from "@/lib/api";
 import { explain } from "@/lib/needs";
 import { useLive } from "@/lib/live";
+import { usePhone } from "@/lib/usePhone";
+import { enterSubmits } from "@/lib/enterKey";
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   pending: { label: "PENDING", color: "#8b8f97" },
@@ -93,6 +95,13 @@ export default function Tasks() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [responseText, setResponseText] = useState("");
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+
+  /* スマホでは、追加の欄をタイトルと「追加」だけにする。詳細・優先度・
+     期限・プロジェクトは、タイトルを打ち始めたら出す。全部を出しておくと
+     欄だけで縦 265px を使い、iPhone SE では一覧が1画面目に1件も入らなかった。
+     （前に選んだ優先度やプロジェクトは残るので、出てきたときに見える） */
+  const phone = usePhone();
+  const showDetails = !phone || newTitle !== "" || newContent !== "";
 
   // Restore the preferred view (list is the default).
   useEffect(() => {
@@ -225,17 +234,19 @@ export default function Tasks() {
       {/* min-w-0 が無いと、グリッドの中身は「これ以上縮めない幅」より小さくなれない。
           スマホでは中身が451pxになり、361pxの枠から右へ切れていた（入力欄が見えない）。 */}
       <div className={`flex min-w-0 flex-col gap-3 ${view === "kanban" ? "lg:flex-row lg:flex-wrap lg:items-start" : ""}`}>
-      {/* KPI row — スマホは2列。4列だと「AWAITING」の幅で横に溢れる。 */}
-      <div className={`grid grid-cols-2 gap-2 sm:grid-cols-4 ${view === "kanban" ? "lg:w-80" : ""}`}>
+      {/* KPI row — スマホでも1段に4つ並べる。2列×2段だと、数字4つだけで
+          縦 130px を使い、一覧を下へ押し出していた。「AWAITING」が収まるよう、
+          スマホでは余白を詰める（それでも溢れる幅なら、枠の中で切る）。 */}
+      <div className={`grid grid-cols-4 gap-1.5 sm:gap-2 ${view === "kanban" ? "lg:w-80" : ""}`}>
         {[
           { key: "pending", label: "PENDING" },
           { key: "in_progress", label: "ACTIVE" },
           { key: "awaiting_approval", label: "AWAITING" },
           { key: "completed", label: "DONE" },
         ].map((s) => (
-          <div key={s.key} className="panel p-2 text-center">
-            <div className="text-[18px] font-bold text-fg-strong">{counts[s.key] ?? 0}</div>
-            <div className="text-[9px] tracking-[0.15em] text-muted label-mono">{s.label}</div>
+          <div key={s.key} className="panel min-w-0 px-1 py-1.5 text-center sm:p-2">
+            <div className="text-[16px] font-bold leading-tight text-fg-strong sm:text-[18px]">{counts[s.key] ?? 0}</div>
+            <div className="truncate text-[9px] tracking-[0.15em] text-muted label-mono">{s.label}</div>
           </div>
         ))}
       </div>
@@ -243,22 +254,39 @@ export default function Tasks() {
       {/* New Task Form */}
       <div className={`panel p-3 ${view === "kanban" ? "lg:min-w-[24rem] lg:flex-1" : ""}`}>
         <div className="mb-1.5 text-[10px] tracking-[0.2em] text-muted label-mono">NEW TASK</div>
-        <input
-          value={newTitle}
-          onChange={(e) => setNewTitle(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && !e.shiftKey && void handleCreate()}
-          placeholder="タスクのタイトル…"
-          className="mb-2 w-full rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2 text-sm text-fg-strong placeholder:text-muted focus:border-[var(--line)] focus:outline-none"
-        />
+        {/* スマホでは「追加」をタイトルの横に置く（下の欄を閉じていても押せる） */}
+        <div className="flex gap-2">
+          <input
+            value={newTitle}
+            onChange={(e) => setNewTitle(e.target.value)}
+            onKeyDown={(e) => enterSubmits(e) && !e.shiftKey && void handleCreate()}
+            placeholder="タスクのタイトル…"
+            className="min-w-0 flex-1 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2 text-sm text-fg-strong placeholder:text-muted focus:border-[var(--line)] focus:outline-none"
+          />
+          {phone && (
+            <button
+              type="button"
+              onClick={() => void handleCreate()}
+              disabled={creating || !newTitle.trim()}
+              className="shrink-0 rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] px-3 text-[11px] text-fg-strong shadow-glow transition disabled:opacity-40 label-mono"
+            >
+              {creating ? "…" : "+ ADD TASK"}
+            </button>
+          )}
+        </div>
+        {showDetails && (
+        <>
         <textarea
           value={newContent}
           onChange={(e) => setNewContent(e.target.value)}
           rows={2}
           placeholder="詳細（任意）…"
-          className="mb-2 w-full resize-none rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2 text-sm text-fg-strong placeholder:text-muted focus:border-[var(--line)] focus:outline-none"
+          className="mt-2 w-full resize-none rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2 text-sm text-fg-strong placeholder:text-muted focus:border-[var(--line)] focus:outline-none"
         />
-        {/* Priority / due / project */}
-        <div className="mb-2 flex gap-2">
+        {/* Priority / due / project — スマホではプロジェクトを2段目へ。
+            3つを1段に詰めると、期限は「mm/dd,」、プロジェクトは
+            「プロジェク」で切れて読めなかった。 */}
+        <div className="mt-2 flex flex-wrap gap-2 sm:flex-nowrap">
           <select
             value={newPriority}
             onChange={(e) => setNewPriority(e.target.value)}
@@ -281,22 +309,28 @@ export default function Tasks() {
             onChange={(e) => setNewProject(e.target.value)}
             placeholder="プロジェクト"
             aria-label="プロジェクト"
-            className="min-w-0 flex-1 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-2 py-1.5 text-[12px] text-fg-strong placeholder:text-muted focus:outline-none"
+            className="min-w-0 flex-1 basis-full sm:basis-0 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-2 py-1.5 text-[12px] text-fg-strong placeholder:text-muted focus:outline-none"
           />
         </div>
-        <button
-          type="button"
-          onClick={() => void handleCreate()}
-          disabled={creating || !newTitle.trim()}
-          className="w-full rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] py-2 text-[11px] tracking-[0.2em] text-fg-strong shadow-glow transition hover:shadow-glow-strong disabled:opacity-40 label-mono"
-        >
-          {creating ? "CREATING…" : "+ ADD TASK"}
-        </button>
+        </>
+        )}
+        {!phone && (
+          <button
+            type="button"
+            onClick={() => void handleCreate()}
+            disabled={creating || !newTitle.trim()}
+            className="mt-2 w-full rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] py-2 text-[11px] tracking-[0.2em] text-fg-strong shadow-glow transition hover:shadow-glow-strong disabled:opacity-40 label-mono"
+          >
+            {creating ? "CREATING…" : "+ ADD TASK"}
+          </button>
+        )}
       </div>
 
-      {/* View toggle + filter tabs */}
-      <div className={`flex flex-wrap items-center gap-1.5 ${view === "kanban" ? "lg:w-full" : ""}`}>
-        <div className="flex overflow-hidden rounded-forge border border-panel" role="tablist" aria-label="表示切替">
+      {/* View toggle + filter tabs — スマホでは横に流す1段にする。折り返すと
+          2〜3段（プロジェクトがあるとさらに増える）になり、一覧が下へ逃げる。
+          はみ出した分は横に送れば出てくる（右端で切れて見えるのが目印）。 */}
+      <div className={`-my-1 flex items-center gap-1.5 overflow-x-auto py-1 sm:my-0 sm:flex-wrap sm:overflow-visible sm:py-0 ${view === "kanban" ? "lg:w-full" : ""}`}>
+        <div className="flex shrink-0 overflow-hidden rounded-forge border border-panel" role="tablist" aria-label="表示切替">
           {(["list", "kanban"] as const).map((v) => (
             <button
               key={v}
@@ -319,7 +353,7 @@ export default function Tasks() {
             key={t.key}
             type="button"
             onClick={() => setFilter(t.key)}
-            className="rounded-forge border px-2.5 py-1 text-[10px] tracking-[0.16em] transition label-mono"
+            className="shrink-0 rounded-forge border px-2.5 py-1 text-[10px] tracking-[0.16em] transition label-mono"
             style={{
               borderColor: filter === t.key ? "var(--accent)" : "var(--panel-bd)",
               color: filter === t.key ? "var(--fg-strong)" : "var(--muted)",
@@ -333,11 +367,11 @@ export default function Tasks() {
         {/* Project filter chips */}
         {projects.length > 0 && (
           <>
-            <span className="ml-1 text-[9px] tracking-[0.14em] text-muted/60 label-mono">PROJECT:</span>
+            <span className="ml-1 shrink-0 text-[9px] tracking-[0.14em] text-muted/60 label-mono">PROJECT:</span>
             <button
               type="button"
               onClick={() => setProjectFilter("")}
-              className="rounded-full border px-2 py-0.5 text-[9px] label-mono"
+              className="shrink-0 rounded-full border px-2 py-0.5 text-[9px] label-mono"
               style={{ borderColor: !projectFilter ? "var(--accent)" : "var(--panel-bd)", color: !projectFilter ? "var(--fg-strong)" : "var(--muted)" }}
             >
               全て
@@ -347,7 +381,7 @@ export default function Tasks() {
                 key={p}
                 type="button"
                 onClick={() => setProjectFilter(projectFilter === p ? "" : p)}
-                className="rounded-full border px-2 py-0.5 text-[9px] label-mono"
+                className="shrink-0 rounded-full border px-2 py-0.5 text-[9px] label-mono"
                 style={{ borderColor: projectFilter === p ? "var(--accent)" : "var(--panel-bd)", color: projectFilter === p ? "var(--fg-strong)" : "var(--muted)" }}
               >
                 {p}
@@ -359,7 +393,9 @@ export default function Tasks() {
         <button
           type="button"
           onClick={() => void load()}
-          className="ml-auto rounded-forge border border-panel px-2.5 py-1 text-[10px] text-muted transition hover:text-fg-strong label-mono"
+          aria-label="読み直す"
+          title="読み直す"
+          className="ml-auto shrink-0 rounded-forge border border-panel px-2.5 py-1 text-[10px] text-muted transition hover:text-fg-strong label-mono"
         >
           ↻
         </button>
@@ -420,19 +456,28 @@ export default function Tasks() {
                   transition={{ duration: 0.2 }}
                 >
                   <div className="flex items-start justify-between gap-2">
+                    {/* 押せる広さは 44px（指の大きさ）、見える丸は小さいまま。
+                        丸ごと 44px にすると、空の大きな丸が行の左に並んで、
+                        何の印か分かりにくかった。外側を負の余白で重ねて、
+                        行の高さは増やさない。 */}
                     <button
                       type="button"
                       onClick={() => void quickToggle(task)}
                       disabled={updatingId === task.id}
                       aria-label={task.status === "completed" ? "未完了に戻す" : "完了にする"}
-                      className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border transition disabled:opacity-40"
-                      style={{
-                        borderColor: task.status === "completed" ? "#60d394" : "var(--input-bd)",
-                        background: task.status === "completed" ? "rgba(96,211,148,0.18)" : "transparent",
-                        color: "#60d394",
-                      }}
+                      className="-my-2.5 -ml-2.5 grid h-11 w-11 shrink-0 place-items-center rounded-full transition disabled:opacity-40"
                     >
-                      {task.status === "completed" ? "✓" : ""}
+                      <span
+                        aria-hidden
+                        className="grid h-6 w-6 place-items-center rounded-full border text-[12px]"
+                        style={{
+                          borderColor: task.status === "completed" ? "#60d394" : "var(--input-bd)",
+                          background: task.status === "completed" ? "rgba(96,211,148,0.18)" : "transparent",
+                          color: "#60d394",
+                        }}
+                      >
+                        {task.status === "completed" ? "✓" : ""}
+                      </span>
                     </button>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">

@@ -21,6 +21,7 @@ import Markdown from "@/components/Markdown";
 import { addToArchive } from "@/components/AppArchive";
 import { forgeGenerate, type ForgeKind, type ForgeResult } from "@/lib/api";
 import { explain } from "@/lib/needs";
+import { enterSubmits } from "@/lib/enterKey";
 
 const KINDS: { key: ForgeKind; label: string; hint: string; placeholder: string }[] = [
   { key: "image", label: "IMAGE", hint: "画像生成", placeholder: "例：サイバーパンクな都市の夜景" },
@@ -183,7 +184,7 @@ export default function Forge() {
                   <input
                     value={editInstruction}
                     onChange={(e) => setEditInstruction(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && regenerate()}
+                    onKeyDown={(e) => enterSubmits(e) && regenerate()}
                     placeholder="例：グラフを追加して / 色を青系に / 章を1つ増やして"
                     className="min-w-0 flex-1 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2 text-sm text-fg-strong placeholder:text-muted focus:border-[var(--line)] focus:outline-none"
                   />

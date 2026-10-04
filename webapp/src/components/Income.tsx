@@ -18,6 +18,7 @@ import {
 import PseoPanel from "@/components/PseoPanel";
 import NewsletterPanel from "@/components/NewsletterPanel";
 import { explain } from "@/lib/needs";
+import { enterSubmits } from "@/lib/enterKey";
 
 type IncomeTab = "queue" | "seo" | "mail";
 
@@ -165,7 +166,7 @@ export default function Income() {
           <input
             value={theme}
             onChange={(e) => setTheme(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && enqueue()}
+            onKeyDown={(e) => enterSubmits(e) && enqueue()}
             placeholder="例：在宅ワークの集中BGM"
             className="min-w-0 flex-1 rounded-forge border border-[var(--input-bd)] bg-[var(--input-bg)] px-3 py-2 text-sm text-fg-strong placeholder:text-muted focus:border-[var(--line)] focus:shadow-glow focus:outline-none"
           />

@@ -37,3 +37,6 @@ next-env.d.ts
 /.next-linked
 /.next-prod
 /.next-audit
+
+# スマホの点検で撮る画面（数十枚・数MB。数字は audit/phone-*.json に残る）
+/audit/phone/

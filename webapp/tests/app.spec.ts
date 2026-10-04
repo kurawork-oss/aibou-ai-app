@@ -18,7 +18,7 @@ async function enterApp(page: Page) {
   // BootScreen: no API_URL → offline state quickly. Click "ENTER OFFLINE" if
   // shown, otherwise wait for the HUD wordmark.
   const offlineBtn = page.getByText("ENTER OFFLINE");
-  const hudH1 = page.getByText("THE FORGE OS").first();
+  const hudH1 = page.getByRole("heading", { name: /THE FORGE OS/ }).first();
   await Promise.race([
     offlineBtn.waitFor({ timeout: 8_000 }).then(() => offlineBtn.click()),
     hudH1.waitFor({ timeout: 10_000 }),
@@ -114,7 +114,7 @@ test("CHAT is the default view; HOME shows the cockpit", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
   // Default landing is CHAT — its message placeholder is unique to that view
-  await expect(page.getByPlaceholder("AIbou にメッセージ…")).toBeVisible({ timeout: 5_000 });
+  await expect(page.getByPlaceholder(/メッセージ…$/)).toBeVisible({ timeout: 5_000 });
   // Navigating to HOME renders the cockpit
   await goMode(page, "HOME");
   await expect(page.getByText("PERSONAL COCKPIT")).toBeVisible({ timeout: 5_000 });
@@ -735,7 +735,9 @@ test("AUTO mode explains what AUTOPILOT is and when to use the others", async ({
   await goMode(page, "AUTO");
   await expect(page.getByText("オートパイロット とは")).toBeVisible({ timeout: 5_000 });
   await expect(page.getByText(/ゴールだけ決めて/)).toBeVisible();
-  // 3つの「手順を並べる」機能の使い分けを示す（同じ説明を3画面で共有している）
+  // 3つの「手順を並べる」機能の使い分けを示す（同じ説明を3画面で共有している）。
+  // スマホの幅では「ほかとの違い」に畳んであるので、開いてから見る
+  await page.getByText("ほかとの違い").click();
   await expect(page.getByText(/つくる › AI STUDIO の ?ワークフロー/)).toBeVisible();
   await expect(page.getByText(/ボード › AUTOMATION の ?自動化/)).toBeVisible();
 });
@@ -1082,7 +1084,7 @@ test.describe("desktop layout", () => {
     const newChat = page.getByText("＋ 新しいチャット");
     await expect(newChat).toBeVisible({ timeout: 5_000 });
     const panelBox = await newChat.boundingBox();
-    const inputBox = await page.getByPlaceholder("AIbou にメッセージ…").boundingBox();
+    const inputBox = await page.getByPlaceholder(/メッセージ…$/).boundingBox();
     // Panel hugs the left edge (well left of the centred conversation) and is tall
     expect(panelBox!.x).toBeLessThan(inputBox!.x);
     expect(panelBox!.x).toBeLessThan(120);
@@ -1106,6 +1108,8 @@ test("ME mode renders life partner intro + experience box", async ({ page }) => 
   await goMode(page, "ME");
   await expect(page.getByText("LIFE PARTNER")).toBeVisible({ timeout: 5_000 });
   await expect(page.getByText("📦 経験の箱")).toBeVisible();
+  // スマホの幅では、箱は見出しだけ（押すと開く）。会話の欄を潰さないため
+  await page.getByRole("button", { name: /経験の箱/ }).click();
   // Offline → the box explains it needs the backend
   await expect(page.getByText(/バックエンド未接続のため箱は使えません/)).toBeVisible();
   // data-mode retint
@@ -1195,7 +1199,7 @@ test("下のナビは実行と管理の2つで、残りは管理の「もっと�
   await expect(nav.getByText("管理", { exact: true })).toBeVisible();
 
   // 実行タブは会話。会話欄はアプリ全体でここ1つ。
-  await expect(page.getByPlaceholder("AIbou にメッセージ…")).toBeVisible({ timeout: 5_000 });
+  await expect(page.getByPlaceholder(/メッセージ…$/)).toBeVisible({ timeout: 5_000 });
 
   // 管理タブ → 「今日」から始まり、切り替えでタスクへ行ける
   await nav.getByText("管理", { exact: true }).click();
@@ -1289,6 +1293,8 @@ test("HOME agent console renders with action suggestions", async ({ page }) => {
 
 /* ── Attachments: screenshot paste + file attach (ui-r26) ── */
 test("CHAT composer hints screenshot paste", async ({ page }) => {
+  // キーボードの案内なので、広い画面で見る（スマホでは出さない。phone.spec.ts）
+  await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/");
   await enterApp(page);
   // Default view is CHAT; the composer's hint line mentions Ctrl+V paste.

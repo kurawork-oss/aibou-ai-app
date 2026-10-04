@@ -21,6 +21,7 @@ import {
 } from "@/lib/runner";
 import { diffLines, collapseDiff, changedFiles, type FileChange } from "@/lib/diff";
 import { codeShellStatus, codeShellRun, type ShellStatus, type ShellResult } from "@/lib/api";
+import { enterSends, enterSubmits } from "@/lib/enterKey";
 
 const LS_WORKSPACES = "forge_code_workspaces";
 const WS_LIMIT = 12;
@@ -563,9 +564,9 @@ export default function CodeMode() {
     return out;
   }, [query, ws]);
 
+  // Enter で送る（変換の確定・指で打つ端末の改行は除く。lib/enterKey.ts）
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.nativeEvent.isComposing) return;
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (enterSends(e)) {
       e.preventDefault();
       void send();
     }
@@ -618,10 +619,15 @@ export default function CodeMode() {
     } catch { /* ignore */ }
   };
 
-  /* ── 開始画面（ワークスペース未選択） ── */
+  /* ── 開始画面（ワークスペース未選択） ──
+     中央に寄せるのは内側の箱で、外側はスクロールの箱にする。高さいっぱいの
+     箱で直接 justify-center すると、中身が高い（スマホ）ときに上下へ同じだけ
+     はみ出し、上にはみ出した分は上の案内と切り替えに重なって、スクロールしても
+     戻ってこなかった（iPhone で説明文が「今日・ボード…」の上に被っていた）。 */
   if (!ws) {
     return (
-      <div className="mx-auto flex h-full max-w-2xl flex-col items-center justify-center gap-4 pb-8">
+      <div className="h-full overflow-y-auto">
+      <div className="mx-auto flex min-h-full max-w-2xl flex-col items-center justify-center gap-4 pb-8">
         <div className="text-center">
           <h2 className="label-mono text-glow text-sm tracking-[0.24em] text-fg-strong">AI CODING AGENT</h2>
           <p className="mt-2 text-[12px] leading-relaxed text-muted">
@@ -719,6 +725,7 @@ export default function CodeMode() {
             </div>
           </div>
         )}
+      </div>
       </div>
     );
   }
@@ -1159,7 +1166,7 @@ export default function CodeMode() {
                 <input
                   value={cmd}
                   onChange={(e) => setCmd(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) void runCommand(); }}
+                  onKeyDown={(e) => { if (enterSubmits(e)) void runCommand(); }}
                   placeholder="npm test / python3 -m pytest -q"
                   aria-label="実行するコマンド"
                   className="min-w-0 flex-1 rounded border border-[var(--input-bd)] bg-[var(--input-bg)] px-2 py-1 font-mono text-[11px] text-fg-strong placeholder:text-muted focus:outline-none"

@@ -11,6 +11,8 @@
  * 今いる場所を強調して出す。
  */
 
+import PhoneFold from "@/components/PhoneFold";
+
 export type Runner = "autopilot" | "workflow" | "automation";
 
 const RUNNERS: { key: Runner; name: string; where: string; when: string }[] = [
@@ -51,6 +53,7 @@ export default function StepRunnersNote({ current, isOwner = null }:
       <p className="text-[11px] leading-relaxed text-fg">
         <span className="text-fg-strong">{me.when}</span>に使います。
       </p>
+      <PhoneFold label="ほかとの違い">
       <div className="mt-2 flex flex-col gap-1 border-t border-panel pt-2 text-[10px] leading-relaxed text-muted">
         {others.map((o) => (
           <div key={o.key}>
@@ -61,6 +64,7 @@ export default function StepRunnersNote({ current, isOwner = null }:
           ※ どれも同じ実行エンジンなので、担当AI・根拠資料・条件分岐は共通で使えます。
         </div>
       </div>
+      </PhoneFold>
     </div>
   );
 }

@@ -29,6 +29,7 @@ import { useLive } from "@/lib/live";
 import FlowBuilder from "@/components/FlowBuilder";
 import StepRunnersNote from "@/components/StepRunnersNote";
 import { STEP_META } from "@/lib/flowSteps";
+import { enterSubmits } from "@/lib/enterKey";
 
 
 // Miro/Zapier-style template chips — quick-start automations.
@@ -171,7 +172,7 @@ function AutomationBoard({ isOwner }: { isOwner: boolean | null }) {
             <textarea
               value={nl}
               onChange={(e) => setNl(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing && !e.shiftKey) { e.preventDefault(); void createFromNL(nl); } }}
+              onKeyDown={(e) => { if (enterSubmits(e) && !e.shiftKey) { e.preventDefault(); void createFromNL(nl); } }}
               rows={2}
               placeholder="やりたいことを自然言語で…（例：毎朝ニュースを要約してLINEに送る）"
               className="min-h-[2.5rem] flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-fg-strong placeholder:text-muted focus:outline-none"
