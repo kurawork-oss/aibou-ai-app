@@ -221,8 +221,24 @@ export async function sseServer(
     };
     send();
   });
-  await new Promise<void>((ok) => server.listen(8099, "127.0.0.1", ok));
-  return { close: () => new Promise<void>((ok) => { server.close(() => ok()); }) };
+  /* 番号は 8099 に決まっている（ビルドに埋めた接続先）。テストは2つ並んで
+     流れるので、別のテストがこのサーバーを開いている間は、閉じるまで待つ。
+     待たずに開くと EADDRINUSE で落ちる（並び方しだいで、たまに落ちていた）。 */
+  for (let tries = 0; ; tries++) {
+    try {
+      await new Promise<void>((ok, ng) => {
+        server.once("error", ng);
+        server.listen(8099, "127.0.0.1", () => { server.off("error", ng); ok(); });
+      });
+      break;
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "EADDRINUSE" || tries > 600) throw e;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  }
+  // 繋ぎっぱなしの接続（keep-alive）が残ると close が待ち続け、続けて流した
+  // 次のテストが同じ番号で開けずに落ちる（--repeat-each で踏んだ）。切ってから閉じる。
+  return { close: () => new Promise<void>((ok) => { server.closeAllConnections(); server.close(() => ok()); }) };
 }
 
 /** 起動して、使える状態まで待つ。 */

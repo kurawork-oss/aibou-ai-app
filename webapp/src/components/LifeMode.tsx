@@ -117,13 +117,23 @@ export default function LifeMode({ settings }: { settings: ChatSettings }) {
   }, []);
   useEffect(() => { void refreshBox(); }, [refreshBox]);
 
+  /* 新しい中身を追いかけるか（会話の画面 Chat.tsx と同じ決め方）。
+     距離は人が送り動かしたときにだけ測り、自分で送ったときは必ず追いかける。 */
+  const pinnedRef = useRef(true);
+  const gestureAtRef = useRef(0);    // 人が最後に送り動かそうとした時刻
+  const markGesture = () => { gestureAtRef.current = Date.now(); };
+  const onScrollLog = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 80) { pinnedRef.current = true; return; }
+    if (Date.now() - gestureAtRef.current < 1500) pinnedRef.current = false;
+  };
   useEffect(() => {
     const el = scrollRef.current;
     // まだ何も話していないとき（説明だけのとき）は、下へ送らない。送ると
     // 説明の頭（LIFE PARTNER・何をする所か）が欄の上に隠れていた（iPhone SE）。
-    if (!el || msgs.length === 0) return;
-    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 160;
-    if (nearBottom) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    if (!el || msgs.length === 0 || !pinnedRef.current) return;
+    el.scrollTop = el.scrollHeight;
   }, [msgs]);
 
   const persist = (next: Msg[]) => { setMsgs(next); saveMsgs(next); };
@@ -136,6 +146,8 @@ export default function LifeMode({ settings }: { settings: ChatSettings }) {
     const userMsg: Msg = { id: uid(), role: "user", content: text };
     const aiMsg: Msg = { id: uid(), role: "assistant", content: "", pending: true };
     const base = [...msgs, userMsg, aiMsg];
+    pinnedRef.current = true;          // 自分で送った物と、その返事は見せる
+    gestureAtRef.current = 0;
     persist(base);
     setStreaming(true);
 
@@ -266,7 +278,9 @@ export default function LifeMode({ settings }: { settings: ChatSettings }) {
       phone ? "grid-rows-[minmax(0,1fr)_auto]" : ""}`}>
       {/* ── LEFT: 相談チャット ── */}
       <div className="flex min-h-0 flex-col">
-        <div ref={scrollRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-1 py-2" aria-live="polite">
+        <div ref={scrollRef} onScroll={onScrollLog}
+          onWheel={markGesture} onTouchMove={markGesture} onPointerDown={markGesture} onKeyDown={markGesture}
+          className="min-h-0 flex-1 space-y-3 overflow-y-auto px-1 py-2" aria-live="polite">
           {msgs.length === 0 && (
             <div className="mx-auto max-w-md pt-8 text-center">
               <h2 className="label-mono text-glow text-sm tracking-[0.22em] text-fg-strong">LIFE PARTNER</h2>

@@ -625,7 +625,8 @@ test("CHAT can switch between conversation and agent (司令塔) mode", async ({
   await page.getByRole("button", { name: /実行（司令塔）/ }).click();
   await expect(page.getByText(/などの道具を使って実際に動きます/)).toBeVisible({ timeout: 5_000 });
   await expect(page.getByText("取り消せない操作は確認する")).toHaveCount(0);
-  await expect(page.getByPlaceholder(/やってほしいことを指示/)).toBeVisible();
+  // スマホの幅では短い案内（「やってほしいこと…」）。長いと2行目に折れて切れる
+  await expect(page.getByPlaceholder(/やってほしいこと/)).toBeVisible();
 
   // 選んだモードは記憶される
   await page.reload();

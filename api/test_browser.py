@@ -27,6 +27,7 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import browser
+import netguard
 import risk
 
 
@@ -85,6 +86,11 @@ def test_the_page_itself_cannot_reach_inside(monkeypatch):
     クラウドの認証情報は、その筋で取られる。
     """
     seen = []
+    # 外の名前は、実際の名前引きに頼らない（引けない環境では、安全側に倒れて
+    # 外のページまで断られる。それは正しい動きだが、ここで見たいことではない）
+    real = netguard.resolve
+    monkeypatch.setattr(netguard, "resolve",
+                        lambda host, port: ["93.184.215.14"] if host == "example.com" else real(host, port))
 
     class FakeRoute:
         def continue_(self): seen.append("continue")

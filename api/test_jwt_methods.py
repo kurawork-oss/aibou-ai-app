@@ -45,18 +45,28 @@ def _jwk_from(public_key, kid="test-key"):
 
 
 def _serve_jwks(monkeypatch, jwks: dict):
-    """公開鍵の置き場を、ネットワークなしで差し替える。"""
+    """公開鍵の置き場を、ネットワークなしで差し替える。
+
+    取りに行く所（PyJWKClient.fetch_data）そのものを差し替える。以前は
+    urllib.request.urlopen を差し替えていたが、PyJWT 2.11 以降は
+    build_opener(...).open() で取りに行く（転送を断るため）ので、差し替えが
+    効かずに本物のネットワークへ出て、テストだけが落ちていた。"""
+    import copy
     import io
     import urllib.request
 
+    import jwt as pyjwt
+
+    monkeypatch.setattr(pyjwt.PyJWKClient, "fetch_data",
+                        lambda self: copy.deepcopy(jwks))
+
+    # /diagnose は鍵の数を自分で数えに行く（urlopen）。こちらも差し替える
     class Res(io.BytesIO):
         def __enter__(self): return self
         def __exit__(self, *a): return False
 
-    def fake_urlopen(url, *a, **k):
-        return Res(json.dumps(jwks).encode())
-
-    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(urllib.request, "urlopen",
+                        lambda url, *a, **k: Res(json.dumps(jwks).encode()))
 
 
 # ── 公開鍵方式（いまのSupabaseの既定）────────────────────────────

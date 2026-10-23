@@ -373,6 +373,7 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
     cancelRef.current?.();
     speechCancelledRef.current = true;
     stopReply();
+    pinnedRef.current = true;
     setMessages([]);
     setInput("");
     setPendingImage(null);
@@ -387,6 +388,7 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
     stopReply();
     setCurrentId(id);
     setHistoryOpen(false);
+    pinnedRef.current = true;          // 開いた会話は、いちばん新しい所から
 
     if (c && c.messages.length > 0) {
       setMessages(c.messages.map((m) => ({ ...m, pending: false })));
@@ -423,6 +425,10 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
 
   const cancelRef = useRef<(() => void) | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  /** 新しい中身を追いかけるか（下の onScrollMessages の説明を参照） */
+  const pinnedRef = useRef(true);
+  /** 人が最後に送り動かそうとした時刻（指・ホイール・キー・つまみ） */
+  const gestureAtRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const { supported: micSupported, listening, transcript, start: startMic, stop: stopMic, reset: resetMic } =
@@ -467,13 +473,36 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
     onStateChange?.(coreState);
   }, [coreState, onStateChange]);
 
-  // Auto-scroll to the newest content — but only when the user is already
-  // near the bottom, so scrolling up to re-read isn't yanked back per token.
-  useEffect(() => {
+  /* 新しい中身を追いかけるか。読み返すために上へ送ったら外れ、底まで
+     戻したら付く。自分で送ったときも付く（送った物と、その返事——確認の札
+     を含む——は必ず見せる）。
+
+     以前は「中身が伸びた**後**に、底からの距離」で決めていた。それだと
+       ・表やコードで一度に 160px 以上伸びると「上へ送った」と取り違えて、
+         返事の途中で追いかけるのをやめる
+       ・読み返していた人が送ると、送った物も確認の札も画面の外のまま
+         （コアは WAITING なのに、何を待っているのか見えない）
+     になっていた。距離は、人が送り動かしたとき（scroll）にだけ測る。
+
+     scroll は、人が動かしたときだけ届くわけではない。こちらで下へ送った分、
+     中身が伸びたときにブラウザが位置を保つための調整（スクロール・アンカー）、
+     押せる物へ焦点が移ったときの寄せ——どれも scroll として届く。それを
+     「上へ送った」と数えると、送った直後に確認の札が画面の外に残った。
+     だから、外すのは**人が動かそうとした直後**（1.5秒以内）の scroll だけ。
+     底に着いた scroll は、誰が動かしたものでも付け直す。 */
+  const markGesture = useCallback(() => { gestureAtRef.current = Date.now(); }, []);
+  const onScrollMessages = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 160;
-    if (nearBottom) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    if (atBottom) { pinnedRef.current = true; return; }
+    if (Date.now() - gestureAtRef.current < 1500) pinnedRef.current = false;
+  }, []);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !pinnedRef.current) return;
+    // すぐに合わせる（なめらかに動かすと、動いている途中の位置で測られる）
+    el.scrollTop = el.scrollHeight;
   }, [messages]);
 
   // Cleanup any in-flight stream / speech on unmount.
@@ -929,6 +958,8 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
       return true;
     }
     // 直行できた。会話にも残す（あとから何をしたか読み返せるように）
+    pinnedRef.current = true;
+    gestureAtRef.current = 0;
     setMessages((prev) => [...prev,
       { id: uid(), role: "user", content: text },
       { id: uid(), role: "assistant", content: res.result ?? "" }]);
@@ -1006,6 +1037,10 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
     };
     const assistantMsg: Message = { id: uid(), role: "assistant", content: "", pending: true };
 
+    // 自分で送った物と、その返事は見せる。直前に指で動かしていても、
+    // その後に届く位置合わせの scroll を「人が上へ送った」と数えない
+    pinnedRef.current = true;
+    gestureAtRef.current = 0;
     setMessages((prev) => [...prev, userMsg, assistantMsg]);
     setInput("");
     setPendingImage(null);
@@ -1190,6 +1225,14 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
   );
 
   const canSend = (input.trim().length > 0 || !!pendingImage) && !streaming;
+
+  /* 送ったあと、入力欄の高さを1行に戻す。高さは打つたびに中身に合わせて
+     伸ばしている（onChange）が、送って空にするのは onChange を通らないので、
+     2行・3行の高さのまま残り、スマホでは会話の欄をそのぶん狭くしていた。 */
+  const inputBoxRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (input === "" && inputBoxRef.current) inputBoxRef.current.style.height = "";
+  }, [input]);
   /* スマホは横幅が足りない。入力欄の横に4つ並べると、打つ所が 150px ほどしか
      残らず、案内の文字まで折り返していた。打ち始めたら声の2つを引っこめて
      送るボタンだけにする（何も無いときは声の2つ。話して始める人のため）。 */
@@ -1224,6 +1267,11 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
       {/* Message list */}
       <div
         ref={scrollRef}
+        onScroll={onScrollMessages}
+        onWheel={markGesture}
+        onTouchMove={markGesture}
+        onPointerDown={markGesture}
+        onKeyDown={markGesture}
         className="min-h-0 flex-1 space-y-3 overflow-y-auto px-1 py-2"
         aria-live="polite"
       >
@@ -1263,9 +1311,12 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
               type="button"
               onClick={() => setHistoryOpen(true)}
               aria-label="Chat history"
-              className="flex min-[860px]:hidden items-center gap-1.5 rounded-forge border border-panel px-2.5 py-1 text-[10px] tracking-[0.12em] text-muted label-mono"
+              title="履歴"
+              className="flex min-[860px]:hidden items-center justify-center gap-1.5 rounded-forge border border-panel px-2.5 py-1 text-[10px] tracking-[0.12em] text-muted label-mono"
             >
-              <HistoryIcon /> 履歴
+              {/* スマホでは印だけ。「履歴」「作った物」「会話／実行」を1列に収める
+                  （2段になると、会話の欄が 50px 狭くなっていた） */}
+              <HistoryIcon />{!phone && " 履歴"}
             </button>
           )}
           {/* 出した物へ戻る口。**浮かせない**。
@@ -1285,19 +1336,22 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
             </button>
           )}
           <div className="flex overflow-hidden rounded-forge border border-panel">
-            {([[false, "💬 会話"], [true, "⚙ 実行（司令塔）"]] as const).map(([on, label]) => (
+            {([[false, "💬 会話", "💬 会話"], [true, "⚙ 実行（司令塔）", "⚙ 実行"]] as const).map(([on, label, short]) => (
               <button key={label} type="button" onClick={() => setAgentMode(on)}
                 aria-pressed={agentMode === on}
+                aria-label={label}
                 className="px-3 py-1 text-[10px] tracking-[0.12em] label-mono"
                 style={{
                   background: agentMode === on ? "var(--btn-bg)" : "transparent",
                   color: agentMode === on ? "var(--fg-strong)" : "var(--muted)",
                 }}>
-                {label}
+                {phone ? short : label}
               </button>
             ))}
           </div>
-          {agentMode && (
+          {/* スマホでは、話し始めたら畳む（2行を使い、会話の欄を狭くしていた。
+              何をするモードかは、最初に切り替えたときに読めば足りる） */}
+          {agentMode && !(phone && messages.length > 0) && (
             <>
               {/* 確認の出し方は設定 →「基本」の1か所で決める（ここに切り替えは置かない）。
                   道具の数は書かない——足すたびに古くなる（「30種」のまま45種になっていた）。 */}
@@ -1407,6 +1461,7 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
 
           {/* Text input */}
           <textarea
+            ref={inputBoxRef}
             value={input}
             onChange={(e) => {
               setInput(e.target.value);
@@ -1421,7 +1476,7 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
                2行目に折れて下が切れ、「AIbou にメッセー」で途切れて見えた。 */
             placeholder={listening ? "聞き取り中…"
               : agentMode
-                ? (phone ? "やってほしいことを指示…" : "やってほしいことを指示…（例：明日15時に歯医者の予定を入れて）")
+                ? (phone ? "やってほしいこと…" : "やってほしいことを指示…（例：明日15時に歯医者の予定を入れて）")
                 : (phone ? "メッセージ…" : "AIbou にメッセージ…")}
             className="max-h-32 min-h-[40px] flex-1 resize-none bg-transparent px-2 py-2 text-sm text-fg-strong placeholder:text-muted focus:outline-none"
             style={{ scrollbarWidth: "none" }}
@@ -1496,7 +1551,9 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
           )}
         </div>
 
-        {/* Footer hint / speaking indicator */}
+        {/* Footer hint / speaking indicator — スマホで何も出す物が無いときは、
+            行ごと出さない（空の 22px が会話の欄を狭くしていた） */}
+        {(speaking || listening || !phone) && (
         <div className="mt-1.5 flex h-4 items-center justify-center gap-2 px-1">
           {speaking ? (
             <span className="text-[10px] tracking-[0.2em] text-[var(--accent)] label-mono">SPEAKING…</span>
@@ -1509,6 +1566,7 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
             </span>
           )}
         </div>
+        )}
       </div>
       </div>
 
@@ -1853,9 +1911,14 @@ function MessageBubble({ message, onRegenerate, onApprove, onReject, onAlways, o
       className={`flex ${isUser ? "justify-end" : "justify-start"}`}
     >
       <div className={`flex max-w-[85%] flex-col sm:max-w-[78%] ${isUser ? "items-end" : "items-start"}`}>
+      {/* max-w-full が要る。この吹き出しは縦に積む箱の中で「中身の幅」に
+          合わせて決まるので、折り返せない物（長いコードの行）があると、
+          その幅まで広がって画面からはみ出す。そうなると段落もその幅で
+          組まれて、本文ごと右に切れて読めなかった（スマホで表やコードを
+          含む返事）。幅を抑えれば、コードと表はそれぞれの箱の中で横に送れる。 */}
       <div
         className={[
-          "rounded-forge border px-3.5 py-2.5 text-sm leading-relaxed",
+          "min-w-0 max-w-full rounded-forge border px-3.5 py-2.5 text-sm leading-relaxed",
           "backdrop-blur-md",
           isUser
             ? "border-panel-strong bg-[rgba(255,255,255,0.07)] text-fg-strong"
@@ -2001,7 +2064,8 @@ function MessageBubble({ message, onRegenerate, onApprove, onReject, onAlways, o
         {message.pending && !message.content ? (
           <TypingDots />
         ) : isUser || message.error ? (
-          <span className="whitespace-pre-wrap">{message.content}</span>
+          /* 長いURL（空白の無い文字列）も折り返す。折り返せないと吹き出しが広がる */
+          <span className="whitespace-pre-wrap [overflow-wrap:anywhere]">{message.content}</span>
         ) : (
           <div className={message.pending ? "caret" : ""}>
             <Markdown text={message.content} />

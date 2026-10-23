@@ -320,3 +320,71 @@ test("広い画面のタスクは、詳細の欄を最初から出す", async ({
   await expect(page.getByPlaceholder("詳細（任意）…")).toBeVisible({ timeout: 5_000 });
   await expect(page.getByLabel("期限")).toBeVisible();
 });
+
+/* ── 2巡目（ui-r123）──────────────────────────────────────────────── */
+
+test("スマホの会話: 履歴・会話／実行の切り替えが1列に収まる", async ({ page }) => {
+  await page.setViewportSize(SE);
+  await enterApp(page);
+  const hist = page.getByRole("button", { name: "Chat history" });
+  const talk = page.getByRole("button", { name: "💬 会話" });
+  const act = page.getByRole("button", { name: /実行（司令塔）/ });
+  await expect(hist).toBeVisible({ timeout: 5_000 });
+  const [h, t, a] = [(await hist.boundingBox())!, (await talk.boundingBox())!, (await act.boundingBox())!];
+  expect(Math.abs(h.y - t.y)).toBeLessThan(6);
+  expect(Math.abs(t.y - a.y)).toBeLessThan(6);
+  // 読み上げの名前は「実行（司令塔）」のまま、見える字は短く
+  await expect(act).toHaveText(/実行/);
+});
+
+test("スマホの実行モード: 話し始めたら、モードの説明を畳む", async ({ page }) => {
+  await page.setViewportSize(SE);
+  await enterApp(page);
+  await page.getByRole("button", { name: /実行（司令塔）/ }).click();
+  const about = page.getByText(/などの道具を使って実際に動きます/);
+  await expect(about).toBeVisible();                       // 切り替えた直後は読める
+  await page.locator("textarea").first().fill("今日の予定を見て");
+  await page.getByLabel("Send message").click();
+  await expect(about).toHaveCount(0);                       // 話し始めたら畳む
+});
+
+test("スマホのボード: 道具は1列で、描く場所を広く取る（SE）", async ({ page }) => {
+  await page.setViewportSize(SE);
+  await enterApp(page);
+  await goScreen(page, "BOARD");
+  const sticky = page.getByRole("button", { name: /付箋/ }).first();
+  const link = page.getByRole("button", { name: /接続/ }).first();
+  await expect(sticky).toBeVisible({ timeout: 5_000 });
+  const [s, l] = [(await sticky.boundingBox())!, (await link.boundingBox())!];
+  expect(Math.abs(s.y - l.y)).toBeLessThan(6);             // 同じ段
+  const canvas = await page.locator("[data-board-canvas]").boundingBox();
+  expect(canvas!.height).toBeGreaterThanOrEqual(280);       // 以前は 190px ほど
+});
+
+test("画面の言語は日本語（読み上げ・漢字の字形）", async ({ page }) => {
+  await enterApp(page);
+  expect(await page.evaluate(() => document.documentElement.lang)).toBe("ja");
+});
+
+test("スマホの会話欄は、下のナビの裏に入らない", async ({ page }) => {
+  await page.setViewportSize(SE);
+  await enterApp(page);
+  const send = page.getByLabel("会話モード");
+  await expect(send).toBeVisible();
+  const navTop = await page.getByLabel("Mobile navigation").evaluate((el) => el.getBoundingClientRect().top);
+  const box = (await page.locator("textarea").first().boundingBox())!;
+  expect(box.y + box.height).toBeLessThanOrEqual(navTop);
+  // 下の余白は「ナビの高さ＋ホームバー」の計算で決める（80px の決め打ちではない）
+  const pb = await page.locator("main").evaluate((el) => getComputedStyle(el).paddingBottom);
+  expect(pb).toBe("64px");                                  // この環境はホームバーの幅 0
+});
+
+test("キーボードが出ている間は、ナビのための下の余白を外す", async ({ page }) => {
+  await page.setViewportSize(SE);
+  await enterApp(page);
+  const pb = () => page.locator("main").evaluate((el) => getComputedStyle(el).paddingBottom);
+  expect(await pb()).toBe("64px");
+  // MobileNav がキーボードを見つけたときに立てる印（visualViewport の縮み）
+  await page.evaluate(() => { document.documentElement.dataset.kb = "open"; });
+  expect(await pb()).toBe("8px");
+});

@@ -1,0 +1,86 @@
+[
+  {
+    "flow": "chat-long",
+    "viewport": "390x844",
+    "overflowX": [],
+    "covered": [],
+    "tiny": 7
+  },
+  {
+    "flow": "chat-long-top",
+    "viewport": "390x844",
+    "overflowX": [],
+    "covered": [],
+    "tiny": 7
+  },
+  {
+    "flow": "chat-approval",
+    "viewport": "390x844",
+    "overflowX": [],
+    "covered": [],
+    "tiny": 0
+  },
+  {
+    "flow": "chat-canvas",
+    "viewport": "390x844",
+    "overflowX": [],
+    "covered": [],
+    "tiny": 0
+  },
+  {
+    "flow": "agent-trace",
+    "viewport": "390x844",
+    "overflowX": [],
+    "covered": [],
+    "tiny": 0
+  },
+  {
+    "flow": "home-data",
+    "viewport": "390x844",
+    "overflowX": [],
+    "covered": [],
+    "tiny": 0
+  },
+  {
+    "flow": "board",
+    "viewport": "390x844",
+    "overflowX": [],
+    "covered": [],
+    "tiny": 0
+  },
+  {
+    "flow": "settings-基本",
+    "viewport": "390x844",
+    "overflowX": [],
+    "covered": [],
+    "tiny": 0
+  },
+  {
+    "flow": "settings-見た目と声",
+    "viewport": "390x844",
+    "overflowX": [],
+    "covered": [],
+    "tiny": 0
+  },
+  {
+    "flow": "settings-記憶",
+    "viewport": "390x844",
+    "overflowX": [],
+    "covered": [],
+    "tiny": 0
+  },
+  {
+    "flow": "settings-つなぐ",
+    "viewport": "390x844",
+    "overflowX": [],
+    "covered": [],
+    "tiny": 0
+  },
+  {
+    "flow": "settings-しらべる",
+    "viewport": "390x844",
+    "overflowX": [],
+    "covered": [],
+    "tiny": 0
+  }
+]

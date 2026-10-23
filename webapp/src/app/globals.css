@@ -1243,10 +1243,19 @@ html[data-skin="custom"] {
   .text-\[12px\] { font-size: 14px; }
 
   .label-mono { letter-spacing: 0.08em; }
+  /* コードの見出し（言語名・コピー）は CSS で 9px と決め打ちしていて、上の
+     一段上げが効かない所だった */
+  .md .md-codebar, .md .md-codebar button { font-size: 11px; }
   .tracking-\[0\.12em\], .tracking-\[0\.14em\], .tracking-\[0\.15em\],
   .tracking-\[0\.16em\], .tracking-\[0\.18em\], .tracking-\[0\.2em\],
   .tracking-\[0\.22em\], .tracking-\[0\.24em\], .tracking-\[0\.28em\],
   .tracking-\[0\.3em\], .tracking-\[0\.4em\] { letter-spacing: 0.08em; }
+}
+
+/* キーボードが出ている間は、下のナビを下げている（page.tsx の MobileNav）。
+   ナビのために空けている下の余白も外して、キーボードの上を広く使う。 */
+@media (max-width: 639px) {
+  html[data-kb="open"] main { padding-bottom: 0.5rem; }
 }
 
 /* 入力欄は 16px 未満だと、iPhone は触った瞬間に画面を拡大して戻さない。

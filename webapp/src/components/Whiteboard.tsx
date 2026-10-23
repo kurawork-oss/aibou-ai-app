@@ -638,9 +638,10 @@ export default function Whiteboard() {
         <button type="button" onClick={() => void deleteCurrent()} title="ボードを削除" className="shrink-0 rounded px-1.5 py-1 text-[11px] text-[#ff8888]">✕</button>
       </div>
 
-      {/* ── Toolbar ── */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        <div className="flex items-center gap-1 rounded-forge border border-panel p-0.5">
+      {/* ── Toolbar ── スマホでは横に流す1段。折り返すと3段（縦 150px ほど）を
+          道具だけで使い、描く場所が SE で 190px しか残らなかった。 */}
+      <div className="-my-1 flex items-center gap-1.5 overflow-x-auto py-1 sm:my-0 sm:flex-wrap sm:overflow-visible sm:py-0">
+        <div className="flex shrink-0 items-center gap-1 rounded-forge border border-panel p-0.5">
           <button type="button" onClick={() => addNode("sticky")}
             className="rounded px-2.5 py-1 text-[10px] tracking-[0.12em] text-fg-strong transition hover:bg-white/5 label-mono" title="付箋を追加">
             ＋ 付箋
@@ -659,7 +660,7 @@ export default function Whiteboard() {
           type="button"
           onClick={() => { setConnectMode((c) => !c); setConnectFrom(null); }}
           aria-pressed={connectMode}
-          className="rounded-forge border px-3 py-1.5 text-[10px] tracking-[0.12em] label-mono"
+          className="shrink-0 rounded-forge border px-3 py-1.5 text-[10px] tracking-[0.12em] label-mono"
           style={{
             borderColor: connectMode ? "var(--accent)" : "var(--panel-bd)",
             color: connectMode ? "var(--fg-strong)" : "var(--muted)",
@@ -670,14 +671,14 @@ export default function Whiteboard() {
           🔗 接続{connectMode ? (connectFrom ? "：2枚目を選択" : "：1枚目を選択") : ""}
         </button>
 
-        <div className="flex items-center gap-0.5 rounded-forge border border-panel p-0.5">
+        <div className="flex shrink-0 items-center gap-0.5 rounded-forge border border-panel p-0.5">
           <button type="button" onClick={undo} disabled={!canUndo} aria-label="元に戻す" title="元に戻す (Ctrl+Z)"
             className="grid h-7 w-7 place-items-center rounded text-muted hover:text-fg-strong disabled:opacity-30">↩︎</button>
           <button type="button" onClick={redoAction} disabled={!canRedo} aria-label="やり直す" title="やり直す (Ctrl+Shift+Z)"
             className="grid h-7 w-7 place-items-center rounded text-muted hover:text-fg-strong disabled:opacity-30">↪︎</button>
         </div>
 
-        <div className="flex items-center gap-0.5 rounded-forge border border-panel p-0.5">
+        <div className="flex shrink-0 items-center gap-0.5 rounded-forge border border-panel p-0.5">
           <button type="button" onClick={() => zoomBy(0.85)} aria-label="縮小" className="grid h-7 w-7 place-items-center rounded text-muted hover:text-fg-strong">−</button>
           <span className="w-11 text-center text-[10px] text-muted label-mono">{Math.round(view.scale * 100)}%</span>
           <button type="button" onClick={() => zoomBy(1.18)} aria-label="拡大" className="grid h-7 w-7 place-items-center rounded text-muted hover:text-fg-strong">＋</button>
@@ -685,7 +686,7 @@ export default function Whiteboard() {
           <button type="button" onClick={() => setView({ x: 60, y: 40, scale: 1 })} aria-label="表示リセット" title="100%に戻す" className="grid h-7 w-7 place-items-center rounded text-muted hover:text-fg-strong">⌂</button>
         </div>
 
-        <span className="ml-auto flex items-center gap-2 text-[9px] tracking-[0.12em] text-muted label-mono">
+        <span className="ml-auto flex shrink-0 items-center gap-2 text-[9px] tracking-[0.12em] text-muted label-mono">
           {toast ? <span className="text-[var(--accent)]">{toast}</span> : null}
           {saveState === "saving" ? "● SAVING…" : saveState === "saved" ? "✓ SAVED" : online ? "AUTOSAVE" : "LOCAL（オフライン保存）"}
         </span>

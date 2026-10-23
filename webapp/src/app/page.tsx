@@ -371,10 +371,15 @@ function Hud() {
   // Every mode uses the full width; each view manages its own internal
   // centering. Chat goes extra-wide so the history rail sits in the far-left
   // margin while the conversation stays centred.
+  //
+  // 下の余白は「下のナビの高さ＋ホームバー（safe-area）」。以前は 80px の
+  // 決め打ちで、ホームバーのある iPhone（ナビは 52px＋34px）では、画面の
+  // 一番下が数 px ナビの裏に入っていた。ホームバーの無い端末では、逆に
+  // 27px 余っていた。
   return (
     <main
       data-mode={view}
-      className={`relative mx-auto flex h-[100dvh] w-full flex-col px-4 pb-20 pt-[max(env(safe-area-inset-top),0.75rem)] transition-[max-width] duration-300 sm:pb-3 ${fullscreen ? "max-w-none" : view === "chat" ? "max-w-[1700px]" : "max-w-6xl"}`}
+      className={`relative mx-auto flex h-[100dvh] w-full flex-col px-4 pb-[calc(4rem_+_env(safe-area-inset-bottom))] pt-[max(env(safe-area-inset-top),0.75rem)] transition-[max-width] duration-300 sm:pb-3 ${fullscreen ? "max-w-none" : view === "chat" ? "max-w-[1700px]" : "max-w-6xl"}`}
     >
       {/* Occasional drifting light-silver ambient bloom (behind everything). */}
       <div className="forge-ambient" aria-hidden />
@@ -623,6 +628,15 @@ function MobileNav({ view, onChange, onSettings }:
     vv.addEventListener("resize", onResize);
     return () => vv.removeEventListener("resize", onResize);
   }, []);
+
+  /* キーボードが出ている間は、ナビのぶん空けている下の余白も要らない。
+     ナビは下げても余白が残り、キーボードの上の狭い所がさらに 64px 減って
+     いた。<html data-kb="open"> で CSS に伝える（globals.css）。 */
+  useEffect(() => {
+    const root = document.documentElement;
+    if (kbOpen) root.dataset.kb = "open"; else delete root.dataset.kb;
+    return () => { delete root.dataset.kb; };
+  }, [kbOpen]);
 
   const tab = tabOf(view as ShellView);
 

@@ -30,7 +30,12 @@ let highlightLoading: Promise<unknown> | null = null;
 
 function useHighlight(text: string): PluggableList {
   const wantsCode = text.includes("```") || /\n {4}\S/.test(text);
-  const [ready, setReady] = useState<unknown>(highlightPlugin);
+  /* 関数を渡すときは、関数を返す関数で包む。useState に関数をそのまま渡すと、
+     React はそれを「初期値を作る関数」として**呼んでしまう**。色つけの部品を
+     呼んだ戻り値（木を受け取る関数）が部品の代わりに入り、unified がそれを
+     部品として呼んで落ちる——一度コードを含む返事を出したあと、次に開いた
+     吹き出しで画面全体が「Application error」になっていた。 */
+  const [ready, setReady] = useState<unknown>(() => highlightPlugin);
   useEffect(() => {
     if (!wantsCode || ready) return;
     let live = true;
