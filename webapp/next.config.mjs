@@ -23,6 +23,16 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  // 顔と手の認識（@vladmandic/human）は、ブラウザの中でだけ動かす。
+  // サーバー側のビルドは package の "node" 版を掴みに行き、入っていない
+  // @tensorflow/tfjs-node を探して失敗する。サーバーでは空の物にする
+  // （使うのはカメラ操作を始めた後の画面の中だけで、サーバーでは呼ばれない）。
+  webpack(config, { isServer }) {
+    if (isServer) {
+      config.resolve.alias = { ...(config.resolve.alias || {}), "@vladmandic/human": false };
+    }
+    return config;
+  },
   env: {
     // Default to the shared Supabase project unless overridden in Vercel.
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL || SUPABASE_URL_DEFAULT,

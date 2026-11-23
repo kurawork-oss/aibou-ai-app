@@ -106,6 +106,8 @@ export default function PendingApprovals() {
             <div className="mt-1.5 flex gap-1.5">
               <button
                 type="button" disabled={busy === a.id}
+                /* 手（カメラ操作）では押させない（lib/pointerDom.ts） */
+                data-gesture-block
                 onClick={() => void answer(a.id, "approve")}
                 className="rounded-forge border px-3 py-1.5 text-[10px] label-mono disabled:opacity-50"
                 style={{ borderColor: "var(--line)", background: "var(--btn-bg)", color: "var(--fg-strong)" }}

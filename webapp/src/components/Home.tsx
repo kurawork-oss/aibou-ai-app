@@ -618,7 +618,8 @@ function AgentConsole({
                     </pre>
                   )}
                   <div className="mt-2 flex gap-2">
-                    <button type="button" onClick={() => void approve()} disabled={approving}
+                    {/* 手（カメラ操作）では押させない（lib/pointerDom.ts） */}
+                    <button type="button" onClick={() => void approve()} disabled={approving} data-gesture-block
                       className="rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] px-3 py-1.5 text-[10px] tracking-[0.12em] text-fg-strong shadow-glow disabled:opacity-40 label-mono">
                       {approving ? "実行中…" : "✓ 承認して実行"}
                     </button>
