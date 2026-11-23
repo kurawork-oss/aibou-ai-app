@@ -1,7 +1,13 @@
 name: Backend Keep-Alive
 
 # Render無料プランは無操作でスリープし、次のアクセスに数十秒かかる。
-# 10分ごとに /health を叩いて温めておく（BACKEND_URL シークレット未設定ならskip）。
+# 10分ごとに /health を叩いて温めておく。
+#
+# 以前は BACKEND_URL が未設定だと「skip」して**成功扱い**で終わっていた。
+# 一度も設定されなかったので、毎回緑のまま1度も温めておらず、アプリを
+# 開くたびに数十秒待たされていた。いまは未設定なら本番の住所を使う
+# （この住所はブラウザが毎回叩いている公開の物で、秘密ではない）。
+# 別のサーバーへ向けたいときだけ、BACKEND_URL を Secret か Variable に置く。
 on:
   schedule:
     - cron: "*/10 * * * *"
@@ -13,10 +19,12 @@ jobs:
     steps:
       - name: Ping backend /health
         env:
-          BACKEND_URL: ${{ secrets.BACKEND_URL }}
+          BACKEND_URL: ${{ secrets.BACKEND_URL || vars.BACKEND_URL || 'https://aibou-brain-api.onrender.com' }}
         run: |
-          if [ -z "$BACKEND_URL" ]; then
-            echo "BACKEND_URL secret not set — skipping."
-            exit 0
-          fi
-          curl -fsS --max-time 60 "${BACKEND_URL%/}/health" && echo " → ok"
+          # 寝ていると起きるまで数十秒かかるので、長めに待って1回だけやり直す
+          for i in 1 2; do
+            if curl -fsS --max-time 90 "${BACKEND_URL%/}/health"; then echo " → ok"; exit 0; fi
+            echo "retry $i…"; sleep 15
+          done
+          echo "::error::バックエンド（${BACKEND_URL}）が応答しません"
+          exit 1

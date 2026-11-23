@@ -5,6 +5,11 @@ name: Supabase Keep-Alive
 #   A) BACKEND_URL … バックエンドの /keepalive を叩く（推奨・追加シークレット不要）
 #   B) SUPABASE_URL + SUPABASE_KEY … Supabaseへ直接クエリ（バックエンド無しでも動く）
 # どちらも未設定/失敗ならジョブを失敗させる（黙って停止するのを防ぐため）。
+#
+# 2026-11: A も B も一度も設定されておらず、10月中旬から毎日失敗していた。
+# 誰も気づかないままプロジェクトが止まり、ログインが「通信できませんでした」
+# になった。A は未設定なら本番の住所を使うようにした（ブラウザが毎回叩いて
+# いる公開の住所で、秘密ではない）。
 on:
   schedule:
     - cron: "17 2 * * *"     # 毎日 02:17 UTC（= 11:17 JST）
@@ -19,7 +24,7 @@ jobs:
       - name: Ping backend /keepalive (A)
         id: backend
         env:
-          BACKEND_URL: ${{ secrets.BACKEND_URL || vars.BACKEND_URL }}
+          BACKEND_URL: ${{ secrets.BACKEND_URL || vars.BACKEND_URL || 'https://aibou-brain-api.onrender.com' }}
         run: |
           if [ -z "$BACKEND_URL" ]; then
             echo "BACKEND_URL 未設定 → スキップして (B) を試す"
