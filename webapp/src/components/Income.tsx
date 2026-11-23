@@ -323,6 +323,7 @@ function JobCard({
           <div className="flex shrink-0 gap-1.5">
             <button
               type="button"
+              data-gesture-block
               onClick={() => onAct(job.id!, "approve")}
               className="rounded-md border border-[var(--line)] px-2.5 py-1 text-[10px] text-fg-strong transition hover:shadow-glow label-mono"
             >

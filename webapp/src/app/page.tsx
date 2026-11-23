@@ -79,6 +79,10 @@ const Keychain = lazy(() => import("@/components/Keychain"));
 const LifeMode = lazy(() => import("@/components/LifeMode"));
 const Tasks = lazy(() => import("@/components/Tasks"));
 const Vault = lazy(() => import("@/components/Vault"));
+/* カメラ操作モード。認識の部品（約2MB＋モデル）は、ここではなく始めたときに
+   lib/vision.ts が取りに行く。ここで運ぶのは画面の部品だけ。 */
+const CameraControl = lazy(() => import("@/components/CameraControl"));
+const CameraSettings = lazy(() => import("@/components/CameraSettings"));
 
 /**
  * 手が空いたら、先に運んでおく。
@@ -132,6 +136,8 @@ function usePrefetchScreens(ready: boolean): void {
       import("@/components/LifeMode"),
       import("@/components/Tasks"),
       import("@/components/Vault"),
+      import("@/components/CameraControl"),
+      import("@/components/CameraSettings"),
       ]).catch(() => null);
     };
     const idle = (window as unknown as {
@@ -157,6 +163,9 @@ import {
 import { listVoices } from "@/lib/voice";
 import { supabase, supabaseEnabled } from "@/lib/supabase";
 import { APP_VERSION } from "@/lib/version";
+import {
+  startCameraControl, stopCameraControl, useCameraControlRunning,
+} from "@/lib/cameraControl";
 
 /** 画面の一覧は shell.ts が持つ（2か所に書くと、片方だけ増えても気づけない）。 */
 type View = ShellView;
@@ -210,6 +219,9 @@ function Hud() {
   usePrefetchScreens(loaded);
   const [fullscreen, setFullscreen] = useState(false);
   const phone = usePhone();
+  // カメラ操作モード（手と顔で動かす）。開き直したときに勝手に始めない
+  // ——カメラは、押したときだけ点ける。
+  const cameraOn = useCameraControlRunning();
 
   /* ── 持ち主かどうか ───────────────────────────────────────────────
      持ち主専用モード（副業・自己進化）の表示を決める。分かるまでは隠す側に
@@ -356,6 +368,21 @@ function Hud() {
       <FullscreenIcon on={fullscreen} />
     </button>
   );
+  /* 広い画面だけ。カメラで操作するのはパソコンを想定していて、スマホの
+     1列はこれ以上ボタンを足すと状態の文字が切れる（設定からは始められる）。 */
+  const cameraButton = (
+    <button
+      type="button"
+      onClick={() => (cameraOn ? stopCameraControl() : startCameraControl())}
+      className="grid h-8 w-8 place-items-center rounded-lg border border-panel text-muted transition hover:border-[var(--line)] hover:text-fg-strong"
+      aria-label={cameraOn ? "カメラ操作を止める" : "カメラで操作（顔と手）"}
+      title={cameraOn ? "カメラ操作を止める" : "カメラで操作（顔と手）"}
+      aria-pressed={cameraOn}
+      style={cameraOn ? { borderColor: "var(--accent)", color: "var(--fg-strong)" } : undefined}
+    >
+      <CameraIcon />
+    </button>
+  );
   const settingsButton = (
     <button
       type="button"
@@ -433,6 +460,7 @@ function Hud() {
             <div className="flex items-center gap-2">
               <Briefing />
               <DesktopTabs view={view} onChange={setView} />
+              {cameraButton}
               {fullscreenButton}
               {settingsButton}
             </div>
@@ -565,6 +593,14 @@ function Hud() {
           />
         )}
       </AnimatePresence>
+
+      {/* カメラ操作モード。どの画面の上にもかぶさり、ピース・指3本で
+          実行／管理を行き来する（下のナビと同じ行き先）。 */}
+      {cameraOn && (
+        <CameraControl
+          onCommand={(c) => setView((v) => (c === "run" ? (RUN_VIEW as View) : tabTarget("manage", v)))}
+        />
+      )}
 
       {/* 下のナビ（スマホ）。実行・管理・設定の3つだけ。 */}
       <MobileNav view={view} onChange={setView}
@@ -829,6 +865,15 @@ function FullscreenIcon({ on }: { on: boolean }) {
   );
 }
 
+function CameraIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M15 10l4.5-2.6a.6.6 0 0 1 .9.5v8.2a.6.6 0 0 1-.9.5L15 14" />
+      <rect x="3" y="6.5" width="12" height="11" rx="2" />
+    </svg>
+  );
+}
+
 function GearIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
@@ -965,6 +1010,17 @@ function SettingsPanel({
 
   // 設定を閉じたら試聴を止める（開きっぱなしで喋り続けないように）
   useEffect(() => () => { stopCoreVoice(); }, []);
+
+  /* Esc で閉じる。ほかの窓（説明書・ボード・作った物）は Esc で閉じるのに、
+     設定だけ閉じなかった。カメラ操作の「親指を立てる」も Esc なので揃える。 */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      // 日本語の変換を取り消す Esc では閉じない（書きかけが消える）
+      if (e.key === "Escape" && !e.isComposing && e.keyCode !== 229) onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
   return (
     // 下のナビと同じ z-40 だと、スマホでは保存ボタンがナビの下に隠れて
@@ -1109,6 +1165,9 @@ function SettingsPanel({
               {/* 確認の出し方は、ここ1か所（以前は会話とHOMEに別々の切り替えがあった） */}
               <ApprovalSetting />
               <AlwaysAllowSettings />
+              {/* 手と顔で操作する。始めたら設定を閉じる（閉じないと、
+                  かぶさった設定の上でしか動かせない）。 */}
+              <CameraSettings onStart={onClose} />
             </>
           )}
 

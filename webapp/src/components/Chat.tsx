@@ -2027,7 +2027,9 @@ function MessageBubble({ message, onRegenerate, onApprove, onReject, onAlways, o
               {JSON.stringify(message.await.params, null, 1)}
             </pre>
             <div className="mt-1.5 flex gap-1.5">
-              <button type="button" onClick={onApprove}
+              {/* 承認は手（カメラ操作）では押させない。認識の揺れで、取り消せない
+                  操作を通してしまわないように（lib/pointerDom.ts）。やめるは押せる。 */}
+              <button type="button" onClick={onApprove} data-gesture-block
                 className="rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] px-3 py-1 text-[10px] text-fg-strong label-mono">
                 実行する
               </button>
@@ -2040,7 +2042,7 @@ function MessageBubble({ message, onRegenerate, onApprove, onReject, onAlways, o
                   だから確認を減らせる所では減らす——ただし段階3と、外の
                   ページを読んだ後には**出さない**（サーバーが決める）。 */}
               {message.await.mayAlways && onAlways && (
-                <button type="button" onClick={onAlways}
+                <button type="button" onClick={onAlways} data-gesture-block
                   className="rounded-forge border border-panel px-3 py-1 text-[10px] text-muted transition hover:text-fg-strong label-mono">
                   いつも許可
                 </button>
