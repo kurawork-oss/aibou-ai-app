@@ -10,6 +10,10 @@ name: Supabase Keep-Alive
 # 誰も気づかないままプロジェクトが止まり、ログインが「通信できませんでした」
 # になった。A は未設定なら本番の住所を使うようにした（ブラウザが毎回叩いて
 # いる公開の住所で、秘密ではない）。
+# ただし本番のバックエンドには Supabase の設定が入っていない（/keepalive が
+# 「Supabase未設定」と返す）ので、いまは A では起こせない。B の
+# SUPABASE_URL と SUPABASE_KEY（anon public キーで足りる）を Secrets に置く。
+# キーはリポジトリに書かない（このリポジトリの決まり）。
 on:
   schedule:
     - cron: "17 2 * * *"     # 毎日 02:17 UTC（= 11:17 JST）
@@ -64,5 +68,5 @@ jobs:
         run: |
           echo "::error::Supabaseを起こせませんでした（このままだと7日で一時停止します）。"
           echo "::error::リポジトリの Settings → Secrets and variables → Actions に"
-          echo "::error::BACKEND_URL（例 https://xxx.onrender.com）を追加するのが最も簡単です。"
+          echo "::error::SUPABASE_URL と SUPABASE_KEY（Supabase の anon public キー）を追加してください。"
           exit 1

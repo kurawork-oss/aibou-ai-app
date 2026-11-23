@@ -18,9 +18,14 @@ def ping(label, url, key):
         return False, f"skip [{label}] (URL/KEY未設定)"
     last = ""
     for table in TABLES:
+        # 新しい形式の公開キー（sb_publishable_…）は JWT ではないので、
+        # Authorization に入れると弾かれる。旧来の JWT（eyJ…）のときだけ付ける。
+        headers = {"apikey": key}
+        if key.startswith("eyJ"):
+            headers["Authorization"] = f"Bearer {key}"
         req = urllib.request.Request(
             f"{url.rstrip('/')}/rest/v1/{table}?select=*&limit=1",
-            headers={"apikey": key, "Authorization": f"Bearer {key}"},
+            headers=headers,
         )
         try:
             with urllib.request.urlopen(req, timeout=30) as r:
