@@ -73,7 +73,7 @@ GROUPS: List[dict] = [
      "pack": "core",
      "tools": [],
      "why_missing": "AIの鍵が1つも入っていません",
-     "next": "管理 → もっと →「連携」→ Gemini で API キーを入れてください（無料枠があります）",
+     "next": "入力欄の「＋」→「連携」→ Gemini で API キーを入れてください（無料枠があります）",
      "action": {"kind": "key", "name": "GEMINI_API_KEY"}},
 
     {"id": "memory", "name": "記憶", "kind": "local", "pack": "core",
@@ -130,7 +130,7 @@ GROUPS: List[dict] = [
     {"id": "vision", "name": "画像を見て答える", "kind": "key",
      "keys": ["GEMINI_API_KEY"], "pack": "core", "tools": [],
      "why_missing": "画像を読むにはGeminiの鍵が要ります",
-     "next": "管理 → もっと →「連携」→ Gemini で API キーを入れてください",
+     "next": "入力欄の「＋」→「連携」→ Gemini で API キーを入れてください",
      "action": {"kind": "key", "name": "GEMINI_API_KEY"}},
 
     {"id": "notify", "name": "通知（端末・LINE・Discord・Slack）", "kind": "local",

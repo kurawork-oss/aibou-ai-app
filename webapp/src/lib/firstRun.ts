@@ -37,7 +37,7 @@ export function firstRunSteps(input: FirstRunInput): FirstRunStep[] {
       done: !!input.db?.connected,
       title: "保存先をつなぐ",
       hint: "自分のSupabaseにつなぐまで、タスク・予定・ノートは保存できません"
-        + "（作ろうとすると理由が出ます）。管理 → もっと →「連携」→ Supabase から。",
+        + "（作ろうとすると理由が出ます）。入力欄の「＋」→「連携」→ Supabase から。",
     },
     {
       key: "guide",

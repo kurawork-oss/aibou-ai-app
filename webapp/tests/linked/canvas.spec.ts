@@ -156,7 +156,7 @@ test("閉じても残ることを、閉じる前に言う", async ({ page }) => 
   withImage(be);
   await enterApp(page);
   await makeImage(page);
-  await expect(page.getByText(/管理 → ファイル.*に残ります/)).toBeVisible();
+  await expect(page.getByText(/閉じても「ファイル」に残ります/)).toBeVisible();
 });
 
 test("図が実際に描かれる（記法のままにしない）", async ({ page }) => {

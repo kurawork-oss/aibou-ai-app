@@ -120,7 +120,7 @@ export default function Home({
         { label: "ミッション", value: summary.missions.active, onClick: () => onNavigate("autopilot") },
         { label: "自動化", value: summary.automations.total, onClick: () => onNavigate("board") },
         // 副業は持ち主だけの画面。他の人に出すと、押した先で断られる。
-        // ナビの「もっと」からも同じ理由で外してある。
+        // 会話の「＋」の一覧からも同じ理由で外してある（lib/chatActions.ts）。
         ...(isOwner === false ? [] : [
           { label: "副業", value: summary.income.pending, onClick: () => onNavigate("income") },
         ]),

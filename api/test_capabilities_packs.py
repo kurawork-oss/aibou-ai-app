@@ -400,16 +400,19 @@ _VIEW_TOOLS = {
 
 
 def _always_shown_views() -> set:
-    """管理タブに、かたまりに関係なくいつも出ている画面（webapp/src/lib/shell.ts）。"""
+    """会話の「＋」に、かたまりに関係なくいつも出ている画面
+    （webapp/src/lib/chatActions.ts の ACTIONS。ui-r126 で入口はここ1つになった）。"""
     import re
     src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "webapp",
-                            "src", "lib", "shell.ts"), encoding="utf-8").read()
-    block = src[src.index("export const MANAGE_SURFACES"):src.index("export function visibleSurfaces")]
+                            "src", "lib", "chatActions.ts"), encoding="utf-8").read()
+    block = src[src.index("export const ACTIONS"):src.index("export const CONNECT_NAMES")]
     out = set()
-    for entry in re.findall(r"\{[^{}]*view: \"[a-z]+\"[^{}]*\}", block):
+    for entry in re.split(r"\n\s*\{ id: ", block)[1:]:
         if "pack:" in entry or "ownerOnly" in entry:
             continue
-        out.add(re.search(r'view: "([a-z]+)"', entry).group(1))
+        m = re.search(r'kind: "view", view: "([a-z]+)"', entry)
+        if m:
+            out.add(m.group(1))
     return out
 
 
@@ -417,7 +420,7 @@ def test_いつも出ている画面の道具は_既定で会話に渡る():
     """画面では使えるのに、会話で頼むと道具が無い——を作らない。
 
     自動化とゴールは「開発（コード・GitHub）」に入っていて既定で切ってあった。
-    一方、ボードとゴールの画面は管理タブにいつも出ている。
+    一方、ボードとゴールの画面は（会話の「＋」に）いつも出ている。
     """
     shown = _always_shown_views()
     assert {"board", "autopilot", "tasks", "vault"} <= shown, f"入口が読めていない: {shown}"

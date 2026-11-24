@@ -476,7 +476,7 @@ function EvolvePanel() {
       } else if (proposal.type === "automation") {
         const steps = Array.isArray(p.steps) ? (p.steps as AutomationStep[]) : [];
         await automationsCreate(String(p.name ?? "Evolved Automation"), steps);
-        setApplied("自動化フローを作成しました。管理 →「ボード」で確認できます。");
+        setApplied("自動化フローを作成しました。入力欄の「＋」→「ボード」で確認できます。");
       } else {
         setApplied("この要望は新規作成不要です（上の回答をご確認ください）。");
       }

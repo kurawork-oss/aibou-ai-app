@@ -8,6 +8,10 @@
 # 「BOARDモードで確認できます」と返すと、押した先に無い場所を案内してしまう。
 # 実際に tools.py・hfhub.py・oauth.py などに残っていた。
 #
+# ui-r126 では入口そのもの（下のナビ「実行・管理」・「もっと」）を無くし、
+# 画面は会話の「＋」から開く形になった。「管理 → もっと →「連携」」と案内すると、
+# 押す所が無い。これも数える。
+#
 # 数えるのは**文字列だけ**（コメントと docstring は経緯の記録なので数えない）。
 # 環境変数の名前（KEYCHAIN_SECRET）と、実在するタブ（AI STUDIO）は対象外。
 
@@ -22,6 +26,8 @@ OLD = re.compile(
     r"(CHAT|HOME|ARCHIVE|STUDIO|VAULT|CAPTURE|INCOME|AUTOPILOT|AUTO|EXTEND|TASKS|BOARD|CODE|LIFE|GUIDE|ME)"
     r"\s?(で|に|を|の|や|と|タブ|画面|モード|›|から|へ)"
     r"|KEYCHAIN(?!_)|DIAGNOSTICS"
+    # 無くした入口（ui-r126）
+    r"|管理\s?→|もっと\s?→|「管理」|「もっと」|管理タブ|下のナビ"
 )
 
 
@@ -54,7 +60,10 @@ def test_server_messages_do_not_point_at_screens_that_no_longer_exist():
 def test_the_detector_actually_catches_the_old_forms():
     """検出が甘くなって素通りしていないか（見張りの見張り）。"""
     for s in ["BOARDモードで確認できます", "CHATで頼めます", "HOMEの生成物", "STUDIO › 素材",
-              "設定 → KEYCHAIN", "AUTOモードで進められます", "手順は GUIDE に載っています"]:
+              "設定 → KEYCHAIN", "AUTOモードで進められます", "手順は GUIDE に載っています",
+              "管理 → もっと →「連携」→ Gemini", "管理 →「ボード」で確認できます", "下の「管理」から開ける"]:
         assert OLD.search(s), s
-    for s in ["AI STUDIO のワークフロー", "KEYCHAIN_SECRET", "LOADING TASKS…", "SNSで投稿文を作る", "README の手順"]:
+    for s in ["AI STUDIO のワークフロー", "KEYCHAIN_SECRET", "LOADING TASKS…", "SNSで投稿文を作る", "README の手順",
+              "在庫管理アプリ", "このモードは管理者専用です", "「もっと〇〇して」で何度でも直せる",
+              "入力欄の「＋」→「連携」→ Gemini"]:
         assert not OLD.search(s), s

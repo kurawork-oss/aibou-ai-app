@@ -7,10 +7,11 @@
  * Views (13): HOME / CHAT / ME / CODE / STUDIO / SNS / CAPTURE / VAULT / TASKS /
  *   INCOME / AUTO / BOARD / ARCHIVE — default is CHAT.
  * (STUDIO hosts the former FORGE as a tab, plus the LP/HP builder.)
- * Navigation is 実行 / 管理 (lib/shell.ts): the bottom bar on phones, the same
- * two buttons in the header on wide screens. 管理 holds 今日・ボード・タスク・
- * ファイル and 「もっと」 for the rest. CHAT goes extra-wide with its history in
- * the far-left margin; other modes use the full width with their own centring.
+ * There is one screen, the chat (ui-r126). Every other view is called from the
+ * chat — the composer's ＋ menu, a leading "/", or a short request such as
+ * 「タスク見せて」 (lib/chatActions.ts) — and opens over it with a
+ * 「← 会話に戻る」 bar. CHAT goes extra-wide with its history in the far-left
+ * margin; other views use the full width with their own centring.
  */
 
 import { isView, type ShellView, PACKS_CHANGED } from "@/lib/shell";
@@ -261,7 +262,7 @@ function Hud() {
      最初の描画を邪魔しないよう、少し置いてから走る（lib/memorySync.ts）。 */
   useEffect(() => { syncOnBoot(); }, []);
 
-  /* 使っている機能のかたまり。管理タブの入口を、これで絞る。
+  /* 使っている機能のかたまり。会話の「＋」の一覧を、これで絞る。
      取れないとき（接続先が無い）は null のまま＝絞らない——繋がっていない
      人に、理由の分からない欠けた一覧を見せないため。
      `/capabilities` は会話側も要るので、共有して1回にしてある。 */

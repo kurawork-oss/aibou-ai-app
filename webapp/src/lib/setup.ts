@@ -57,7 +57,7 @@ export const GLOSSARY: Term[] = [
   { word: "Gemini（ジェミニ）", means: "Googleが作ったAI。このアプリの頭脳として使います" },
   { word: "プロジェクト", means: "Supabaseで借りる倉庫1つぶんの単位" },
   { word: "バックエンド", means: "アプリの裏で動いている部分。画面ではなく処理をする側" },
-  { word: "連携", means: "外のサービスの鍵を入れる画面（管理 → もっと →「連携」）" },
+  { word: "連携", means: "外のサービスの鍵を入れる画面（入力欄の「＋」→「連携」）" },
 ];
 
 /** 貼り付け用のSQL（アプリ自身が配信する。バックエンド不要）。 */
@@ -175,7 +175,7 @@ export const SETUP_STEPS: SetupStep[] = [
       "aistudio.google.com/app/apikey を開く",
       "Googleアカウントでログインし、「Create API key」を押す",
       "表示された鍵（AIza… で始まる文字列）をコピーする",
-      "管理 → もっと →「連携」→ Gemini に貼って保存する",
+      "入力欄の「＋」→「連携」→ Gemini に貼って保存する",
     ],
     caution: [
       "自分の鍵を入れると、利用料は自分の枠から引かれます（無料枠があります）。",

@@ -12,7 +12,7 @@
  */
 
 import { test, expect } from "@playwright/test";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { OVERLAY_VIEWS, TODAY_WIDGETS, VIEWS, isView } from "../src/lib/shell";
 import { ACTIONS } from "../src/lib/chatActions";
@@ -64,4 +64,49 @@ test("重い作業場（コード・ボード・つくる）も、会話から�
 
 test("持ち主だけの画面が、他の人に案内されない", () => {
   expect(ACTIONS.find((a) => a.target.kind === "view" && a.target.view === "income")?.ownerOnly).toBeTruthy();
+});
+
+/* ── 無くした入口で案内していないか ──────────────────────────────
+ *
+ * ナビを無くしたあとも、文言に「管理 → もっと →「連携」」が残っていた
+ * （鍵の入れ方・保存先の案内・作った物の在り処）。押す所が無い案内は、
+ * 案内が無いより悪い。サーバー側の文は api/test_screen_names.py で見ている。
+ * 数えるのは文字列だけ（コメントは経緯の記録なので外す）。 */
+const OLD_NAV = /管理\s?→|もっと\s?→|「管理」|「もっと」|管理タブ|下のナビ/;
+
+function withoutComments(code: string): string {
+  return code
+    .replace(/\/\*[\s\S]*?\*\//g, "")          // /* … */ と {/* … */}
+    .replace(/(^|[^:"'`])\/\/.*$/gm, "$1");     // // …（https:// は残す）
+}
+
+function sourceFiles(dir: string): string[] {
+  return readdirSync(dir).flatMap((name) => {
+    const p = join(dir, name);
+    if (statSync(p).isDirectory()) return sourceFiles(p);
+    return /\.(ts|tsx)$/.test(name) ? [p] : [];
+  });
+}
+
+test("画面の文言が、無くした入口（管理・もっと・下のナビ）を指していない", () => {
+  const bad: string[] = [];
+  const files = sourceFiles(join(process.cwd(), "src"));
+  expect(files.length, "読めたファイルが少ない（見張りが空振りしている）").toBeGreaterThan(50);
+  for (const file of files) {
+    withoutComments(readFileSync(file, "utf8")).split("\n").forEach((line, i) => {
+      if (OLD_NAV.test(line)) bad.push(`${file.replace(process.cwd() + "/", "")}:${i + 1}: ${line.trim().slice(0, 80)}`);
+    });
+  }
+  expect(bad, `無くした入口で案内している:\n${bad.join("\n")}`).toEqual([]);
+});
+
+test("見張りが空振りしていない", () => {
+  for (const s of ["管理 → もっと →「連携」", "管理 →「ボード」で確認できます", "下のナビの裏"]) {
+    expect(OLD_NAV.test(s), s).toBe(true);
+  }
+  for (const s of ["在庫管理アプリ", "「もっと〇〇して」", "入力欄の「＋」→「連携」"]) {
+    expect(OLD_NAV.test(s), s).toBe(false);
+  }
+  // コメントは数えない・文字列の中の https:// は消さない
+  expect(withoutComments('// 管理 → もっと\nconst a = "https://x";')).toBe('\nconst a = "https://x";');
 });

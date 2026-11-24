@@ -1,6 +1,6 @@
 /**
  * 会話で作ったページ・アプリ・動画の絵コンテが、その場で使える形で出るか。
- * そして「管理 → ファイル」に、作った物が全部並ぶか。
+ * そして「ファイル」に、作った物が全部並ぶか。
  *
  * ・ページとアプリは sandbox の枠（allow-same-origin 無し）で動く。
  *   生成物のスクリプトが、このアプリのログイン情報に触れない
@@ -37,7 +37,7 @@ test("会話で作ったページは、sandbox の枠の中で動く", async ({ 
   expect(await frame.getAttribute("sandbox")).not.toContain("allow-same-origin");
   await expect(canvas.frameLocator("iframe").locator("#h")).toHaveText("森のカフェ");
   // 閉じても残る（ファイルに並ぶ）ことを、その場で言う
-  await expect(canvas.getByText(/閉じても「管理 → ファイル」に残ります/)).toBeVisible();
+  await expect(canvas.getByText(/閉じても「ファイル」に残ります/)).toBeVisible();
 });
 
 test("別のタブで開いても、sandbox の枠の外には出ない", async ({ page, context }) => {

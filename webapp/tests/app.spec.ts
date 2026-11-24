@@ -497,7 +497,7 @@ test("Settings close button works", async ({ page }) => {
   await expect(page.getByText("CORE SETTINGS")).not.toBeVisible({ timeout: 3_000 });
 });
 
-/* ── Navigation（管理 →「もっと」から） ───────────────────────────── */
+/* ── Navigation（会話の「＋」から） ───────────────────────────── */
 test("STUDIO のタブは「何を作るか」で並ぶ（アプリの入口は1つだけ）", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
