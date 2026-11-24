@@ -11,14 +11,12 @@
  */
 
 import { test, expect, type Page } from "@playwright/test";
-import { enterApp, mockBackend } from "./backend";
+import { enterApp, mockBackend, openManage } from "./backend";
 
 const NOTION = { key: "notion", label: "Notion", configured: true, connected: false, unlocks: [] };
 
 async function openExtend(page: Page) {
-  await page.getByLabel("Mobile navigation").getByText("管理", { exact: true }).click();
-  await page.getByRole("button", { name: /もっと/ }).click();
-  await page.getByRole("button", { name: /^連携/ }).click();
+  await openManage(page, "連携");
   await page.getByRole("button", { name: /Notion/ }).first().click();
 }
 

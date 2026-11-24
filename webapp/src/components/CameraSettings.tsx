@@ -139,7 +139,7 @@ export default function CameraSettings({ onStart }: { onStart?: () => void }) {
         <p className="mt-1.5 text-[11px] leading-relaxed text-muted">
           文字は打てないので、会話の🎤（声で入力）と組み合わせてください。
           カメラから50cm〜1mほど離れ、手のひらをカメラに向けると読み取りやすくなります。
-          画面の行き来は、カーソルで下（または上）のボタンを押します。
+          画面を開くときは、カーソルで入力欄の「＋」を押します（閉じるのは ✌）。
         </p>
       </details>
 

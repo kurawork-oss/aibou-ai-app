@@ -55,7 +55,7 @@ test("説明書を開いても、画面が横にはみ出さない", async ({ pa
   await page.waitForSelector("text=ENTER", { timeout: 10_000 });
   await page.click("text=ENTER");
   const off = page.getByText("ENTER OFFLINE");
-  const hud = page.locator('nav[aria-label="Mobile navigation"], nav[aria-label="画面の切り替え"]').getByRole("button", { name: "管理", exact: true }).first();
+  const hud = page.getByRole("button", { name: "できること", exact: true }).first();
   await Promise.race([
     off.waitFor({ timeout: 8_000 }).then(() => off.click()).catch(() => {}),
     hud.waitFor({ timeout: 10_000 }),

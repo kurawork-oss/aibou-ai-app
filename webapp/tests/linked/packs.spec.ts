@@ -11,7 +11,7 @@
  */
 
 import { test, expect } from "@playwright/test";
-import { enterApp, mockBackend } from "./backend";
+import { enterApp, mockBackend, openPlus } from "./backend";
 
 /** 設定を開いて CORE を表示する。 */
 async function openSettings(page: import("@playwright/test").Page) {
@@ -102,7 +102,7 @@ test("切ったら、再読込なしで # の候補からも消える", async ({
 
 /* ── 使っていない機能の入口は、案内しない ──────────────────────── */
 
-test("切ってあるかたまりの入口は、管理タブの「もっと」に出ない", async ({ page }) => {
+test("切ってあるかたまりの入口は、「できること」に出ない", async ({ page }) => {
   /* 定義書の狙いは「機能数」ではなく「体験」。使っていない機能の入口が
      並んでいると、開くたびに要らない判断をさせることになる。
      **画面は消していない**——設定で入れ直せば戻る。 */
@@ -113,20 +113,19 @@ test("切ってあるかたまりの入口は、管理タブの「もっと」�
 
   await page.goto("/");
   await enterApp(page);
-  await page.getByRole("button", { name: "管理" }).click();
-  await page.getByRole("button", { name: /もっと/ }).click();
   await page.waitForTimeout(600);
+  const menu = await openPlus(page);
 
-  /* 入口のボタンは「見出し＋説明」が続いた名前になる（例:
+  /* 一覧の行は「見出し＋説明」が続いた名前になる（例:
      「コードリポジトリを触る」）。exact で "コード" を探すと**何にも当たらず、
      消えていなくても通ってしまう**ので、先頭で見る。 */
-  await expect(page.getByRole("button", { name: /^つくる/ })).toBeVisible({ timeout: 5_000 });
+  await expect(menu.getByRole("option", { name: /^つくる/ })).toBeVisible({ timeout: 5_000 });
   // 先に「当たる書き方になっている」ことを確かめてから、消えていることを見る
-  await expect(page.getByRole("button", { name: /^資料/ }),
+  await expect(menu.getByRole("option", { name: /^資料/ }),
     "当たらない書き方になっている（この確認が無いと、下の判定が空振りする）")
     .toBeVisible();
   for (const gone of ["SNS", "コード", "副業"]) {
-    await expect(page.getByRole("button", { name: new RegExp(`^${gone}`) }),
+    await expect(menu.getByRole("option", { name: new RegExp(`^${gone}`) }),
       `切ってあるのに「${gone}」が案内に出ている`).toHaveCount(0);
   }
 });
@@ -138,9 +137,9 @@ test("入れ直すと、入口が戻る（消していない）", async ({ page 
 
   await page.goto("/");
   await enterApp(page);
-  await page.getByRole("button", { name: "管理" }).click();
-  await page.getByRole("button", { name: /もっと/ }).click();
-  await expect(page.getByRole("button", { name: /^コード/ })).toHaveCount(0);
+  let menu = await openPlus(page);
+  await expect(menu.getByRole("option", { name: /^コード/ })).toHaveCount(0);
+  await page.keyboard.press("Escape");
 
   // 設定で「開発」を入れる
   await page.getByLabel("Settings").click();
@@ -149,19 +148,17 @@ test("入れ直すと、入口が戻る（消していない）", async ({ page 
   await page.waitForTimeout(900);
   await page.getByRole("button", { name: "✕" }).first().click();
 
-  /* 「もっと」は押すたびに開閉するので、開き直しながら待つ。
-     決め打ちで1回開いて待つと、入れ替えが間に合わないときだけ落ちる。 */
-  await page.getByRole("button", { name: "管理" }).click();
+  /* 一覧は開き直しながら待つ。決め打ちで1回開いて待つと、入れ替えが
+     間に合わないときだけ落ちる。 */
   await expect(async () => {
-    const more = page.getByRole("button", { name: /もっと/ });
-    if (await more.isVisible()) await more.click();
-    await expect(page.getByRole("button", { name: /^コード/ }),
+    if (!(await page.getByRole("listbox", { name: "できること" }).isVisible())) menu = await openPlus(page);
+    await expect(menu.getByRole("option", { name: /^コード/ }),
       "入れ直しても戻らない＝消えてしまっている").toBeVisible({ timeout: 2_000 });
   }).toPass({ timeout: 20_000 });
 });
 
 test("できることを、開くたびに2回聞かない", async ({ page }) => {
-  /* 会話の `#` と管理タブの入口が、どちらも /capabilities を要る。
+  /* 会話の `#` と「できること」の一覧が、どちらも /capabilities を要る。
      素直に両方が呼ぶと、寝ている無料バックエンドでは1往復ぶん待たされる。 */
   const be = await mockBackend(page);
   await page.goto("/");

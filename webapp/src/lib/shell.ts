@@ -1,27 +1,19 @@
 /**
- * shell.ts — 画面を「実行」と「管理」の2つに畳む対応表。
+ * shell.ts — 画面（View）の一覧と、「使う機能」が変わった合図。
  *
- * なぜ2つなのか
- * -------------
+ * 画面は「会話」1つ（ui-r126）。ほかの画面は会話から呼んで、会話の上に開く。
+ *
+ * それでも画面を残す理由
+ * ----------------------
  * チャットが得意なのは**出来事**、苦手なのは**状態**。
  *
  *   「画像を作って」        → 一度きりの出来事。会話で完結する
  *   「付箋を動かす」        → いま何があるかを見ながら触る物。
  *                            会話の吹き出しに入れた瞬間に使えなくなる
  *
- * だからこの線引きは、好みではなく構造から出てくる。あとから破綻しない。
- *
- *   実行 … AIが判断してやる（会話）
- *   管理 … 人が見て触る（残っている物）
- *
- * 流れは「実行 → 成果物 → 管理」。スライドは作るのが実行、直すのが管理。
- * 同じ機能が両側に顔を出すのは自然で、矛盾しない。
- *
- * 大事なこと
- * ----------
- * 画面（View）は1つも消していない。**ナビが案内する数を減らしただけ。**
- * 消すと機能が失われるが、案内を減らすだけなら、`#` からも「もっと」からも
- * たどり着ける。15タブが15個の判断を迫っていたのが問題だった。
+ * だから「見て触る物」は画面のまま残し、**行き先を選ばせる入口だけ**を
+ * 無くした（下のナビ・管理の切り替え・「もっと」）。呼べる物の一覧は
+ * lib/chatActions.ts の ACTIONS の1か所。
  */
 
 import type { WidgetId } from "@/lib/homeLayout";
@@ -70,104 +62,16 @@ export function announcePacksChanged() {
   window.dispatchEvent(new Event(PACKS_CHANGED));
 }
 
-/** 下のナビ。ここは2つだけにする。 */
-export const TABS = [
-  { key: "run" as const, label: "実行", hint: "話して、やってもらう" },
-  { key: "manage" as const, label: "管理", hint: "残っている物を見る・触る" },
-];
-
-export type TabKey = (typeof TABS)[number]["key"];
-
-/** 実行タブが開く画面。会話がここ1つに集まる。 */
-export const RUN_VIEW: ShellView = "chat";
-
-/**
- * 管理タブの中身。よく開く順に並べる。
- *
- * 「タスク・予定」「ファイル・資料」のように束ねてあるのは、どちらも
- * 同じ問い（いつ何をするか／どこに置いてあるか）に答える物だから。
- * 別々のタブにすると、毎回どちらか選ぶ手間が増える。
+/*
+ * ui-r126 で、行き先を選ばせる入口（下のナビ「実行・管理」、管理の中の
+ * 切り替え、「もっと」）を無くした。画面は「会話」1つで、ほかの画面は
+ * 会話から呼んで、会話の上に開く。呼べる物の一覧は lib/chatActions.ts の
+ * ACTIONS の1か所（ナビの一覧と二重に持たない）。
  */
-export const MANAGE_SURFACES: {
-  key: string; label: string; view: ShellView; hint: string;
-}[] = [
-  { key: "today", label: "今日", view: "home", hint: "見張り・予定・通知" },
-  { key: "board", label: "ボード", view: "board", hint: "考えを広げる" },
-  { key: "tasks", label: "タスク", view: "tasks", hint: "やること" },
-  { key: "files", label: "ファイル", view: "archive", hint: "作った物" },
-];
 
-/**
- * 「もっと」に入れる残り。
- *
- * ここに置くのは「たまにしか開かないが、開くときは画面が要る」物。
- * 会話から `#` でも呼べるが、`#` を知らない人の行き止まりを作らないため、
- * 一覧としても残す。
- */
-export const MORE_SURFACES: {
-  key: string; label: string; view: ShellView; hint: string;
-  ownerOnly?: boolean; pack?: string;
-}[] = [
-  { key: "studio", label: "つくる", view: "studio", hint: "アプリ・LP・素材", pack: "make" },
-  { key: "code", label: "コード", view: "code", hint: "リポジトリを触る", pack: "dev" },
-  { key: "sns", label: "SNS", view: "sns", hint: "投稿文を作る", pack: "share" },
-  { key: "capture", label: "録音", view: "capture", hint: "録音・文字起こし", pack: "make" },
-  { key: "vault", label: "資料", view: "vault", hint: "入れた資料から答える" },
-  { key: "me", label: "きろく", view: "me", hint: "日々のこと" },
-  { key: "autopilot", label: "ゴール", view: "autopilot", hint: "分解して進める" },
-  { key: "income", label: "副業", view: "income", hint: "収益の自動化",
-    ownerOnly: true, pack: "income" },
-  { key: "extend", label: "連携", view: "extend", hint: "外のサービスと繋ぐ" },
-  { key: "guide", label: "説明書", view: "guide", hint: "使い方" },
-];
-
-/**
- * いま案内してよい入口だけに絞る。
- *
- * **画面は1つも消していない。案内の数を減らすだけ。**
- * `pack` の付いた入口は、設定 →「つなぐ」でそのかたまりを入れている人にだけ
- * 出す。既定では 発信(share)・開発(dev)・副業(income) が切ってあるので、
- * その3つは案内に出ない——使いたくなったら設定で入れれば戻る。
- *
- * `#` の候補一覧はサーバー側（capabilities.py）が同じパックで絞っている。
- * ここで別の基準にすると「`#` には出るのに一覧には無い」というずれが出る
- * ので、**同じ名前のパックで揃える**。
- *
- * packs を渡せないとき（接続先が無い＝オフライン）は絞らない。
- * 繋がっていない人に、理由の分からない欠けた一覧を見せないため。
- */
-export function visibleSurfaces<T extends { ownerOnly?: boolean; pack?: string }>(
-  list: T[], opts: { isOwner?: boolean | null; packs?: string[] | null } = {},
-): T[] {
-  const { isOwner = null, packs = null } = opts;
-  return list.filter((s) => {
-    if (s.ownerOnly && isOwner === false) return false;
-    if (s.pack && packs && !packs.includes(s.pack)) return false;
-    return true;
-  });
-}
-
-/** その画面が、どちらのタブに属するか。 */
-export function tabOf(view: ShellView): TabKey {
-  return view === RUN_VIEW ? "run" : "manage";
-}
-
-/** 管理タブの中で、いまどれが選ばれているか（「もっと」の物は null）。 */
-export function surfaceOf(view: ShellView): string | null {
-  const hit = MANAGE_SURFACES.find((s) => s.view === view);
-  return hit ? hit.key : null;
-}
-
-/**
- * 「今日」に出すウィジェット。
- *
- * エージェントの欄は入れない。会話は実行タブに1つだけ置く。
- * これまでHOMEにもチャット欄があり、CHATにも司令塔モードがあって、
- * 同じことを2か所でやっていた。
- */
 export const TODAY_WIDGETS: WidgetId[] = [
   "watch", "dials", "agenda", "notifications", "artifacts", "connect",
 ];
 
-/** 実行タブから開ける、重い作業場（会話の上にかぶせる）。 */
+/** 重い作業場（会話から呼んで、会話の上にかぶせる）。 */
 export const OVERLAY_VIEWS: ShellView[] = ["code", "board", "studio"];

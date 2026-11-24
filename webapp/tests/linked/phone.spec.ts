@@ -26,18 +26,16 @@ const TASKS = [
   { id: "t4", title: "歯医者を予約する", content: "", status: "pending", priority: "low", project: "" },
 ];
 
-test("iPhone SE で、最初の2件が下のナビより上に見えている", async ({ page }) => {
+test("iPhone SE で、最初の2件が画面の中に見えている", async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 667 });
   await mockBackend(page, { "/tasks": { json: { items: TASKS } } });
   await enterApp(page);
   await openManage(page, "タスク");
   await expect(page.getByText("見積書を送る")).toBeVisible({ timeout: 10_000 });
 
-  const navTop = await page.getByLabel("Mobile navigation")
-    .evaluate((el) => el.getBoundingClientRect().top);
   for (const title of ["見積書を送る", "ブログの下書きを仕上げる"]) {
     const box = (await page.getByText(title, { exact: true }).boundingBox())!;
-    expect(box.y + box.height, `${title} がナビの裏か画面の外にある`).toBeLessThanOrEqual(navTop);
+    expect(box.y + box.height, `${title} が画面の外にある`).toBeLessThanOrEqual(667);
   }
 });
 

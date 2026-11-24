@@ -98,13 +98,14 @@ test("スマホの入力欄は、どの画面でも 16px 以上（触っても�
   expect(bad, `16px 未満の入力欄:\n${bad.join("\n")}`).toEqual([]);
 });
 
-test("iPhone SE でも、「もっと」の最後（説明書）まで押せる", async ({ page }) => {
+test("iPhone SE でも、「＋」の一覧の最後（説明書）まで押せる", async ({ page }) => {
   await page.setViewportSize(SE);
   await enterApp(page);
-  await page.getByLabel("Mobile navigation").getByText("管理", { exact: true }).click();
-  await page.getByRole("button", { name: /もっと/ }).click();
-  // 下のナビの裏に入っていると、ここでナビが押されて止まる
-  await page.getByRole("button", { name: /^説明書/ }).click({ timeout: 5_000 });
+  await page.getByRole("button", { name: "できること", exact: true }).click();
+  // 一覧は縦に送れる。いちばん下まで送って押せること（画面の外に切れて押せない、が無い）
+  const last = page.locator('[data-action="guide"]');
+  await last.scrollIntoViewIfNeeded();
+  await last.click({ timeout: 5_000 });
   await expect(page.getByRole("heading", { name: /の説明書/ })).toBeVisible({ timeout: 5_000 });
 });
 
@@ -221,27 +222,26 @@ test("スマホのタスク: 追加の欄はタイトルと「追加」だけ。
   expect(new Set(ys).size).toBe(1);
 });
 
-/* 管理タブのどの画面も、中身が上の切り替え（今日・ボード…・もっと）の上に
-   はみ出していないこと。
+/* 会話の上に開くどの画面も、中身が上の「会話に戻る」の上にはみ出して
+   いないこと（以前は管理タブの切り替えの上を見ていた）。
    コード画面の開始画面は、高さいっぱいの箱で中央寄せにしていたので、中身が
    高いスマホでは上下へ同じだけはみ出した。上に出た分は切り替えと案内に
    重なり、スクロールしても戻ってこなかった（iPhone で説明文が被って読めない）。 */
 for (const vp of [SE, PRO]) {
-  test(`管理タブの画面の中身が、切り替えの上にはみ出さない（${vp.width}x${vp.height}）`, async ({ page }) => {
+  test(`開いた画面の中身が、「会話に戻る」の上にはみ出さない（${vp.width}x${vp.height}）`, async ({ page }) => {
     await page.setViewportSize(vp);
     await enterApp(page);
     const bad: string[] = [];
     for (const s of ["HOME", "TASKS", "BOARD", "ARCHIVE", "STUDIO", "CODE", "SNS", "CAPTURE",
       "VAULT", "ME", "AUTO", "EXTEND", "GUIDE"]) {
       await goScreen(page, s);
-      await expect(page.getByRole("button", { name: /▲ もっと/ })).toHaveCount(0);
-      await page.waitForTimeout(500);   // 開くときの動き（奥から出てくる）が収まるまで
+      await page.waitForTimeout(500);   // 開くときの動き（下から出てくる）が収まるまで
       const over = await page.evaluate(() => {
-        const more = [...document.querySelectorAll("button")]
-          .find((b) => /もっと/.test(b.textContent || ""));
-        const section = document.querySelector("main > section");
-        if (!more || !section) return ["切り替えが見つからない"];
-        const bar = more.parentElement!.parentElement!;       // ManageBar の外枠
+        const back = [...document.querySelectorAll("button")]
+          .find((b) => /会話に戻る/.test(b.textContent || ""));
+        const section = document.querySelector("[data-panel]");
+        if (!back || !section) return ["会話に戻るが見つからない"];
+        const bar = back.parentElement!;                      // 「会話に戻る」の列
         const barBottom = bar.getBoundingClientRect().bottom;
         const out: string[] = [];
         for (const el of Array.from(section.querySelectorAll("*"))) {
@@ -366,25 +366,14 @@ test("画面の言語は日本語（読み上げ・漢字の字形）", async ({
   expect(await page.evaluate(() => document.documentElement.lang)).toBe("ja");
 });
 
-test("スマホの会話欄は、下のナビの裏に入らない", async ({ page }) => {
+test("スマホの会話欄は、いちばん下まで使える（下のナビはもう無い）", async ({ page }) => {
   await page.setViewportSize(SE);
   await enterApp(page);
-  const send = page.getByLabel("会話モード");
-  await expect(send).toBeVisible();
-  const navTop = await page.getByLabel("Mobile navigation").evaluate((el) => el.getBoundingClientRect().top);
+  await expect(page.getByLabel("会話モード")).toBeVisible();
+  await expect(page.getByLabel("Mobile navigation")).toHaveCount(0);
   const box = (await page.locator("textarea").first().boundingBox())!;
-  expect(box.y + box.height).toBeLessThanOrEqual(navTop);
-  // 下の余白は「ナビの高さ＋ホームバー」の計算で決める（80px の決め打ちではない）
+  expect(box.y + box.height).toBeLessThanOrEqual(SE.height);
+  // 下の余白はホームバーのぶんだけ（ナビの 52px を空けていたのを返した）
   const pb = await page.locator("main").evaluate((el) => getComputedStyle(el).paddingBottom);
-  expect(pb).toBe("64px");                                  // この環境はホームバーの幅 0
-});
-
-test("キーボードが出ている間は、ナビのための下の余白を外す", async ({ page }) => {
-  await page.setViewportSize(SE);
-  await enterApp(page);
-  const pb = () => page.locator("main").evaluate((el) => getComputedStyle(el).paddingBottom);
-  expect(await pb()).toBe("64px");
-  // MobileNav がキーボードを見つけたときに立てる印（visualViewport の縮み）
-  await page.evaluate(() => { document.documentElement.dataset.kb = "open"; });
-  expect(await pb()).toBe("8px");
+  expect(pb).toBe("12px");                                  // この環境はホームバーの幅 0
 });

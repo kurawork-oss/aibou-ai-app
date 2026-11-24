@@ -11,13 +11,12 @@
  */
 
 import { test, expect, type Page } from "@playwright/test";
-import { enablePack, enterApp, mockBackend, type Backend } from "./backend";
+import { enablePack, enterApp, mockBackend, openPlus, type Backend } from "./backend";
 
-/** 管理タブの「もっと」から、その画面を開く。 */
+/** 会話の「＋」（できること）から、その画面を開く。 */
 async function openMore(page: Page, label: string | RegExp, mark: string | RegExp) {
-  await page.getByLabel("Mobile navigation").getByText("管理", { exact: true }).click();
-  await page.getByRole("button", { name: /もっと/ }).click();
-  await page.getByRole("button", { name: label }).click();
+  const menu = await openPlus(page);
+  await menu.getByRole("option", { name: label }).first().click();
   await expect(page.getByText(mark)).toBeVisible({ timeout: 10_000 });
 }
 

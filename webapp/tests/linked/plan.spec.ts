@@ -11,19 +11,17 @@
  */
 
 import { test, expect, type Page } from "@playwright/test";
-import { enablePack, enterApp, mockBackend, type Backend } from "./backend";
+import { enablePack, enterApp, mockBackend, openManage, openPlus, type Backend } from "./backend";
 
 /**
- * 管理タブの「もっと」から画面を開く。
+ * 会話の「＋」（できること）から画面を開く。
  *
- * 「もっと」の各行き先は、名前と説明が1つのボタンに入っている
- * （例：「ゴール分解して進める」）。同じ言葉はHOMEの計器にも出るので
- * （例：「0副業」）、説明まで含めた名前で押して取り違えを避ける。
+ * 一覧の各行き先は、名前と説明が1つの行に入っている（例：「ゴール分解して進める」）。
+ * 説明まで含めた名前で押して、取り違えを避ける。
  */
 async function openMore(page: Page, tile: RegExp, mark: () => Promise<void>) {
-  await page.getByLabel("Mobile navigation").getByText("管理", { exact: true }).click();
-  await page.getByRole("button", { name: /もっと/ }).click();
-  await page.getByRole("button", { name: tile }).click();
+  const menu = await openPlus(page);
+  await menu.getByRole("option", { name: tile }).click();
   await mark();
 }
 
@@ -145,11 +143,11 @@ test("持ち主でない人には、副業を案内しない", async ({ page }) 
   const be = await mockBackend(page);
   be.set("/account/profile", { json: { is_owner: false, owner_only_modes: ["income"] } });
   await enterApp(page);
-  await page.getByLabel("Mobile navigation").getByText("管理", { exact: true }).click();
+  await openManage(page, "今日");
   // HOMEの計器（「0副業」）に出ていないこと——押した先で断られるより良い
   await expect(page.getByRole("button", { name: /副業/ })).toHaveCount(0);
-  // ナビの一覧にも出ていないこと
-  await page.getByRole("button", { name: /もっと/ }).click();
-  await expect(page.getByRole("button", { name: /^説明書\s*使い方$/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /副業/ })).toHaveCount(0);
+  // 「できること」の一覧にも出ていないこと
+  const menu = await openPlus(page);
+  await expect(menu.getByRole("option", { name: /^説明書\s*使い方$/ })).toBeVisible();
+  await expect(menu.getByRole("option", { name: /副業/ })).toHaveCount(0);
 });

@@ -13,12 +13,7 @@
  * the far-left margin; other modes use the full width with their own centring.
  */
 
-import {
-  MANAGE_SURFACES, MORE_SURFACES, RUN_VIEW, isView, surfaceOf, tabOf,
-  visibleSurfaces,
-  type ShellView,
-  PACKS_CHANGED,
-} from "@/lib/shell";
+import { isView, type ShellView, PACKS_CHANGED } from "@/lib/shell";
 import dynamic from "next/dynamic";
 /* 起動の途中に出る物は、後から運ばない。運ぶ往復がそのまま
    「開いてから使えるまで」に足される（実測で 900ms → 1666ms に伸びた）。 */
@@ -169,6 +164,7 @@ import { APP_VERSION } from "@/lib/version";
 import {
   startCameraControl, stopCameraControl, useCameraControlRunning, useClapToggleEnabled,
 } from "@/lib/cameraControl";
+import { ACTIONS, type ActionTarget, type SettingsTab as ActionSettingsTab } from "@/lib/chatActions";
 
 /** 画面の一覧は shell.ts が持つ（2か所に書くと、片方だけ増えても気づけない）。 */
 type View = ShellView;
@@ -216,8 +212,15 @@ function Hud() {
   const [online, setOnline] = useState(true);
   const reduceMotion = useReducedMotion();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  /* 設定を、会話から頼まれたタブで開く（「声を変えて」→ 見た目と声）。 */
+  const [settingsTab, setSettingsTab] = useState<ActionSettingsTab>("core");
   const [loaded, setLoaded] = useState(false);
+  /* いま会話の上に開いている画面。"chat" なら何も開いていない。
+     ui-r126 から、画面は「会話」1つ。ほかの画面は会話の上にかぶさって
+     開き、「会話に戻る」で閉じる（会話はその間も残っている）。 */
   const [view, setView] = useState<View>("chat");
+  /* 「Gmail とつないで」から開いた連携の画面で、最初に開くつなぐ先。 */
+  const [connectFocus, setConnectFocus] = useState<string | null>(null);
   // 使える状態になったら、まだ運んでいない画面を静かに取りに行く
   usePrefetchScreens(loaded);
   const [fullscreen, setFullscreen] = useState(false);
@@ -290,22 +293,36 @@ function Hud() {
         voiceEngine: v.engine, rate: v.rate, pitch: v.pitch,
       });
       if (voice !== null) setVoiceReplies(voice === "1");
-      // Reopen the mode you were using (PWA relaunch lands where you left off).
-      let savedView = localStorage.getItem("forge_view") as View | null;
-      if (savedView === ("forge" as View)) savedView = "studio"; // 旧FORGEはWORKSHOP(studio)に統合
-      if (savedView && ["chat", "me", "sns", "capture", "code", "vault", "income", "tasks", "studio", "autopilot", "board", "archive", "home", "guide", "extend"].includes(savedView)) {
-        setView(savedView);
-      }
+      /* 開き直したら、いつも会話から（ui-r126）。以前は前回の画面を開き
+         直していたが、画面は会話の上に一時的に開く物になったので、
+         開き直して「会話に戻る」から始まると、どこにいるのか分からない。 */
+      localStorage.removeItem("forge_view");
       if (localStorage.getItem("forge_fullscreen") === "1") setFullscreen(true);
     } catch { /* ignore */ }
     setLoaded(true);
   }, []);
 
-  // Persist the active mode.
+  /* 開いた画面は Esc でも閉じる（会話に戻る）。設定やほかの窓が開いて
+     いるときは、そちらが先に閉じる（設定が開いている間は何もしない）。 */
   useEffect(() => {
-    if (!loaded) return;
-    try { localStorage.setItem("forge_view", view); } catch { /* ignore */ }
-  }, [view, loaded]);
+    if (view === "chat" || settingsOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.isComposing || e.keyCode === 229) return;
+      // 中に開いた小窓（連携の詳細・説明書の拡大など）が先に Esc を取ったら、
+      // 外側は閉じない。全部の受け手が終わってから確かめる。
+      setTimeout(() => { if (!e.defaultPrevented) setView("chat"); }, 0);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [view, settingsOpen]);
+
+  /** 「できること」で選ばれた行き先を開く（Chat から呼ばれる）。 */
+  const runAction = useCallback((t: ActionTarget) => {
+    if (t.kind === "view") { setConnectFocus(null); setView(t.view as View); }
+    else if (t.kind === "settings") { setSettingsTab(t.tab); setSettingsOpen(true); }
+    else if (t.kind === "connect") { setConnectFocus(t.service); setView("extend"); }
+    else if (t.kind === "camera") startCameraControl();
+  }, []);
 
   // Persist the fullscreen (focus) preference.
   useEffect(() => {
@@ -391,7 +408,7 @@ function Hud() {
   const settingsButton = (
     <button
       type="button"
-      onClick={() => setSettingsOpen(true)}
+      onClick={() => { setSettingsTab("core"); setSettingsOpen(true); }}
       className="grid h-8 w-8 place-items-center rounded-lg border border-panel text-muted transition hover:border-[var(--line)] hover:text-fg-strong"
       aria-label="Settings"
       title="Settings"
@@ -404,14 +421,12 @@ function Hud() {
   // centering. Chat goes extra-wide so the history rail sits in the far-left
   // margin while the conversation stays centred.
   //
-  // 下の余白は「下のナビの高さ＋ホームバー（safe-area）」。以前は 80px の
-  // 決め打ちで、ホームバーのある iPhone（ナビは 52px＋34px）では、画面の
-  // 一番下が数 px ナビの裏に入っていた。ホームバーの無い端末では、逆に
-  // 27px 余っていた。
+  // 下の余白はホームバー（safe-area）のぶんだけ。下のナビは無くした
+  // （ui-r126）ので、そのぶんの高さは会話に返した。
   return (
     <main
       data-mode={view}
-      className={`relative mx-auto flex h-[100dvh] w-full flex-col px-4 pb-[calc(4rem_+_env(safe-area-inset-bottom))] pt-[max(env(safe-area-inset-top),0.75rem)] transition-[max-width] duration-300 sm:pb-3 ${fullscreen ? "max-w-none" : view === "chat" ? "max-w-[1700px]" : "max-w-6xl"}`}
+      className={`relative mx-auto flex h-[100dvh] w-full flex-col px-4 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-[max(env(safe-area-inset-top),0.75rem)] transition-[max-width] duration-300 sm:pb-3 ${fullscreen ? "max-w-none" : "max-w-[1700px]"}`}
     >
       {/* Occasional drifting light-silver ambient bloom (behind everything). */}
       <div className="forge-ambient" aria-hidden />
@@ -464,7 +479,6 @@ function Hud() {
             </div>
             <div className="flex items-center gap-2">
               <Briefing />
-              <DesktopTabs view={view} onChange={setView} />
               {cameraButton}
               {fullscreenButton}
               {settingsButton}
@@ -495,9 +509,9 @@ function Hud() {
           <>
             <header
               className="flex flex-col items-center transition-[color,opacity,transform] duration-300 ease-out motion-reduce:transition-none"
-              style={{ paddingBottom: view === "chat" || view === "home" ? "0.5rem" : "0.25rem", paddingTop: view === "chat" || view === "home" ? "0.25rem" : "0" }}
+              style={{ paddingBottom: "0.5rem", paddingTop: "0.25rem" }}
             >
-              <CoreOrb size={view === "chat" || view === "home" ? 108 : 72} state={coreState} />
+              <CoreOrb size={view === "chat" ? 108 : 72} state={coreState} />
               {/* ブランド＋システム名を1行に。AIbou は小文字を含むので
                   uppercase になる label-mono ではなく brand-wordmark を使う。 */}
               <h1 className="text-glow mt-3 flex items-baseline gap-2 text-fg-strong">
@@ -520,69 +534,81 @@ function Hud() {
           Views enter from depth (3D rotateX) — except CHAT, whose fixed
           history panel must never sit inside a transformed ancestor, so it
           fades only. */}
-      <section className="min-h-0 flex-1" style={{ perspective: 1400 }}>
-        <motion.div
-          key={view}
-          /* 縦に積む箱にする。
-             ここには画面本体だけでなく、上の案内（NeedsNotice）や管理タブの
-             切り替えも並ぶ。それらが場所を取るのに画面本体が h-full（＝親の
-             高さ100%）だと、兄弟のぶんだけ下へはみ出す。実測で入力欄の
-             下49pxが下のナビの裏に潜っていて、スマホで押しにくかった。 */
-          className="flex h-full min-h-0 flex-col"
-          initial={
-            reduceMotion
-              ? false
-              : view === "chat"
-                ? { opacity: 0 }
-                : { opacity: 0, rotateX: 5, y: 14, scale: 0.985 }
-          }
-          animate={{ opacity: 1, rotateX: 0, y: 0, scale: 1 }}
-          transition={{ type: "spring", stiffness: 320, damping: 30 }}
+      <section className="relative min-h-0 flex-1">
+        {/* 会話の上に開いた画面。上の「会話に戻る」で閉じる。
+            並びは会話より前に置く（キーボードで最初に届くのは、いま開いて
+            いる画面の物。会話は見えない間、押せない・読まれない）。 */}
+        <AnimatePresence>
+          {loaded && view !== "chat" && (
+            <motion.div
+              key={view}
+              role="region"
+              aria-label={panelTitle(view)}
+              data-panel={view}
+              className="absolute inset-0 z-20 flex min-h-0 flex-col"
+              style={{ background: "var(--bg)" }}
+              initial={reduceMotion ? false : { opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 10 }}
+              transition={{ duration: 0.2 }}
+            >
+              <div className="mx-auto flex w-full max-w-5xl shrink-0 items-center gap-2 pb-2">
+                <button
+                  type="button"
+                  onClick={() => setView("chat")}
+                  className="inline-flex min-h-[44px] items-center gap-1.5 rounded-forge border border-panel px-3.5 text-[13px] text-fg-strong transition hover:border-[var(--line)]"
+                >
+                  <span aria-hidden>←</span> 会話に戻る
+                </button>
+                <span className="truncate text-[13px] text-muted">{panelTitle(view)}</span>
+              </div>
+              {/* 「この画面を使うには◯◯を設定してください」を、操作より先に出す。 */}
+              {view !== "guide" && (
+                <div className="mx-auto w-full max-w-3xl shrink-0">
+                  <NeedsNotice mode={view} />
+                </div>
+              )}
+              <div className="flex min-h-0 flex-1 flex-col">
+                {view === "home" && <Home settings={settings} onNavigate={setView} isOwner={isOwner} />}
+                {view === "me" && <LifeMode settings={settings} />}
+                {view === "sns" && <Centered><SnsMode /></Centered>}
+                {view === "capture" && <Centered><Capture /></Centered>}
+                {view === "code" && <CodeMode />}
+                {view === "vault" && <Centered><Vault /></Centered>}
+                {view === "income" && <Centered><Income /></Centered>}
+                {view === "tasks" && <Centered><Tasks /></Centered>}
+                {view === "studio" && <Centered><Workshop /></Centered>}
+                {view === "autopilot" && <Centered><Autopilot isOwner={isOwner} /></Centered>}
+                {view === "board" && <Centered><Dashboard isOwner={isOwner} /></Centered>}
+                {view === "archive" && <Centered><AppArchive /></Centered>}
+                {view === "extend" && <Centered><Extensions onNavigate={setView} focusId={connectFocus} /></Centered>}
+                {view === "guide" && <Centered><Guide /></Centered>}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        {/* 会話は、いつもここにある。ほかの画面を開いている間も消さない
+            （書きかけ・返事の途中を失わない）。見えないようにするだけ。 */}
+        <div
+          className={`flex h-full min-h-0 flex-col ${view !== "chat" ? "invisible" : ""}`}
+          aria-hidden={view !== "chat"}
         >
-          {/* 「この画面を使うには◯◯を設定してください」を、操作より先に出す。
-              押した先で 401 や 503 の数字を見せられても、何をすればいいのか
-              分からないため。足りているときは何も出ない。 */}
-          {loaded && view !== "guide" && (
-            <div className="mx-auto w-full max-w-3xl shrink-0">
-              <NeedsNotice mode={view} />
-            </div>
+          {loaded && (
+            <Chat
+              settings={settings}
+              voiceReplies={voiceReplies}
+              onStateChange={setCoreState}
+              /* `#ボード` などの画面ものを、その場で開く。知らない名前は
+                 無視する（サーバー側の名前が先に変わっても、飛び先の
+                 無い所へ飛ばさない）。 */
+              onOpenView={(v) => { if (isView(v)) setView(v); }}
+              onAction={runAction}
+              isOwner={isOwner}
+              packs={packs}
+            />
           )}
+        </div>
 
-          {/* 管理タブの中の切り替え。実行（会話）のときは出さない。 */}
-          {loaded && tabOf(view as ShellView) === "manage" && (
-            <ManageBar view={view} onChange={setView} isOwner={isOwner} packs={packs} />
-          )}
-
-          {/* 画面本体は「残った高さ」を使う。上の案内や切り替えが場所を
-              取っても、はみ出さずに縮む（min-h-0 が無いと縮まない）。 */}
-          <div className="flex min-h-0 flex-1 flex-col">
-            {loaded && view === "home" && <Home settings={settings} onNavigate={setView} isOwner={isOwner} />}
-            {loaded && view === "chat" && (
-              <Chat
-                settings={settings}
-                voiceReplies={voiceReplies}
-                onStateChange={setCoreState}
-                /* `#ボード` などの画面ものを、その場で開く。知らない名前は
-                   無視する（サーバー側の名前が先に変わっても、飛び先の
-                   無い所へ飛ばさない）。 */
-                onOpenView={(v) => { if (isView(v)) setView(v); }}
-              />
-            )}
-            {loaded && view === "me" && <LifeMode settings={settings} />}
-            {loaded && view === "sns" && <Centered><SnsMode /></Centered>}
-            {loaded && view === "capture" && <Centered><Capture /></Centered>}
-            {loaded && view === "code" && <CodeMode />}
-            {loaded && view === "vault" && <Centered><Vault /></Centered>}
-            {loaded && view === "income" && <Centered><Income /></Centered>}
-            {loaded && view === "tasks" && <Centered><Tasks /></Centered>}
-            {loaded && view === "studio" && <Centered><Workshop /></Centered>}
-            {loaded && view === "autopilot" && <Centered><Autopilot isOwner={isOwner} /></Centered>}
-            {loaded && view === "board" && <Centered><Dashboard isOwner={isOwner} /></Centered>}
-            {loaded && view === "archive" && <Centered><AppArchive /></Centered>}
-            {loaded && view === "extend" && <Centered><Extensions onNavigate={setView} /></Centered>}
-            {loaded && view === "guide" && <Centered><Guide /></Centered>}
-          </div>
-        </motion.div>
       </section>
 
       {/* Settings drawer */}
@@ -591,6 +617,7 @@ function Hud() {
           <SettingsPanel
             initial={settings}
             initialVoice={voiceReplies}
+            initialTab={settingsTab}
             online={online}
             onClose={() => setSettingsOpen(false)}
             onSave={handleSave}
@@ -600,13 +627,9 @@ function Hud() {
       </AnimatePresence>
 
       {/* カメラ操作モード。どの画面の上にもかぶさる。画面の行き来は、
-          手のカーソルで下のナビを押す（覚える形を増やさない）。 */}
+          手のカーソルで入力欄の「＋」を押す（覚える形を増やさない）。 */}
       {cameraOn && <CameraControl />}
       {clapOn && <ClapListener />}
-
-      {/* 下のナビ（スマホ）。実行・管理・設定の3つだけ。 */}
-      <MobileNav view={view} onChange={setView}
-                 onSettings={() => setSettingsOpen(true)} />
     </main>
   );
 }
@@ -622,214 +645,14 @@ const stateLabel = coreStateLabel;
 const OWNER_ONLY_VIEWS: View[] = ["income"];
 
 
-/* 下のナビと上の切り替えの印（線画・currentColor で文字色に合わせる）。
-   以前は15画面ぶんの印があったが、行き先は実行・管理の2つになった。 */
-function NavIcon({ name }: { name: "run" | "manage" }) {
-  const p = {
-    width: 17, height: 17, viewBox: "0 0 24 24", fill: "none",
-    stroke: "currentColor", strokeWidth: 1.6,
-    strokeLinecap: "round" as const, strokeLinejoin: "round" as const,
-  };
-  return name === "run"
-    ? (<svg {...p}><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.7A8.5 8.5 0 1 1 21 11.5z" /></svg>)
-    : (<svg {...p}><path d="M3 11l9-7 9 7" /><path d="M5 10v10h14V10" /><path d="M9 20v-6h6v6" /></svg>);
-}
-
 /** Centres non-fullbleed views so they don't stretch on the wide page. */
 function Centered({ children }: { children: React.ReactNode }) {
   return <div className="mx-auto h-full w-full max-w-5xl">{children}</div>;
 }
 
-/**
- * 下のナビ。「実行」「管理」の2つと、歯車だけ。
- *
- * 以前は4つのモード＋⋯で、⋯の中に14タイルが並んでいた。15個の行き先が
- * 常に見えていて、開くたびに「どこへ行くか」を決めさせていた。
- *
- * 相棒は、行き先を選ばせない物のはず。だから
- *   実行 … 話して、やってもらう（会話はここ1つ）
- *   管理 … 残っている物を見る・触る
- * の2つにして、残りは管理の中と `#` からたどれるようにした。画面は
- * 1つも消していない（案内する数を減らしただけ）。
- *
- * 歯車を下に置いたのは、右上の32pxが片手では届きにくかったため。
- * キーボードが出ている間は下げる（visualViewport）。
- */
-function MobileNav({ view, onChange, onSettings }:
-  { view: View; onChange: (v: View) => void; onSettings: () => void }) {
-  const [kbOpen, setKbOpen] = useState(false);
-
-  useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const onResize = () => setKbOpen(window.innerHeight - vv.height > 120);
-    vv.addEventListener("resize", onResize);
-    return () => vv.removeEventListener("resize", onResize);
-  }, []);
-
-  /* キーボードが出ている間は、ナビのぶん空けている下の余白も要らない。
-     ナビは下げても余白が残り、キーボードの上の狭い所がさらに 64px 減って
-     いた。<html data-kb="open"> で CSS に伝える（globals.css）。 */
-  useEffect(() => {
-    const root = document.documentElement;
-    if (kbOpen) root.dataset.kb = "open"; else delete root.dataset.kb;
-    return () => { delete root.dataset.kb; };
-  }, [kbOpen]);
-
-  const tab = tabOf(view as ShellView);
-
-  return (
-    <nav
-      aria-label="Mobile navigation"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-panel bg-[var(--chrome)] backdrop-blur-md transition-transform duration-200 sm:hidden"
-      style={{
-        paddingBottom: "env(safe-area-inset-bottom)",
-        transform: kbOpen ? "translateY(110%)" : "none",
-      }}
-    >
-      <div className="mx-auto grid max-w-md grid-cols-3">
-        <button
-          type="button"
-          onClick={() => onChange(tabTarget("run", view))}
-          aria-current={tab === "run" ? "page" : undefined}
-          className="flex min-h-[52px] flex-col items-center justify-center gap-0.5 text-[10px] tracking-[0.06em] label-mono"
-          style={{ color: tab === "run" ? "var(--accent)" : "var(--muted)" }}
-        >
-          <NavIcon name="run" />
-          <span>実行</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => onChange(tabTarget("manage", view))}
-          aria-current={tab === "manage" ? "page" : undefined}
-          className="flex min-h-[52px] flex-col items-center justify-center gap-0.5 text-[10px] tracking-[0.06em] label-mono"
-          style={{ color: tab === "manage" ? "var(--accent)" : "var(--muted)" }}
-        >
-          <NavIcon name="manage" />
-          <span>管理</span>
-        </button>
-        <button
-          type="button"
-          onClick={onSettings}
-          aria-label="設定"
-          className="flex min-h-[52px] flex-col items-center justify-center gap-0.5 text-[10px] tracking-[0.06em] text-muted label-mono"
-        >
-          <span className="text-base leading-none">⚙</span>
-          <span>設定</span>
-        </button>
-      </div>
-    </nav>
-  );
-}
-
-/**
- * 管理タブの中の切り替え。よく開く4つと「もっと」。
- *
- * 「もっと」に残りを入れてあるのは、`#` を知らない人の行き止まりを
- * 作らないため。会話から呼べるのと、一覧としてたどれるのは別の話。
- */
-function ManageBar({ view, onChange, isOwner, packs }:
-  { view: View; onChange: (v: View) => void; isOwner: boolean | null;
-    packs: string[] | null }) {
-  const [moreOpen, setMoreOpen] = useState(false);
-  const here = surfaceOf(view as ShellView);
-  /* 使っていない機能の入口は案内しない（画面は消していない。設定で
-     入れ直せば戻る）。`#` の候補もサーバー側で同じパックで絞っている。 */
-  const more = visibleSurfaces(MORE_SURFACES, { isOwner, packs });
-
-  return (
-    /* 下に少し空ける。無いと、切り替えの列と画面の最初の枠がくっついて
-       1つの塊に見えた（タスクの数字の箱が、切り替えの続きに見える）。 */
-    <div className="mx-auto mb-2 w-full max-w-5xl shrink-0">
-      {/* スマホでも1列に収める（375px で「もっと」だけ2段目に落ちていた） */}
-      <div className="flex items-center gap-1 sm:flex-wrap sm:gap-1.5">
-        {MANAGE_SURFACES.map((sf) => (
-          <button
-            key={sf.key}
-            type="button"
-            onClick={() => { onChange(sf.view as View); setMoreOpen(false); }}
-            title={sf.hint}
-            className="min-h-[44px] shrink-0 rounded-forge border px-2.5 text-[13px] transition sm:px-3 sm:text-[12px]"
-            style={{
-              borderColor: here === sf.key ? "var(--accent)" : "var(--panel-bd)",
-              color: here === sf.key ? "var(--fg-strong)" : "var(--muted)",
-              background: here === sf.key ? "var(--btn-bg)" : "transparent",
-            }}
-          >
-            {sf.label}
-          </button>
-        ))}
-        <button
-          type="button"
-          onClick={() => setMoreOpen((v) => !v)}
-          aria-expanded={moreOpen}
-          className="min-h-[44px] shrink-0 rounded-forge border border-panel px-2.5 text-[13px] text-muted transition sm:px-3 sm:text-[12px]"
-          style={{ color: here === null ? "var(--fg-strong)" : undefined }}
-        >
-          {moreOpen ? "▲ もっと" : "▼ もっと"}
-        </button>
-      </div>
-
-      {/* 開いた一覧は、それだけで縦に伸びる。小さい画面（iPhone SE）では
-          最後の「説明書」が下のナビの裏に入って押せなかったので、残りの
-          高さの中でスクロールさせる。 */}
-      {moreOpen && (
-        <div className="mt-1.5 grid max-h-[min(60dvh,440px)] grid-cols-2 gap-1.5 overflow-y-auto overscroll-contain pb-1 sm:grid-cols-4">
-          {more.map((m) => (
-            <button
-              key={m.key}
-              type="button"
-              onClick={() => { onChange(m.view as View); setMoreOpen(false); }}
-              className="rounded-forge border border-panel px-3 py-2 text-left transition hover:border-[var(--line)]"
-              style={{ borderColor: view === m.view ? "var(--accent)" : undefined }}
-            >
-              <span className="block text-[12px] text-fg-strong">{m.label}</span>
-              <span className="block text-[11px] text-muted">{m.hint}</span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** タブを押したときの行き先（下のナビと上の切り替えで同じにする）。 */
-function tabTarget(key: "run" | "manage", view: View): View {
-  if (key === "run") return RUN_VIEW as View;
-  return (surfaceOf(view as ShellView) ? view : MANAGE_SURFACES[0].view) as View;
-}
-
-/**
- * 広い画面の 実行／管理（スマホでは下のナビが同じ役をする）。
- *
- * 以前ここには、15の画面を英語の札で並べた「Modes」の一覧があった。
- * 下のナビ（実行・管理）と管理の中の切り替え（今日・ボード・タスク・
- * ファイル・もっと）が同じ行き先を日本語で持っていて、**入口が2通り・
- * 呼び名が2通り**になっていた。しかも Modes のほうは、使っていない
- * 機能のかたまり（設定で切った物）まで並べていた。入口を1つにする。
- */
-function DesktopTabs({ view, onChange }: { view: View; onChange: (v: View) => void }) {
-  const tab = tabOf(view as ShellView);
-  return (
-    <nav aria-label="画面の切り替え" className="hidden items-center gap-1 sm:flex">
-      {([["run", "実行"], ["manage", "管理"]] as const).map(([key, label]) => (
-        <button
-          key={key}
-          type="button"
-          onClick={() => onChange(tabTarget(key, view))}
-          aria-current={tab === key ? "page" : undefined}
-          className="flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[10px] tracking-[0.12em] label-mono transition hover:border-[var(--line)]"
-          style={{
-            borderColor: tab === key ? "var(--accent)" : "var(--panel-bd)",
-            color: tab === key ? "var(--fg-strong)" : "var(--muted)",
-          }}
-        >
-          <NavIcon name={key} />
-          <span>{label}</span>
-        </button>
-      ))}
-    </nav>
-  );
+/** 会話の上に開いた画面の名前（「会話に戻る」の横に出す）。 */
+function panelTitle(view: View): string {
+  return ACTIONS.find((a) => a.target.kind === "view" && a.target.view === view)?.label ?? "";
 }
 
 function StatusDot({ online }: { online: boolean }) {
@@ -949,15 +772,18 @@ function SettingsPanel({
   onClose,
   onSave,
   onGoExtend,
+  initialTab = "core",
 }: {
   initial: ChatSettings;
   initialVoice: boolean;
+  /** 会話から「声を変えて」のように頼まれたとき、最初に開くタブ。 */
+  initialTab?: SettingsTab;
   online: boolean;
   onClose: () => void;
   onSave: (settings: ChatSettings, voice: boolean) => void;
   onGoExtend: () => void;
 }) {
-  const [tab, setTab] = useState<SettingsTab>("core");
+  const [tab, setTab] = useState<SettingsTab>(initialTab);
   const [name, setName] = useState(initial.name);
   const [persona, setPersona] = useState(initial.persona);
   const [voice, setVoice] = useState(initialVoice);
@@ -1072,6 +898,7 @@ function SettingsPanel({
               key={t.key}
               type="button"
               onClick={() => setTab(t.key)}
+              aria-pressed={tab === t.key}
               className="shrink-0 grow px-1.5 py-2.5 text-[9px] tracking-[0.1em] transition label-mono"
               style={{
                 color: tab === t.key ? "var(--fg-strong)" : "var(--muted)",

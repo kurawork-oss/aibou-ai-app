@@ -249,8 +249,25 @@ export async function enterApp(page: Page) {
   await page.locator("textarea").first().waitFor({ timeout: 20_000 });
 }
 
-/** 管理タブのその面を開く。 */
+/** 会話の「＋」（できること）を開いて、その一覧を返す。 */
+export async function openPlus(page: Page) {
+  // 会話の上に何か開いていたら、先に会話へ戻る
+  const back = page.getByRole("button", { name: /会話に戻る/ }).first();
+  if (await back.isVisible().catch(() => false)) await back.click();
+  await page.getByRole("button", { name: "できること", exact: true }).click();
+  return page.getByRole("listbox", { name: "できること" });
+}
+
+const ACTION_OF: Record<string, string> = {
+  今日: "today", タスク: "tasks", ボード: "board", ファイル: "files", 資料: "vault",
+  連携: "extend", つくる: "studio", SNS: "sns", 録音: "capture", ゴール: "autopilot",
+  副業: "income", コード: "code", きろく: "me", 説明書: "guide",
+};
+
+/** 会話の「＋」から、その画面を開く（名前は一覧の見出し。例：「タスク」）。 */
 export async function openManage(page: Page, label: string) {
-  await page.getByLabel("Mobile navigation").getByText("管理", { exact: true }).click();
-  await page.getByRole("button", { name: label, exact: true }).click();
+  const menu = await openPlus(page);
+  const id = ACTION_OF[label];
+  if (!id) throw new Error(`知らない画面: ${label}`);
+  await menu.locator(`[data-action="${id}"]`).click();
 }

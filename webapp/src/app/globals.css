@@ -1252,12 +1252,6 @@ html[data-skin="custom"] {
   .tracking-\[0\.3em\], .tracking-\[0\.4em\] { letter-spacing: 0.08em; }
 }
 
-/* キーボードが出ている間は、下のナビを下げている（page.tsx の MobileNav）。
-   ナビのために空けている下の余白も外して、キーボードの上を広く使う。 */
-@media (max-width: 639px) {
-  html[data-kb="open"] main { padding-bottom: 0.5rem; }
-}
-
 /* 入力欄は 16px 未満だと、iPhone は触った瞬間に画面を拡大して戻さない。
    打つたびに拡大して、横にずれた画面を指で戻すことになっていた
    （会話の入力欄を含め、全部の入力欄が 14px だった）。

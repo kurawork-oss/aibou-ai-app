@@ -52,10 +52,13 @@ test("欄が Enter を直に見ていない（変換の確定で送ってしま�
       bad.push(`${f}:${i + 1}: ${line.trim().slice(0, 100)}`);
     });
   }
-  // # の一覧は、関数の頭で isComposingKey を見てから Enter を見る
-  const palette = readFileSync(join(dir, "CommandPalette.tsx"), "utf8");
-  expect(palette).toMatch(/if \(isComposingKey\(e\)\) return;[\s\S]*e\.key === "Enter"/);
-  expect(bad.filter((b) => !b.startsWith("CommandPalette.tsx")),
+  // # の一覧と「できること」の一覧は、関数の頭で isComposingKey を見てから Enter を見る
+  const lists = ["CommandPalette.tsx", "ActionMenu.tsx"];
+  for (const f of lists) {
+    expect(readFileSync(join(dir, f), "utf8"), f)
+      .toMatch(/if \(isComposingKey\(e\)\) return;[\s\S]*e\.key === "Enter"/);
+  }
+  expect(bad.filter((b) => !lists.some((f) => b.startsWith(f))),
     `Enter を直に見ている欄（lib/enterKey.ts の enterSubmits / enterSends を使う）:\n${bad.join("\n")}`)
     .toEqual([]);
 });

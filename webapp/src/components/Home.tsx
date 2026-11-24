@@ -910,7 +910,7 @@ function ImageLightbox({
   // Keyboard: Esc close, ←/→ navigate.
   useEffect(() => {
     const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") { e.preventDefault(); onClose(); }
       else if (e.key === "ArrowLeft") prev();
       else if (e.key === "ArrowRight") next();
     };

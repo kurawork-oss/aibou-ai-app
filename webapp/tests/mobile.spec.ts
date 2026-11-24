@@ -111,7 +111,7 @@ test("スマホの全モードで、中身が横に切れていない", async ({
   expect(bad, `横に切れている所:\n${bad.join("\n")}`).toEqual([]);
 });
 
-test("下のナビと本文の文字が、読める大きさである", async ({ page }) => {
+test("本文の文字が、読める大きさである", async ({ page }) => {
   await page.setViewportSize({ width: 393, height: 852 });
   await page.goto("/");
   await enterApp(page);
@@ -142,11 +142,10 @@ test("下のナビと本文の文字が、読める大きさである", async ({
   });
   expect(tiny, `10px未満の本文:\n${tiny.join("\n")}`).toEqual([]);
 
-  // 下のナビは HUD ラベルだが、行き先そのものなので読める大きさが要る
-  const navSize = await page.getByLabel("Mobile navigation")
-    .getByText("管理", { exact: true })
+  // 戻り道（会話に戻る）は、行き先そのものなので読める大きさが要る
+  const backSize = await page.getByRole("button", { name: /会話に戻る/ })
     .evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
-  expect(navSize).toBeGreaterThanOrEqual(10);
+  expect(backSize).toBeGreaterThanOrEqual(12);
 });
 
 /* ── 畳んだ先（開かないと出てこない所）────────────────────────────
@@ -154,21 +153,28 @@ test("下のナビと本文の文字が、読める大きさである", async ({
  * 上の見張りは「モードを開いて測る」ので、押して初めて出る面は通らない。
  * ナビを2つに畳んだぶん、行き先はそういう面へ移った——つまり、いちばん
  * 測れていない所へ移った。ここで開いてから測る。 */
-test("管理タブの「もっと」を開いても、押せるものが44px以上ある", async ({ page }) => {
+test("「＋」（できること）を開いても、押せるものが44px以上ある", async ({ page }) => {
   await page.setViewportSize({ width: 393, height: 852 });
   await page.goto("/");
   await enterApp(page);
-  await goMode(page, "HOME");
-  await page.getByRole("button", { name: /もっと/ }).click();
-  await page.waitForTimeout(400);
+  await page.getByRole("button", { name: "できること", exact: true }).click();
+  await page.waitForTimeout(300);
   // 開いたことを確かめてから測る（閉じたまま測ると、何も無いので必ず通る）
-  await expect(page.getByRole("button", { name: /説明書/ })).toBeVisible();
+  await expect(page.getByRole("listbox", { name: "できること" })).toBeVisible();
 
-  const { small, clipped } = await measure(page, MIN_TAP);
-  expect(small.map((s) => `${s.w}x${s.h} 「${s.label}」`),
-    "「もっと」の中に小さすぎる行き先がある").toEqual([]);
-  expect(clipped.map((c) => `枠${c.client}px に中身${c.content}px 「${c.text}」`),
-    "「もっと」の中が横に切れている").toEqual([]);
+  // 一覧の中の行き先だけを測る（入力欄の横のボタンは、別の見張りの担当）
+  const rows = await page.getByRole("listbox", { name: "できること" }).evaluate((box, MIN) => {
+    const small: string[] = [];
+    for (const el of Array.from(box.querySelectorAll("button"))) {
+      const b = el.getBoundingClientRect();
+      if (b.height < MIN) small.push(`${Math.round(b.width)}x${Math.round(b.height)} 「${(el.textContent || "").trim().slice(0, 20)}」`);
+    }
+    const clipped = box.scrollWidth > box.clientWidth + 1;
+    return { small, clipped, count: box.querySelectorAll("button").length };
+  }, MIN_TAP);
+  expect(rows.count).toBeGreaterThan(10);
+  expect(rows.small, "「できること」の中に小さすぎる行き先がある").toEqual([]);
+  expect(rows.clipped, "「できること」の中が横に切れている").toBe(false);
 });
 
 /* ── 重なり ────────────────────────────────────────────────────────

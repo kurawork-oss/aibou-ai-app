@@ -27,7 +27,14 @@ import { explain } from "@/lib/needs";
 import BrandIcon from "@/components/BrandIcon";
 import MyDatabase from "@/components/MyDatabase";
 
-export default function Extensions({ onNavigate }: { onNavigate?: (v: "guide") => void }) {
+export default function Extensions({ onNavigate, focusId = null }: {
+  onNavigate?: (v: "guide") => void;
+  /**
+   * 会話で「Gmail とつないで」のように頼まれて開いたとき、最初に開くつなぐ先
+   * （lib/extensions.ts の id）。一覧から探させない。
+   */
+  focusId?: string | null;
+}) {
   const [keysSet, setKeysSet] = useState<Set<string>>(new Set());
   const [keyInfo, setKeyInfo] = useState<Map<string, ApiKeyInfo>>(new Map());
   const [orphans, setOrphans] = useState<OrphanKey[]>([]);
@@ -38,7 +45,8 @@ export default function Extensions({ onNavigate }: { onNavigate?: (v: "guide") =
   const [dbOn, setDbOn] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [open, setOpen] = useState<Extension | null>(null);
+  const [open, setOpen] = useState<Extension | null>(
+    () => (focusId ? EXTENSIONS.find((e) => e.id === focusId) ?? null : null));
 
   const load = useCallback(async () => {
     if (!API_URL) { setLoading(false); return; }
@@ -304,7 +312,8 @@ function Detail({ ext, connected, google, provider, info, onClose, onChanged }: 
   });
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    // preventDefault: 外側（会話の上に開いた画面）まで一緒に閉じないように
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { e.preventDefault(); onClose(); } };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);

@@ -485,7 +485,7 @@ function ModeDetail({ mode, onClose, onZoom }: {
   mode: GuideMode; onClose: () => void; onZoom: () => void;
 }) {
   useEffect(() => {
-    const onKey = (e: globalThis.KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const onKey = (e: globalThis.KeyboardEvent) => { if (e.key === "Escape") { e.preventDefault(); onClose(); } };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
@@ -547,7 +547,7 @@ function ModeDetail({ mode, onClose, onZoom }: {
 /** 画面写真の拡大。Escでも閉じられる。 */
 function ZoomOverlay({ mode, onClose }: { mode: GuideMode; onClose: () => void }) {
   useEffect(() => {
-    const onKey = (e: globalThis.KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const onKey = (e: globalThis.KeyboardEvent) => { if (e.key === "Escape") { e.preventDefault(); onClose(); } };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);

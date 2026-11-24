@@ -80,33 +80,40 @@ test("画面の入口は1つ（Modes の一覧はもう無い）", async ({ page
   await expect(page.getByLabel("Modes", { exact: true })).toHaveCount(0);
 });
 
-test("管理の中から、全部の画面へ行ける", async ({ page }) => {
+test("会話の「＋」から、全部の画面へ行ける（行き先を選ぶナビはもう無い）", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
-  await page.getByRole("navigation", { name: "Mobile navigation" })
-    .getByRole("button", { name: "管理", exact: true }).click();
-  for (const label of ["今日", "ボード", "タスク", "ファイル"]) {
-    await expect(page.getByRole("button", { name: label, exact: true })).toBeVisible();
-  }
-  await page.getByRole("button", { name: /もっと/ }).click();
-  for (const label of ["つくる", "コード", "SNS", "録音", "資料", "きろく", "ゴール", "副業", "連携", "説明書"]) {
-    await expect(page.getByRole("button", { name: new RegExp(`^${label}(\\s|$)`) })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Mobile navigation" })).toHaveCount(0);
+  await expect(page.getByRole("navigation", { name: "画面の切り替え" })).toHaveCount(0);
+  await page.getByRole("button", { name: "できること", exact: true }).click();
+  const menu = page.getByRole("listbox", { name: "できること" });
+  for (const label of ["今日", "ボード", "タスク", "ファイル", "つくる", "コード", "SNS", "録音",
+    "資料", "きろく", "ゴール", "副業", "連携", "説明書", "設定", "見た目と声", "記憶", "カメラで操作"]) {
+    await expect(menu.getByRole("option", { name: new RegExp(`^${label}`) }).first()).toBeVisible();
   }
 });
 
 test.describe("広い画面", () => {
   test.use({ viewport: { width: 1280, height: 900 } });
 
-  test("下のナビが無い幅でも、実行と管理を行き来できる", async ({ page }) => {
+  test("開いた画面は会話の上にかぶさり、「会話に戻る」で戻れる（書きかけは残る）", async ({ page }) => {
     await page.goto("/");
     await enterApp(page);
-    const tabs = page.getByRole("navigation", { name: "画面の切り替え" });
-    await expect(tabs).toBeVisible();
-    await expect(page.getByRole("navigation", { name: "Mobile navigation" })).toBeHidden();
-    await tabs.getByRole("button", { name: "管理", exact: true }).click();
-    await expect(page.getByRole("button", { name: "今日", exact: true })).toBeVisible();
-    await tabs.getByRole("button", { name: "実行", exact: true }).click();
-    await expect(page.locator("textarea").first()).toBeVisible();
+    const box = page.getByPlaceholder(/メッセージ…$/);
+    await box.fill("書きかけの文");
+    await page.getByRole("button", { name: "できること", exact: true }).click();
+    await page.locator('[data-action="today"]').click();
+    await expect(page.getByRole("region", { name: "今日" })).toBeVisible();
+    await expect(box).toBeHidden();
+    await page.getByRole("button", { name: /会話に戻る/ }).click();
+    await expect(box).toBeVisible();
+    await expect(box).toHaveValue("書きかけの文");
+    // Esc でも戻れる
+    await page.getByRole("button", { name: "できること", exact: true }).click();
+    await page.locator('[data-action="tasks"]').click();
+    await expect(page.getByRole("region", { name: "タスク" })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("region", { name: "タスク" })).toHaveCount(0);
   });
 });
 
@@ -311,13 +318,16 @@ test("GUIDE mode opens and shows how to start even without a backend", async ({ 
   await expect(page.getByRole("tab")).toHaveCount(4);
 });
 
-test("説明書は 管理 →「もっと」から開けて、再読み込みしても残る", async ({ page }) => {
+test("説明書は「＋」から開ける。開き直すと会話から始まる", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
   await goMode(page, "GUIDE");
+  await expect(page.getByRole("heading", { name: /の説明書/ })).toBeVisible({ timeout: 8_000 });
+  // 開いた画面は会話の上の一時的な物。開き直したら会話（どこにいるか迷わない）
   await page.reload({ waitUntil: "domcontentloaded" });
   await enterApp(page);
-  await expect(page.getByRole("heading", { name: /の説明書/ })).toBeVisible({ timeout: 8_000 });
+  await expect(page.getByPlaceholder(/メッセージ…$/)).toBeVisible({ timeout: 8_000 });
+  await expect(page.getByRole("heading", { name: /の説明書/ })).toHaveCount(0);
 });
 
 
@@ -541,6 +551,8 @@ test("STUDIO workshop tab persists across reload", async ({ page }) => {
   await expect(page.getByText(/Webアプリ作成はバックエンド接続後/)).toBeVisible({ timeout: 5_000 });
   await page.reload();
   await enterApp(page);
+  // 開き直すと会話から。もう一度開けば、選んでいたタブのまま
+  await goMode(page, "STUDIO");
   await expect(page.getByText(/Webアプリ作成はバックエンド接続後/)).toBeVisible({ timeout: 8_000 });
 });
 
@@ -601,9 +613,10 @@ test("HOME widgets can be reordered, hidden, restored and remembered", async ({ 
   await page.getByRole("button", { name: /✓ 完了/ }).click();
   await expect(page.getByLabel("計器盤を前へ")).toHaveCount(0);
 
-  // 再読込しても並びは残る
+  // 再読込しても並びは残る（開き直すと会話からなので、もう一度開く）
   await page.reload();
   await enterApp(page);
+  await goMode(page, "HOME");
   await expect.poll(async () => (await ids())[0], { timeout: 10_000 }).toBe("dials");
 
   // 既定に戻せる
@@ -1181,37 +1194,82 @@ test("Mode switch retints the accent (data-mode)", async ({ page }) => {
   expect(accent).toBe("#ff7a7a");
 });
 
-/* ── 下のナビ：実行 / 管理 / 設定 の3つだけ ──
+/* ── 画面は会話1つ（ui-r126） ──
  *
- * 以前は4モード＋⋯で、⋯の中に14タイルが並んでいた。行き先が15個あって、
- * 開くたびに「どこへ行くか」を決めさせていた。いまは2つに畳んで、残りは
- * 管理タブの「もっと」からたどる。画面は1つも消していないので、
- * ここでは「畳んだ先に本当に届くか」を見る。 */
-test("下のナビは実行と管理の2つで、残りは管理の「もっと」から届く", async ({ page }) => {
+ * 以前は 実行／管理 の2つのタブと、管理の中の切り替え・「もっと」が
+ * あった。いまは行き先を選ぶナビを置かず、全部を会話から呼ぶ。
+ * 画面は1つも消していないので、ここでは「頼めば本当に届くか」を見る。 */
+test("ナビは無く、頼み方と「＋」から全部の画面に届く（スマホ）", async ({ page }) => {
   await page.setViewportSize({ width: 393, height: 852 });
   await page.goto("/");
   await enterApp(page);
-  const nav = page.getByLabel("Mobile navigation");
-  await expect(nav).toBeVisible();
+  await expect(page.getByLabel("Mobile navigation")).toHaveCount(0);
 
-  // 行き先は3つ（実行・管理・設定）だけ
-  await expect(nav.locator("button")).toHaveCount(3);
-  await expect(nav.getByText("実行", { exact: true })).toBeVisible();
-  await expect(nav.getByText("管理", { exact: true })).toBeVisible();
+  // 会話欄はアプリ全体でここ1つ
+  const box = page.getByPlaceholder(/メッセージ…$/);
+  await expect(box).toBeVisible({ timeout: 5_000 });
 
-  // 実行タブは会話。会話欄はアプリ全体でここ1つ。
-  await expect(page.getByPlaceholder(/メッセージ…$/)).toBeVisible({ timeout: 5_000 });
-
-  // 管理タブ → 「今日」から始まり、切り替えでタスクへ行ける
-  await nav.getByText("管理", { exact: true }).click();
-  await expect(page.getByText("PERSONAL COCKPIT")).toBeVisible({ timeout: 5_000 });
-  await page.getByRole("button", { name: "タスク", exact: true }).click();
+  // 「タスク見せて」と頼むと、その場で開く（AIに回さない）。会話にも残る
+  await box.fill("タスク見せて");
+  await box.press("Enter");
   await expect(page.getByText("NEW TASK")).toBeVisible({ timeout: 5_000 });
+  await page.getByRole("button", { name: /会話に戻る/ }).click();
+  const card = page.locator('[data-action-card="tasks"]');
+  await expect(card).toBeVisible();
+  // カードを押せば、あとからでも同じ所が開く
+  await card.getByRole("button", { name: "開く" }).click();
+  await expect(page.getByText("NEW TASK")).toBeVisible({ timeout: 5_000 });
+  await page.getByRole("button", { name: /会話に戻る/ }).click();
 
-  // ナビから消した画面も、「もっと」で行き止まりにならない
-  await page.getByRole("button", { name: /もっと/ }).click();
-  await page.getByRole("button", { name: /録音/ }).click();
+  // 「＋」の一覧からも開ける
+  await page.getByRole("button", { name: "できること", exact: true }).click();
+  await page.locator('[data-action="capture"]').click();
   await expect(page.getByText("画面録画・録音")).toBeVisible({ timeout: 5_000 });
+});
+
+test("「声を変えて」で設定がそのタブで開く・「/」で打ちながら選べる", async ({ page }) => {
+  await page.goto("/");
+  await enterApp(page);
+  const box = page.getByPlaceholder(/メッセージ…$/);
+  await box.fill("声を変えて");
+  await box.press("Enter");
+  await expect(page.getByText("CORE SETTINGS")).toBeVisible({ timeout: 5_000 });
+  await expect(page.getByRole("button", { name: "見た目と声", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await page.keyboard.press("Escape");
+  await expect(page.getByText("CORE SETTINGS")).toHaveCount(0);
+
+  await box.fill("/ぼー");
+  const menu = page.getByRole("listbox", { name: "できること" });
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole("option").first()).toContainText("ボード");
+  await box.press("Enter");
+  await expect(page.getByRole("region", { name: "ボード" })).toBeVisible({ timeout: 5_000 });
+});
+
+test("中身のある頼みは、画面を開かずにAIへ回す", async ({ page }) => {
+  await page.goto("/");
+  await enterApp(page);
+  const box = page.getByPlaceholder(/メッセージ…$/);
+  await box.fill("タスクを3つ追加して");
+  await box.press("Enter");
+  // 画面は開かない（会話のまま）・カードも出ない
+  await expect(page.locator("[data-panel]")).toHaveCount(0);
+  await expect(page.locator("[data-action-card]")).toHaveCount(0);
+  await expect(page.getByText("タスクを3つ追加して")).toBeVisible();
+});
+
+test("「Gmail とつないで」で、連携の画面がその場で開き、会話にカードが残る", async ({ page }) => {
+  await page.goto("/");
+  await enterApp(page);
+  const box = page.getByPlaceholder(/メッセージ…$/);
+  await box.fill("Gmailとつないで");
+  await box.press("Enter");
+  // 接続なしでは「繋がってから使えます」と言う（詳細が開くのは tests/linked/connect.spec.ts）
+  await expect(page.getByRole("region", { name: "連携" })).toBeVisible({ timeout: 5_000 });
+  await page.getByRole("button", { name: /会話に戻る/ }).click();
+  const card = page.locator('[data-action-card="google"]');
+  await expect(card).toContainText("Google");
+  await expect(card.getByRole("button", { name: "つなぐ" })).toBeVisible();
 });
 
 /* ── CODE deep mode + AI provider settings (ui-r21) ── */
@@ -1415,14 +1473,16 @@ test("INCOME: queue has a manual refresh button", async ({ page }) => {
   await expect(page.getByRole("button", { name: /Refresh jobs/i })).toBeVisible({ timeout: 5_000 });
 });
 
-test("Active mode persists across reload", async ({ page }) => {
+test("開き直すと会話から始まる（開いていた画面は残さない）", async ({ page }) => {
   await page.goto("/");
   await enterApp(page);
   await goMode(page, "TASKS");
   await expect(page.getByText("NEW TASK")).toBeVisible({ timeout: 5_000 });
   await page.reload();
   await enterApp(page);
-  await expect(page.getByText("NEW TASK")).toBeVisible({ timeout: 8_000 });
+  // 画面は会話の上の一時的な物。開き直して「会話に戻る」から始まると迷うので、会話から
+  await expect(page.getByPlaceholder(/メッセージ…$/)).toBeVisible({ timeout: 8_000 });
+  await expect(page.getByText("NEW TASK")).toHaveCount(0);
 });
 
 test("No JavaScript errors navigating all modes", async ({ page }) => {
