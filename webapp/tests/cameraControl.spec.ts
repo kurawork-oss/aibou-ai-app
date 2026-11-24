@@ -15,7 +15,8 @@
 import { test, expect, type Page } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
-import { MODEL_BASE } from "../src/lib/vision";
+import ts from "typescript";
+import { enterApp, liveTracks, serveModels, trackStreams } from "./cameraHelpers";
 
 const FAKE_CAMERA = [
   "--use-fake-ui-for-media-stream",
@@ -31,54 +32,6 @@ test.use({
   }, { scope: "worker" }],
   permissions: ["camera"],
 });
-
-const MODELS_DIR = path.join(__dirname, "../node_modules/@vladmandic/human/models");
-
-async function serveModels(page: Page) {
-  await page.route(`${MODEL_BASE}**`, async (route) => {
-    const name = new URL(route.request().url()).pathname.split("/").pop() ?? "";
-    const file = path.join(MODELS_DIR, name);
-    if (!name || !fs.existsSync(file)) return route.fulfill({ status: 404, body: "" });
-    await route.fulfill({
-      status: 200,
-      body: fs.readFileSync(file),
-      contentType: name.endsWith(".json") ? "application/json" : "application/octet-stream",
-    });
-  });
-}
-
-/** 開いたカメラを覚えておく（止めたあと、本当に消えたかを見るため）。テストの中だけの仕掛け。 */
-async function trackStreams(page: Page) {
-  await page.addInitScript(() => {
-    const md = navigator.mediaDevices;
-    if (!md?.getUserMedia) return;
-    const orig = md.getUserMedia.bind(md);
-    (window as unknown as { __streams: MediaStream[] }).__streams = [];
-    md.getUserMedia = async (c?: MediaStreamConstraints) => {
-      const s = await orig(c);
-      (window as unknown as { __streams: MediaStream[] }).__streams.push(s);
-      return s;
-    };
-  });
-}
-
-const liveTracks = (page: Page) => page.evaluate(() =>
-  ((window as unknown as { __streams?: MediaStream[] }).__streams ?? [])
-    .flatMap((s) => s.getTracks()).filter((t) => t.readyState === "live").length);
-
-async function enterApp(page: Page) {
-  await page.goto("/");
-  await page.waitForSelector("text=ENTER", { timeout: 10_000 });
-  await page.click("text=ENTER");
-  const offlineBtn = page.getByText("ENTER OFFLINE");
-  const hud = page.locator('nav[aria-label="Mobile navigation"], nav[aria-label="画面の切り替え"]')
-    .getByRole("button", { name: "管理", exact: true }).first();
-  await Promise.race([
-    offlineBtn.waitFor({ timeout: 8_000 }).then(() => offlineBtn.click()).catch(() => {}),
-    hud.waitFor({ timeout: 10_000 }),
-  ]);
-  await hud.waitFor({ timeout: 10_000 });
-}
 
 const panel = (page: Page) => page.getByRole("complementary", { name: "カメラ操作" });
 
@@ -96,6 +49,9 @@ test("広い画面: 上のボタンで始めると、カメラが開いて認識
   // 偽のカメラには手が映らないので、ここまで来れば「読み込み → 回っている」
   await expect(panel(page).locator("[data-camera-status]"))
     .toHaveText("手を映してください", { timeout: 90_000 });
+  // 次にすることを言う
+  await expect(panel(page).locator("[data-camera-hint]"))
+    .toHaveText("手のひらをカメラに向けて、顔の横くらいまで上げてください。");
   expect(await liveTracks(page)).toBe(1);
 
   // 映像が実際に流れている（止まった絵ではない）
@@ -216,4 +172,183 @@ test("承認のボタンには、手で押させない印が付いている", ()
     ["Income.tsx", /data-gesture-block\s*\n\s*onClick=\{\(\) => onAct\(job\.id!, "approve"\)\}/],
   ];
   for (const [file, re] of cases) expect(read(file), file).toMatch(re);
+});
+
+/* ── 2巡目: はじめての練習・押し方と速さ ───────────────────────── */
+
+const practice = (page: Page) => page.getByRole("dialog", { name: "カメラ操作の練習" });
+
+test("はじめて始めると練習が出る。スキップすれば次からは出ない", async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await serveModels(page);
+  await enterApp(page);
+  await page.getByRole("button", { name: "カメラで操作（顔と手）" }).click();
+  await expect(practice(page)).toBeVisible({ timeout: 90_000 });
+  await expect(practice(page).locator("[data-practice-step]")).toHaveAttribute("data-practice-step", "hand");
+  await expect(practice(page)).toContainText("手のひらをカメラに向けて");
+  await practice(page).getByRole("button", { name: "スキップ" }).click();
+  await expect(practice(page)).toHaveCount(0);
+
+  // 止めて、もう一度始める → 練習は出ない
+  await panel(page).getByRole("button", { name: "カメラ操作を止める" }).click();
+  await page.getByRole("button", { name: "カメラで操作（顔と手）" }).click();
+  await expect(panel(page).locator("[data-camera-status]")).toHaveText("手を映してください", { timeout: 90_000 });
+  await expect(practice(page)).toHaveCount(0);
+
+  // 「？」から、練習をもう一度
+  await panel(page).getByRole("button", { name: "手の形の一覧" }).click();
+  await expect(panel(page).getByRole("list", { name: "手の形と動き" })).toContainText("1秒止める");
+  await panel(page).getByRole("button", { name: "練習をもう一度" }).click();
+  await expect(practice(page)).toBeVisible();
+  await panel(page).getByRole("button", { name: "カメラ操作を止める" }).click();
+});
+
+test("設定: 押し方と速さを選べて、覚えている", async ({ page }) => {
+  await enterApp(page);
+  await page.getByLabel("Settings").click();
+  const section = page.getByRole("region", { name: "カメラで操作" });
+  const how = section.getByRole("radiogroup", { name: "押し方" });
+  const speed = section.getByRole("radiogroup", { name: "カーソルの速さ" });
+  await expect(how.getByRole("radio", { name: "両方" })).toHaveAttribute("aria-checked", "true");
+  await how.getByRole("radio", { name: "止めるだけ" }).click();
+  await speed.getByRole("radio", { name: "はやい" }).click();
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("forge_camera_prefs") || "{}"));
+  expect(saved.clickMode).toBe("dwell");
+  expect(saved.speed).toBe("fast");
+  await page.reload();
+  await enterApp(page);
+  await page.getByLabel("Settings").click();
+  await expect(page.getByRole("region", { name: "カメラで操作" }).getByRole("radiogroup", { name: "押し方" })
+    .getByRole("radio", { name: "止めるだけ" })).toHaveAttribute("aria-checked", "true");
+});
+
+/* ── カーソルが押す物を決める所（lib/pointerDom.ts）を、本物のブラウザで ── */
+
+/** pointerDom.ts を、そのままページに読み込める形にする（import の無い1ファイル）。 */
+function pointerDomScript(): string {
+  const src = fs.readFileSync(path.join(__dirname, "../src/lib/pointerDom.ts"), "utf8");
+  const js = ts.transpileModule(src, { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ESNext } }).outputText;
+  return `(() => { ${js.replace(/^export /gm, "")}
+    window.__pd = { findTarget, pressAt, pressElement }; })();`;
+}
+
+async function pointerPage(page: Page) {
+  await page.setViewportSize({ width: 800, height: 600 });
+  await page.setContent(`
+    <style>body{margin:0} button{position:absolute;padding:0;border:0}</style>
+    <button id="small" style="left:100px;top:100px;width:20px;height:20px">✕</button>
+    <button id="big" style="left:300px;top:300px;width:200px;height:80px">大きい</button>
+    <button id="approve" data-gesture-block style="left:600px;top:100px;width:80px;height:30px">実行する</button>
+    <button id="off" disabled style="left:100px;top:400px;width:40px;height:40px">off</button>
+    <input id="text" style="position:absolute;left:600px;top:400px;width:120px;height:30px" />
+  `);
+  await page.addScriptTag({ content: pointerDomScript() });
+  await page.evaluate(() => {
+    const w = window as unknown as { __log: string[] };
+    w.__log = [];
+    for (const id of ["small", "big", "approve", "text"]) {
+      for (const ev of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"]) {
+        document.getElementById(id)!.addEventListener(ev, () => w.__log.push(`${id}:${ev}`));
+      }
+    }
+  });
+}
+
+type PD = { findTarget: (x: number, y: number) => null | { el: HTMLElement; x: number; y: number; snapped: boolean; blocked: boolean } };
+
+test("小さなボタンのすぐ脇で止まっても、吸い付いて押せる", async ({ page }) => {
+  await pointerPage(page);
+  const r = await page.evaluate(() => {
+    const pd = (window as unknown as { __pd: PD }).__pd;
+    const near = pd.findTarget(140, 110); // ✕ の右端から20px
+    const on = pd.findTarget(110, 110);
+    const far = pd.findTarget(200, 200);
+    return {
+      near: near && { id: near.el.id, snapped: near.snapped, x: near.x, y: near.y },
+      on: on && { id: on.el.id, snapped: on.snapped },
+      far,
+    };
+  });
+  expect(r.near?.id).toBe("small");
+  expect(r.near?.snapped).toBe(true);
+  // 押すのはボタンの中
+  expect(r.near!.x).toBeLessThanOrEqual(120);
+  expect(r.near!.x).toBeGreaterThanOrEqual(100);
+  expect(r.on).toEqual({ id: "small", snapped: false });
+  expect(r.far).toBeNull();
+});
+
+test("大きなボタンは、カーソルの位置で押す（真ん中へ飛ばない）", async ({ page }) => {
+  await pointerPage(page);
+  const t = await page.evaluate(() => {
+    const x = (window as unknown as { __pd: PD }).__pd.findTarget(320, 310);
+    return x && { id: x.el.id, x: x.x, y: x.y };
+  });
+  expect(t).toEqual({ id: "big", x: 320, y: 310 });
+});
+
+test("押すときはマウスと同じ順に合図を出す。文字の欄なら入力できる状態にする", async ({ page }) => {
+  await pointerPage(page);
+  const log = await page.evaluate(() => {
+    const pd = (window as unknown as { __pd: { pressAt: (x: number, y: number) => unknown } }).__pd;
+    pd.pressAt(140, 110);
+    pd.pressAt(650, 415);
+    return { log: (window as unknown as { __log: string[] }).__log, focused: document.activeElement?.id };
+  });
+  expect(log.log.slice(0, 5)).toEqual(["small:pointerdown", "small:mousedown", "small:pointerup", "small:mouseup", "small:click"]);
+  expect(log.focused).toBe("text");
+});
+
+test("承認のボタンは、真上でも・吸い付きでも押さない。押せないボタンには吸い付かない", async ({ page }) => {
+  await pointerPage(page);
+  const r = await page.evaluate(() => {
+    const w = window as unknown as { __pd: PD & { pressAt: (x: number, y: number) => { done: boolean; why?: string } }; __log: string[] };
+    const direct = w.__pd.pressAt(640, 115);
+    const snapped = w.__pd.pressAt(700, 115);
+    const t = w.__pd.findTarget(640, 115);
+    const off = w.__pd.findTarget(120, 420);
+    return { direct, snapped, blocked: t?.blocked, off: off?.el.id ?? null, log: w.__log };
+  });
+  expect(r.direct.done).toBe(false);
+  expect(r.direct.why).toContain("手では押せません");
+  expect(r.snapped.done).toBe(false);
+  expect(r.blocked).toBe(true);
+  expect(r.log.filter((l) => l.startsWith("approve:"))).toEqual([]);
+  expect(r.off).toBeNull();
+});
+
+/* ── 3巡目: 手を2回たたいて始める・止める ────────────────────────── */
+
+test("パンパンを入れるとマイクで聞き始め、偽マイクのピッという音では動かない。切るとマイクが消える", async ({ page }) => {
+  test.setTimeout(60_000);
+  await serveModels(page);
+  await trackStreams(page);
+  await enterApp(page);
+  await page.getByLabel("Settings").click();
+  const section = page.getByRole("region", { name: "カメラで操作" });
+  const box = section.getByRole("checkbox", { name: /手を2回たたいて/ });
+  await box.scrollIntoViewIfNeeded();
+  await box.check();
+  await expect(section.locator("[data-clap-status]")).toHaveAttribute("data-clap-status", "listening", { timeout: 15_000 });
+  expect(await liveTracks(page)).toBe(1);
+  // Chrome の偽マイクは1秒ごとにピッと鳴る。4秒聞いても、カメラ操作は始まらない
+  await page.waitForTimeout(4000);
+  await expect(panel(page)).toHaveCount(0);
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("forge_camera_prefs") || "{}"));
+  expect(saved.clapToggle).toBe(true);
+
+  await box.uncheck();
+  await expect.poll(() => liveTracks(page)).toBe(0);
+  await expect(section.locator("[data-clap-status]")).toHaveCount(0);
+});
+
+test("パンパンは既定では切ってある（勝手にマイクを開かない）", async ({ page }) => {
+  await trackStreams(page);
+  await enterApp(page);
+  await page.waitForTimeout(1500);
+  expect(await liveTracks(page)).toBe(0);
+  await page.getByLabel("Settings").click();
+  await expect(page.getByRole("region", { name: "カメラで操作" })
+    .getByRole("checkbox", { name: /手を2回たたいて/ })).not.toBeChecked();
 });

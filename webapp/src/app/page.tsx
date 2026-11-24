@@ -83,6 +83,8 @@ const Vault = lazy(() => import("@/components/Vault"));
    lib/vision.ts が取りに行く。ここで運ぶのは画面の部品だけ。 */
 const CameraControl = lazy(() => import("@/components/CameraControl"));
 const CameraSettings = lazy(() => import("@/components/CameraSettings"));
+/* 「パンパン」で始める・止める耳。設定で入れたときだけ置く（マイクを開くので）。 */
+const ClapListener = lazy(() => import("@/components/ClapListener"));
 
 /**
  * 手が空いたら、先に運んでおく。
@@ -138,6 +140,7 @@ function usePrefetchScreens(ready: boolean): void {
       import("@/components/Vault"),
       import("@/components/CameraControl"),
       import("@/components/CameraSettings"),
+      import("@/components/ClapListener"),
       ]).catch(() => null);
     };
     const idle = (window as unknown as {
@@ -164,7 +167,7 @@ import { listVoices } from "@/lib/voice";
 import { supabase, supabaseEnabled } from "@/lib/supabase";
 import { APP_VERSION } from "@/lib/version";
 import {
-  startCameraControl, stopCameraControl, useCameraControlRunning,
+  startCameraControl, stopCameraControl, useCameraControlRunning, useClapToggleEnabled,
 } from "@/lib/cameraControl";
 
 /** 画面の一覧は shell.ts が持つ（2か所に書くと、片方だけ増えても気づけない）。 */
@@ -222,6 +225,8 @@ function Hud() {
   // カメラ操作モード（手と顔で動かす）。開き直したときに勝手に始めない
   // ——カメラは、押したときだけ点ける。
   const cameraOn = useCameraControlRunning();
+  // 手を2回たたいて始める・止める（入れた人だけ、マイクで聞く）
+  const clapOn = useClapToggleEnabled();
 
   /* ── 持ち主かどうか ───────────────────────────────────────────────
      持ち主専用モード（副業・自己進化）の表示を決める。分かるまでは隠す側に
@@ -594,13 +599,10 @@ function Hud() {
         )}
       </AnimatePresence>
 
-      {/* カメラ操作モード。どの画面の上にもかぶさり、ピース・指3本で
-          実行／管理を行き来する（下のナビと同じ行き先）。 */}
-      {cameraOn && (
-        <CameraControl
-          onCommand={(c) => setView((v) => (c === "run" ? (RUN_VIEW as View) : tabTarget("manage", v)))}
-        />
-      )}
+      {/* カメラ操作モード。どの画面の上にもかぶさる。画面の行き来は、
+          手のカーソルで下のナビを押す（覚える形を増やさない）。 */}
+      {cameraOn && <CameraControl />}
+      {clapOn && <ClapListener />}
 
       {/* 下のナビ（スマホ）。実行・管理・設定の3つだけ。 */}
       <MobileNav view={view} onChange={setView}

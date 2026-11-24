@@ -19,8 +19,8 @@ Framer Motion**.
   (browser TTS, with the API `/tts` route as a fallback).
 - **Vision** — attach an image and the core analyzes it via `/vision`.
 - **Camera control (hands + face)** — operate the app with hand gestures through
-  the PC camera (point = cursor, pinch = click, fist = scroll, held poses =
-  switch / close / pause). Optionally register your face so it only responds
+  the PC camera (move your hand = cursor, hold still 1s or pinch = click,
+  fist = scroll, held ✌ = close, held 👍 = pause), with a first-run practice. Optionally register your face so it only responds
   while you are in front of the camera. Runs entirely in the browser with
   [Human](https://github.com/vladmandic/human) (MIT); models (~15MB) load once
   from jsDelivr, or from `NEXT_PUBLIC_VISION_MODEL_URL` if you self-host them.
