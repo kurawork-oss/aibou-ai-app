@@ -12,14 +12,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   cameraAvailability, cameraErrorMessage, clearFaceProfile, DEFAULT_CAMERA_PREFS,
-  readCameraPrefs, readFaceProfile, startCameraControl, stopCameraControl,
+  readCameraPrefs, readFaceProfile, resetTutorial, startCameraControl, stopCameraControl,
   subscribeCameraStore, useCameraControlRunning, writeCameraPrefs, writeFaceProfile,
   type CameraPrefs,
 } from "@/lib/cameraControl";
 import {
   bestSimilarity, ENROLL_SAMPLES, isFrontal, samplesConsistent, STRICTNESS, type Strictness,
 } from "@/lib/faceMatch";
-import { GESTURE_HELP } from "@/lib/handGesture";
+import { CLICK_MODES, GESTURE_HELP, SPEEDS, type ClickMode, type Speed } from "@/lib/handGesture";
 import { attachStream, detect, loadVision, MODEL_DOWNLOAD_MB, openCamera, stopStream } from "@/lib/vision";
 
 type Session = "idle" | "enroll" | "test";
@@ -82,6 +82,36 @@ export default function CameraSettings({ onStart }: { onStart?: () => void }) {
         </p>
       )}
 
+      <div className="mt-3 space-y-3">
+        <Choice
+          label="押し方"
+          value={prefs.clickMode}
+          options={(Object.keys(CLICK_MODES) as ClickMode[]).map((k) => ({ value: k, label: CLICK_MODES[k].label }))}
+          onChange={(v) => update({ clickMode: v })}
+          note="「両方」なら、ボタンの上で1秒止めても、つまんでも押せます。つまむのが難しければ「止めるだけ」に。"
+        />
+        <Choice
+          label="カーソルの速さ"
+          value={prefs.speed}
+          options={(Object.keys(SPEEDS) as Speed[]).map((k) => ({ value: k, label: SPEEDS[k].label }))}
+          onChange={(v) => update({ speed: v })}
+          note="画面の端まで届かないなら「はやい」、行き過ぎるなら「ゆっくり」に。"
+        />
+        <button
+          type="button"
+          disabled={!canUse}
+          onClick={() => {
+            resetTutorial();
+            if (running) stopCameraControl();
+            startCameraControl();
+            onStart?.();
+          }}
+          className="w-full rounded-forge border border-panel py-2 text-[11px] text-fg-strong disabled:opacity-40"
+        >
+          練習しながら始める（手を映す → 合わせる → 押す → スクロール → 閉じる）
+        </button>
+      </div>
+
       <details className="mt-2">
         <summary className="cursor-pointer text-[11px] text-muted">手の形と動き</summary>
         <ul className="mt-1.5 space-y-1" aria-label="手の形と動き">
@@ -95,6 +125,7 @@ export default function CameraSettings({ onStart }: { onStart?: () => void }) {
         <p className="mt-1.5 text-[11px] leading-relaxed text-muted">
           文字は打てないので、会話の🎤（声で入力）と組み合わせてください。
           カメラから50cm〜1mほど離れ、手のひらをカメラに向けると読み取りやすくなります。
+          画面の行き来は、カーソルで下（または上）のボタンを押します。
         </p>
       </details>
 
@@ -115,20 +146,12 @@ export default function CameraSettings({ onStart }: { onStart?: () => void }) {
 
         <div>
           <div className="mb-1 text-[11px] text-muted">本人と判定する厳しさ</div>
-          <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label="本人と判定する厳しさ">
-            {(Object.keys(STRICTNESS) as Strictness[]).map((k) => (
-              <button key={k} type="button" role="radio" aria-checked={prefs.strictness === k}
-                onClick={() => update({ strictness: k })}
-                className="rounded-forge border px-2 py-1.5 text-[11px] transition"
-                style={{
-                  borderColor: prefs.strictness === k ? "var(--accent)" : "var(--panel-bd)",
-                  background: prefs.strictness === k ? "var(--btn-bg)" : "transparent",
-                  color: prefs.strictness === k ? "var(--fg-strong)" : "var(--muted)",
-                }}>
-                {STRICTNESS[k].label}
-              </button>
-            ))}
-          </div>
+          <Segments
+            label="本人と判定する厳しさ"
+            value={prefs.strictness}
+            options={(Object.keys(STRICTNESS) as Strictness[]).map((k) => ({ value: k, label: STRICTNESS[k].label }))}
+            onChange={(v) => update({ strictness: v })}
+          />
           <p className="mt-1 text-[11px] leading-relaxed text-muted">
             本人なのに止まるなら「ゆるめ」に。「確かめる」で実際の値が見られます。
           </p>
@@ -169,6 +192,40 @@ export default function CameraSettings({ onStart }: { onStart?: () => void }) {
         <li>承認のボタン（「実行する」「承認して実行」「いつも許可」など）は、誤って通さないよう手では押せません。</li>
       </ul>
     </section>
+  );
+}
+
+/** 3つから1つ選ぶ（押し方・速さ・厳しさ）。 */
+function Segments<T extends string>({ label, value, options, onChange }: {
+  label: string; value: T; options: { value: T; label: string }[]; onChange: (v: T) => void;
+}) {
+  return (
+    <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label={label}>
+      {options.map((o) => (
+        <button key={o.value} type="button" role="radio" aria-checked={value === o.value}
+          onClick={() => onChange(o.value)}
+          className="rounded-forge border px-2 py-1.5 text-[11px] transition"
+          style={{
+            borderColor: value === o.value ? "var(--accent)" : "var(--panel-bd)",
+            background: value === o.value ? "var(--btn-bg)" : "transparent",
+            color: value === o.value ? "var(--fg-strong)" : "var(--muted)",
+          }}>
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function Choice<T extends string>({ label, value, options, onChange, note }: {
+  label: string; value: T; options: { value: T; label: string }[]; onChange: (v: T) => void; note?: string;
+}) {
+  return (
+    <div>
+      <div className="mb-1 text-[11px] text-muted">{label}</div>
+      <Segments label={label} value={value} options={options} onChange={onChange} />
+      {note && <p className="mt-1 text-[11px] leading-relaxed text-muted">{note}</p>}
+    </div>
   );
 }
 

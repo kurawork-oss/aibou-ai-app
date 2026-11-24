@@ -12,7 +12,10 @@ import {
   bestSimilarity, decodeDescriptor, encodeDescriptor, FaceGate, faceSimilarity,
   isFrontal, samplesConsistent, STRICTNESS,
 } from "../src/lib/faceMatch";
-import { cameraErrorMessage, DEFAULT_CAMERA_PREFS, readCameraPrefs } from "../src/lib/cameraControl";
+import {
+  cameraErrorMessage, CLICK_MODE_KEYS, DEFAULT_CAMERA_PREFS, readCameraPrefs, SPEED_KEYS,
+} from "../src/lib/cameraControl";
+import { CLICK_MODES, SPEEDS } from "../src/lib/handGesture";
 import { HUMAN_VERSION, MODEL_BASE } from "../src/lib/vision";
 
 const N = 1024;
@@ -122,4 +125,12 @@ test("カメラを開けなかった理由を、次にすることの形で言�
   expect(cameraErrorMessage({ name: "NotFoundError" })).toContain("見つかりません");
   expect(cameraErrorMessage({ name: "NotReadableError" })).toContain("ほかのアプリ");
   expect(cameraErrorMessage(null)).toContain("開けませんでした");
+});
+
+test("設定の選びどころが、手の操作の側と同じ（押し方・速さ）", () => {
+  expect([...CLICK_MODE_KEYS].sort()).toEqual(Object.keys(CLICK_MODES).sort());
+  expect([...SPEED_KEYS].sort()).toEqual(Object.keys(SPEEDS).sort());
+  // 既定は「どちらでも押せる」「ふつう」
+  expect(DEFAULT_CAMERA_PREFS.clickMode).toBe("both");
+  expect(DEFAULT_CAMERA_PREFS.speed).toBe("normal");
 });

@@ -5,4 +5,4 @@
  * glance whether the live site is serving the latest deployment (vs. a cached
  * old build or a stale immutable deployment URL).
  */
-export const APP_VERSION = "2026.11.23 · ui-r124 CAMERA";
+export const APP_VERSION = "2026.11.24 · ui-r125 CAMERA-2";

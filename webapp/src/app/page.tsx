@@ -594,13 +594,9 @@ function Hud() {
         )}
       </AnimatePresence>
 
-      {/* カメラ操作モード。どの画面の上にもかぶさり、ピース・指3本で
-          実行／管理を行き来する（下のナビと同じ行き先）。 */}
-      {cameraOn && (
-        <CameraControl
-          onCommand={(c) => setView((v) => (c === "run" ? (RUN_VIEW as View) : tabTarget("manage", v)))}
-        />
-      )}
+      {/* カメラ操作モード。どの画面の上にもかぶさる。画面の行き来は、
+          手のカーソルで下のナビを押す（覚える形を増やさない）。 */}
+      {cameraOn && <CameraControl />}
 
       {/* 下のナビ（スマホ）。実行・管理・設定の3つだけ。 */}
       <MobileNav view={view} onChange={setView}

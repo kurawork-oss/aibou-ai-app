@@ -18,9 +18,12 @@ import { useSyncExternalStore } from "react";
 import {
   decodeDescriptor, encodeDescriptor, isStrictness, type Strictness,
 } from "@/lib/faceMatch";
+// 型だけ借りる（handGesture の本体を最初の画面の荷物に入れない）
+import type { ClickMode, Speed } from "@/lib/handGesture";
 
 const LS_PREFS = "forge_camera_prefs";
 const LS_FACE = "forge_camera_face";
+const LS_TUTORIAL = "forge_camera_tutorial_done";
 
 export interface CameraPrefs {
   /** 顔を登録してあるとき、本人が映っている間だけ手で操作できる。 */
@@ -30,6 +33,10 @@ export interface CameraPrefs {
   antiSpoof: boolean;
   /** 右の小窓にカメラの映像を出す。 */
   preview: boolean;
+  /** 押し方（つまむ・止める・両方）。 */
+  clickMode: ClickMode;
+  /** カーソルの速さ（手の小さな動きで、どれだけ動くか）。 */
+  speed: Speed;
 }
 
 export const DEFAULT_CAMERA_PREFS: CameraPrefs = {
@@ -37,7 +44,15 @@ export const DEFAULT_CAMERA_PREFS: CameraPrefs = {
   strictness: "normal",
   antiSpoof: false,
   preview: true,
+  clickMode: "both",
+  speed: "normal",
 };
+
+/** handGesture.ts の CLICK_MODES・SPEEDS と同じ並び（テストが見張る）。 */
+export const CLICK_MODE_KEYS: readonly ClickMode[] = ["both", "pinch", "dwell"];
+export const SPEED_KEYS: readonly Speed[] = ["slow", "normal", "fast"];
+const isClickMode = (v: unknown): v is ClickMode => CLICK_MODE_KEYS.includes(v as ClickMode);
+const isSpeed = (v: unknown): v is Speed => SPEED_KEYS.includes(v as Speed);
 
 export function readCameraPrefs(): CameraPrefs {
   try {
@@ -47,6 +62,8 @@ export function readCameraPrefs(): CameraPrefs {
       strictness: isStrictness(raw.strictness) ? raw.strictness : DEFAULT_CAMERA_PREFS.strictness,
       antiSpoof: typeof raw.antiSpoof === "boolean" ? raw.antiSpoof : DEFAULT_CAMERA_PREFS.antiSpoof,
       preview: typeof raw.preview === "boolean" ? raw.preview : DEFAULT_CAMERA_PREFS.preview,
+      clickMode: isClickMode(raw.clickMode) ? raw.clickMode : DEFAULT_CAMERA_PREFS.clickMode,
+      speed: isSpeed(raw.speed) ? raw.speed : DEFAULT_CAMERA_PREFS.speed,
     };
   } catch {
     return { ...DEFAULT_CAMERA_PREFS };
@@ -56,6 +73,21 @@ export function readCameraPrefs(): CameraPrefs {
 export function writeCameraPrefs(p: CameraPrefs): void {
   try { localStorage.setItem(LS_PREFS, JSON.stringify(p)); } catch { /* 保存できない端末では、その場だけ効く */ }
   emit();
+}
+
+/* ── はじめての練習（済んだかどうかだけ覚える） ─────────────────── */
+
+export function tutorialDone(): boolean {
+  try { return localStorage.getItem(LS_TUTORIAL) === "1"; } catch { return true; }
+}
+
+export function markTutorialDone(): void {
+  try { localStorage.setItem(LS_TUTORIAL, "1"); } catch { /* ignore */ }
+}
+
+/** 次に始めたとき、練習をもう一度出す。 */
+export function resetTutorial(): void {
+  try { localStorage.removeItem(LS_TUTORIAL); } catch { /* ignore */ }
 }
 
 interface StoredFace { v: 1; at: number; samples: string[] }
