@@ -13,8 +13,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   cameraAvailability, cameraErrorMessage, clearFaceProfile, DEFAULT_CAMERA_PREFS,
   readCameraPrefs, readFaceProfile, resetTutorial, startCameraControl, stopCameraControl,
-  subscribeCameraStore, useCameraControlRunning, writeCameraPrefs, writeFaceProfile,
-  type CameraPrefs,
+  subscribeCameraStore, useCameraControlRunning, useClapStatus, writeCameraPrefs, writeFaceProfile,
+  type CameraPrefs, type ClapStatus,
 } from "@/lib/cameraControl";
 import {
   bestSimilarity, ENROLL_SAMPLES, isFrontal, samplesConsistent, STRICTNESS, type Strictness,
@@ -81,6 +81,20 @@ export default function CameraSettings({ onStart }: { onStart?: () => void }) {
           顔を登録していないので、いまは誰の手でも動きます。下で登録できます。
         </p>
       )}
+
+      <label className="mt-3 flex cursor-pointer items-start gap-2">
+        <input type="checkbox" checked={prefs.clapToggle} disabled={!canUse}
+          onChange={(e) => update({ clapToggle: e.target.checked })}
+          className="mt-0.5 accent-[var(--accent)]" />
+        <span className="text-[12px] leading-relaxed text-fg">
+          👏 手を2回たたいて（パンパン）始める・止める
+          <span className="block text-[11px] text-muted">
+            オンの間は、このアプリを開いているあいだマイクで手をたたく音だけを聞き分けます。
+            音は保存も送信もしません。机をたたく音などで動くことがあります。
+          </span>
+        </span>
+      </label>
+      {prefs.clapToggle && <ClapStatusLine />}
 
       <div className="mt-3 space-y-3">
         <Choice
@@ -192,6 +206,31 @@ export default function CameraSettings({ onStart }: { onStart?: () => void }) {
         <li>承認のボタン（「実行する」「承認して実行」「いつも許可」など）は、誤って通さないよう手では押せません。</li>
       </ul>
     </section>
+  );
+}
+
+/** 「パンパン」の耳がいまどうしているか。たたいたら、その場で「聞こえた」と言う。 */
+function ClapStatusLine() {
+  const st: ClapStatus = useClapStatus();
+  const [fresh, setFresh] = useState(false);
+  const lastClapAt = st.state === "listening" ? st.lastClapAt : null;
+  useEffect(() => {
+    if (!lastClapAt) return;
+    setFresh(true);
+    const t = setTimeout(() => setFresh(false), 1800);
+    return () => clearTimeout(t);
+  }, [lastClapAt]);
+  const text = st.state === "starting" ? "マイクを準備しています…"
+    : st.state === "error" ? st.message
+      : st.state === "listening"
+        ? (fresh ? "👏 パン！ 聞こえました（続けてもう1回で動きます）" : "聞いています。パンパンとたたいてください。")
+        : "";
+  if (!text) return null;
+  return (
+    <p className="mt-1 pl-6 text-[11px] leading-relaxed" role="status" data-clap-status={st.state}
+       style={{ color: st.state === "error" ? "#ffb347" : fresh ? "var(--accent)" : "var(--muted)" }}>
+      {text}
+    </p>
   );
 }
 

@@ -448,6 +448,12 @@ export default function CameraControl() {
                   </li>
                 ))}
             </ul>
+            {prefs.clapToggle && (
+              <p className="mt-1.5 flex gap-1.5 text-[11px] leading-snug">
+                <span className="w-4 shrink-0 text-center" aria-hidden>👏</span>
+                <span className="text-muted">手を2回たたく → <span className="text-fg">止める／始める</span></span>
+              </p>
+            )}
             <p className="mt-1.5 text-[10px] leading-snug text-muted">承認のボタンは手では押せません（マウスか指で）。</p>
             <button type="button" onClick={() => { setStep(0); setHelpOpen(false); }}
               className="mt-2 w-full rounded-forge border border-[var(--line)] bg-[var(--btn-bg)] py-1.5 text-[11px] text-fg-strong">

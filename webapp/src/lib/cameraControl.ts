@@ -37,6 +37,8 @@ export interface CameraPrefs {
   clickMode: ClickMode;
   /** カーソルの速さ（手の小さな動きで、どれだけ動くか）。 */
   speed: Speed;
+  /** 手を2回たたいて（パンパン）始める・止める。マイクを使うので、既定は切る。 */
+  clapToggle: boolean;
 }
 
 export const DEFAULT_CAMERA_PREFS: CameraPrefs = {
@@ -46,6 +48,7 @@ export const DEFAULT_CAMERA_PREFS: CameraPrefs = {
   preview: true,
   clickMode: "both",
   speed: "normal",
+  clapToggle: false,
 };
 
 /** handGesture.ts の CLICK_MODES・SPEEDS と同じ並び（テストが見張る）。 */
@@ -64,6 +67,7 @@ export function readCameraPrefs(): CameraPrefs {
       preview: typeof raw.preview === "boolean" ? raw.preview : DEFAULT_CAMERA_PREFS.preview,
       clickMode: isClickMode(raw.clickMode) ? raw.clickMode : DEFAULT_CAMERA_PREFS.clickMode,
       speed: isSpeed(raw.speed) ? raw.speed : DEFAULT_CAMERA_PREFS.speed,
+      clapToggle: typeof raw.clapToggle === "boolean" ? raw.clapToggle : DEFAULT_CAMERA_PREFS.clapToggle,
     };
   } catch {
     return { ...DEFAULT_CAMERA_PREFS };
@@ -140,6 +144,53 @@ export function stopCameraControl(): void { if (running) { running = false; emit
 /** いまカメラ操作モードが動いているか（画面の再描画つき）。 */
 export function useCameraControlRunning(): boolean {
   return useSyncExternalStore(subscribe, isCameraControlRunning, () => false);
+}
+
+/* ── 手をたたいて始める・止める（マイクの耳） ────────────────────
+ * 耳そのものは components/ClapListener.tsx。ここは「入っているか」と
+ * 「いまどうしているか」を、設定の画面と分け合うだけ。 */
+
+/** 「パンパンで始める・止める」が入っているか（画面の再描画つき）。 */
+export function useClapToggleEnabled(): boolean {
+  return useSyncExternalStore(subscribe, () => readCameraPrefs().clapToggle, () => false);
+}
+
+export type ClapStatus =
+  | { state: "off" }
+  | { state: "starting" }
+  | { state: "listening"; lastClapAt: number | null }
+  | { state: "error"; message: string };
+
+const CLAP_OFF: ClapStatus = { state: "off" };
+let clapStatus: ClapStatus = CLAP_OFF;
+export function getClapStatus(): ClapStatus { return clapStatus; }
+export function setClapStatus(s: ClapStatus): void { clapStatus = s; emit(); }
+export function useClapStatus(): ClapStatus {
+  return useSyncExternalStore(subscribe, getClapStatus, () => CLAP_OFF);
+}
+
+/** パンパンが聞こえたとき: 止まっていれば始め、動いていれば止める。 */
+export function toggleCameraControl(): boolean {
+  if (running) stopCameraControl(); else startCameraControl();
+  return running;
+}
+
+/** マイクを開けなかった理由を、次に何をすればいいかの形で返す。 */
+export function micErrorMessage(err: unknown): string {
+  const name = (err as { name?: string } | null)?.name ?? "";
+  switch (name) {
+    case "NotAllowedError":
+    case "SecurityError":
+      return "マイクの使用が許可されていません。アドレス欄の左の印からマイクを「許可」にしてください。";
+    case "NotFoundError":
+    case "OverconstrainedError":
+      return "マイクが見つかりません。パソコンにマイクが付いているか・つないであるかを確かめてください。";
+    case "NotReadableError":
+    case "AbortError":
+      return "マイクを開けませんでした。ほかのアプリ（会議アプリなど）がマイクを使っていないか確かめてください。";
+    default:
+      return `マイクを開けませんでした（${name || "原因不明"}）。`;
+  }
 }
 
 /** 設定や登録が変わったら描き直したい所が使う。 */

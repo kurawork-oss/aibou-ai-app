@@ -16,7 +16,7 @@ import { test, expect, type Page } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
-import { MODEL_BASE } from "../src/lib/vision";
+import { enterApp, liveTracks, serveModels, trackStreams } from "./cameraHelpers";
 
 const FAKE_CAMERA = [
   "--use-fake-ui-for-media-stream",
@@ -32,54 +32,6 @@ test.use({
   }, { scope: "worker" }],
   permissions: ["camera"],
 });
-
-const MODELS_DIR = path.join(__dirname, "../node_modules/@vladmandic/human/models");
-
-async function serveModels(page: Page) {
-  await page.route(`${MODEL_BASE}**`, async (route) => {
-    const name = new URL(route.request().url()).pathname.split("/").pop() ?? "";
-    const file = path.join(MODELS_DIR, name);
-    if (!name || !fs.existsSync(file)) return route.fulfill({ status: 404, body: "" });
-    await route.fulfill({
-      status: 200,
-      body: fs.readFileSync(file),
-      contentType: name.endsWith(".json") ? "application/json" : "application/octet-stream",
-    });
-  });
-}
-
-/** 開いたカメラを覚えておく（止めたあと、本当に消えたかを見るため）。テストの中だけの仕掛け。 */
-async function trackStreams(page: Page) {
-  await page.addInitScript(() => {
-    const md = navigator.mediaDevices;
-    if (!md?.getUserMedia) return;
-    const orig = md.getUserMedia.bind(md);
-    (window as unknown as { __streams: MediaStream[] }).__streams = [];
-    md.getUserMedia = async (c?: MediaStreamConstraints) => {
-      const s = await orig(c);
-      (window as unknown as { __streams: MediaStream[] }).__streams.push(s);
-      return s;
-    };
-  });
-}
-
-const liveTracks = (page: Page) => page.evaluate(() =>
-  ((window as unknown as { __streams?: MediaStream[] }).__streams ?? [])
-    .flatMap((s) => s.getTracks()).filter((t) => t.readyState === "live").length);
-
-async function enterApp(page: Page) {
-  await page.goto("/");
-  await page.waitForSelector("text=ENTER", { timeout: 10_000 });
-  await page.click("text=ENTER");
-  const offlineBtn = page.getByText("ENTER OFFLINE");
-  const hud = page.locator('nav[aria-label="Mobile navigation"], nav[aria-label="画面の切り替え"]')
-    .getByRole("button", { name: "管理", exact: true }).first();
-  await Promise.race([
-    offlineBtn.waitFor({ timeout: 8_000 }).then(() => offlineBtn.click()).catch(() => {}),
-    hud.waitFor({ timeout: 10_000 }),
-  ]);
-  await hud.waitFor({ timeout: 10_000 });
-}
 
 const panel = (page: Page) => page.getByRole("complementary", { name: "カメラ操作" });
 
@@ -364,4 +316,39 @@ test("承認のボタンは、真上でも・吸い付きでも押さない。�
   expect(r.blocked).toBe(true);
   expect(r.log.filter((l) => l.startsWith("approve:"))).toEqual([]);
   expect(r.off).toBeNull();
+});
+
+/* ── 3巡目: 手を2回たたいて始める・止める ────────────────────────── */
+
+test("パンパンを入れるとマイクで聞き始め、偽マイクのピッという音では動かない。切るとマイクが消える", async ({ page }) => {
+  test.setTimeout(60_000);
+  await serveModels(page);
+  await trackStreams(page);
+  await enterApp(page);
+  await page.getByLabel("Settings").click();
+  const section = page.getByRole("region", { name: "カメラで操作" });
+  const box = section.getByRole("checkbox", { name: /手を2回たたいて/ });
+  await box.scrollIntoViewIfNeeded();
+  await box.check();
+  await expect(section.locator("[data-clap-status]")).toHaveAttribute("data-clap-status", "listening", { timeout: 15_000 });
+  expect(await liveTracks(page)).toBe(1);
+  // Chrome の偽マイクは1秒ごとにピッと鳴る。4秒聞いても、カメラ操作は始まらない
+  await page.waitForTimeout(4000);
+  await expect(panel(page)).toHaveCount(0);
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("forge_camera_prefs") || "{}"));
+  expect(saved.clapToggle).toBe(true);
+
+  await box.uncheck();
+  await expect.poll(() => liveTracks(page)).toBe(0);
+  await expect(section.locator("[data-clap-status]")).toHaveCount(0);
+});
+
+test("パンパンは既定では切ってある（勝手にマイクを開かない）", async ({ page }) => {
+  await trackStreams(page);
+  await enterApp(page);
+  await page.waitForTimeout(1500);
+  expect(await liveTracks(page)).toBe(0);
+  await page.getByLabel("Settings").click();
+  await expect(page.getByRole("region", { name: "カメラで操作" })
+    .getByRole("checkbox", { name: /手を2回たたいて/ })).not.toBeChecked();
 });
