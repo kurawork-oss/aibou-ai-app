@@ -28,7 +28,9 @@ export type ActionTarget =
   | { kind: "view"; view: ShellView }
   | { kind: "settings"; tab: SettingsTab }
   | { kind: "connect"; service: string }
-  | { kind: "camera" };
+  | { kind: "camera" }
+  /** ペットを選ぶ窓を開く（hide なら、その場で隠す）。lib/pets.ts */
+  | { kind: "pet"; hide?: boolean };
 
 export interface ChatAction {
   id: string;
@@ -94,6 +96,8 @@ export const ACTIONS: ChatAction[] = [
     keywords: ["カメラ", "カメラ操作", "ジェスチャー", "ハンドジェスチャー"], target: { kind: "camera" } },
   { id: "check", label: "しらべる", hint: "何が使えるか・うまく動かないとき", mark: "?", group: "set",
     keywords: ["しらべる", "診断", "調子"], target: { kind: "settings", tab: "check" } },
+  { id: "pet", label: "ペット", hint: "作業の様子を見せる相棒を選ぶ・隠す", mark: "♡", group: "set",
+    keywords: ["pet", "マスコット"], target: { kind: "pet" } },
   { id: "guide", label: "説明書", hint: "使い方", mark: "▢", group: "set",
     keywords: ["説明書", "使い方", "ヘルプ"], target: { kind: "view", view: "guide" } },
 ];
@@ -174,13 +178,17 @@ const OPEN = "(?:を|の画面を|画面を|の画面|画面|の設定を|設定
 const CHANGE = "(?:を|の設定を|の設定|設定を)?(?:変えて|かえて|変更して|変えたい|かえたい|設定して|直して|なおして|変える|いじりたい|調整して)";
 const CONNECT = "(?:と|に|を|の)?(?:連携を)?(?:つないで|繋いで|つなぎたい|繋ぎたい|つなげて|繋げて|つなぐ|繋ぐ|連携して|連携したい|連携|接続して|接続したい|使えるようにして)";
 const CAMERA_START = "(?:を|で)?(?:始めて|はじめて|開始して|オンにして|つけて|使いたい|起動して|操作したい)";
+const PET_PICK = "(?:を)?(?:選びたい|えらびたい|選んで|えらんで|選ぶ|えらぶ|選ばせて|えらばせて)";
+const PET_HIDE = "(?:を)?(?:隠して|かくして|消して|けして|しまって|非表示にして|オフにして|出さないで|ださないで)";
 
 // 頼み方の言葉も、入力と同じ形（ひらがな）にそろえてから比べる
 const re = (head: string, ...rest: string[]) => new RegExp(`^${head}${rest.map(normalize).join("")}`);
 
 export type Matched =
   | { kind: "action"; action: ChatAction }
-  | { kind: "connect"; service: string; label: string };
+  | { kind: "connect"; service: string; label: string }
+  /** 「ペット隠して」。選ぶ窓を出さずに、その場で隠す。 */
+  | { kind: "pet-hide"; action: ChatAction };
 
 /**
  * 短い頼みが「画面を開く・設定を変える・つなぐ」だけなら、それを返す。
@@ -209,6 +217,12 @@ export function matchAction(
         if (re(kw, CAMERA_START, TAIL).test(t)) return { kind: "action", action: a };
         continue;
       }
+      if (a.target.kind === "pet") {
+        if (re(kw, PET_HIDE, TAIL).test(t)) return { kind: "pet-hide", action: a };
+        if (re(kw, PET_PICK, TAIL).test(t) || re(kw, CHANGE, TAIL).test(t)) {
+          return { kind: "action", action: a };
+        }
+      }
       if (re(kw, OPEN, TAIL).test(t)) return { kind: "action", action: a };
       if (a.target.kind === "settings" && re(kw, CHANGE, TAIL).test(t)) {
         return { kind: "action", action: a };
@@ -225,5 +239,6 @@ export function actionVerb(target: ActionTarget): string {
     case "settings": return "設定を開く";
     case "connect": return "つなぐ";
     case "camera": return "始める";
+    case "pet": return "選ぶ";
   }
 }

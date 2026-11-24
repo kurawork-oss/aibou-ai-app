@@ -166,6 +166,8 @@ import {
   startCameraControl, stopCameraControl, useCameraControlRunning, useClapToggleEnabled,
 } from "@/lib/cameraControl";
 import { ACTIONS, type ActionTarget, type SettingsTab as ActionSettingsTab } from "@/lib/chatActions";
+import Pet, { PetPicker } from "@/components/Pet";
+import { PET_OFF, openPetPicker, usePetPickerOpen, writePet } from "@/lib/pets";
 
 /** 画面の一覧は shell.ts が持つ（2か所に書くと、片方だけ増えても気づけない）。 */
 type View = ShellView;
@@ -231,6 +233,7 @@ function Hud() {
   const cameraOn = useCameraControlRunning();
   // 手を2回たたいて始める・止める（入れた人だけ、マイクで聞く）
   const clapOn = useClapToggleEnabled();
+  const petPicker = usePetPickerOpen();
 
   /* ── 持ち主かどうか ───────────────────────────────────────────────
      持ち主専用モード（副業・自己進化）の表示を決める。分かるまでは隠す側に
@@ -323,6 +326,7 @@ function Hud() {
     else if (t.kind === "settings") { setSettingsTab(t.tab); setSettingsOpen(true); }
     else if (t.kind === "connect") { setConnectFocus(t.service); setView("extend"); }
     else if (t.kind === "camera") startCameraControl();
+    else if (t.kind === "pet") { if (t.hide) writePet(PET_OFF); else openPetPicker(); }
   }, []);
 
   // Persist the fullscreen (focus) preference.
@@ -561,7 +565,9 @@ function Hud() {
                 >
                   <span aria-hidden>←</span> 会話に戻る
                 </button>
-                <span className="truncate text-[13px] text-muted">{panelTitle(view)}</span>
+                <span className="min-w-0 flex-1 truncate text-[13px] text-muted">{panelTitle(view)}</span>
+                {/* 会話が隠れている間も、作業の様子が見えるように */}
+                <Pet state={coreState} placement="down" onShowChat={() => setView("chat")} onOpen={runAction} />
               </div>
               {/* 「この画面を使うには◯◯を設定してください」を、操作より先に出す。 */}
               {view !== "guide" && (
@@ -606,6 +612,7 @@ function Hud() {
               onAction={runAction}
               isOwner={isOwner}
               packs={packs}
+              petSlot={view === "chat" ? <Pet state={coreState} onOpen={runAction} /> : null}
             />
           )}
         </div>
@@ -631,6 +638,7 @@ function Hud() {
           手のカーソルで入力欄の「＋」を押す（覚える形を増やさない）。 */}
       {cameraOn && <CameraControl />}
       {clapOn && <ClapListener />}
+      {petPicker && <PetPicker />}
     </main>
   );
 }

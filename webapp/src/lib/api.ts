@@ -2152,6 +2152,21 @@ export async function autopilotList(): Promise<Mission[]> {
   return data.items ?? [];
 }
 
+/**
+ * 承認を待っている操作の数（ペットの「動いていること」に出す）。
+ * 読めなければ 0（繋がっていない人に、毎回エラーを見せない）。
+ */
+export async function approvalsWaiting(): Promise<number> {
+  if (!API_URL) return 0;
+  try {
+    const res = await fetch(`${API_URL}/approvals`, { headers: authHeaders(), cache: "no-store" });
+    const b = (await res.json().catch(() => null)) as { items?: unknown[] } | null;
+    return Array.isArray(b?.items) ? b!.items!.length : 0;
+  } catch {
+    return 0;
+  }
+}
+
 export async function autopilotCreate(goal: string, notify = true): Promise<Mission> {
   const res = await fetch(`${requireApiUrl()}/autopilot/missions`, {
     method: "POST",
