@@ -109,7 +109,9 @@ export default function ArtifactViewer({ meta, onClose }: { meta: ArtifactMeta; 
   const editDeck = (next: SlideDeck) => { setDeck(next); saveDeck(next); };
 
   useEffect(() => {
-    const onKey = (e: globalThis.KeyboardEvent) => { if (e.key === "Escape" && present === null) onClose(); };
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Escape" && present === null) { e.preventDefault(); onClose(); }
+    };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose, present]);
@@ -274,7 +276,7 @@ function PresentMode({ deck, theme, index, setIndex, onExit }: { deck: SlideDeck
   const next = () => setIndex((index + 1) % deck.slides.length);
   useEffect(() => {
     const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.key === "Escape") onExit();
+      if (e.key === "Escape") { e.preventDefault(); onExit(); }
       else if (e.key === "ArrowLeft") prev();
       else if (e.key === "ArrowRight" || e.key === " ") { e.preventDefault(); next(); }
     };

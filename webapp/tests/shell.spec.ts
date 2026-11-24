@@ -1,109 +1,112 @@
 /**
- * 画面を「実行 / 管理」の2つに畳んだ対応表の検証。
+ * 画面を「会話」1つにした対応表の検証（ui-r126）。
  *
  * ここで守りたいのは1点だけ。
  *
- *   **ナビが案内する数を減らしただけで、画面は1つも消していない。**
+ *   **入口を会話にまとめただけで、画面は1つも消していない。**
  *
- * 15タブを2タブにしたとき、いちばん起きやすい事故は「畳んだ拍子に
- * どこからも開けない画面ができる」こと。しかも壊れ方が静かで、
- * その画面を使わない人（＝作った本人）は気づかない。
- *
- * だから View の一覧と、ナビからたどれる先を突き合わせる。
- * 新しい画面を足して案内し忘れたら、ここで落ちる。
+ * ナビを無くしたとき、いちばん起きやすい事故は「どこからも開けない画面が
+ * できる」こと。しかも壊れ方が静かで、その画面を使わない人は気づかない。
+ * だから View の一覧と、会話の「できること」（lib/chatActions.ts）を
+ * 突き合わせる。新しい画面を足して載せ忘れたら、ここで落ちる。
  */
 
 import { test, expect } from "@playwright/test";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
-import {
-  MANAGE_SURFACES, MORE_SURFACES, OVERLAY_VIEWS, RUN_VIEW, TABS, VIEWS,
-  TODAY_WIDGETS, isView, surfaceOf, tabOf, type ShellView,
-} from "../src/lib/shell";
+import { OVERLAY_VIEWS, TODAY_WIDGETS, VIEWS, isView } from "../src/lib/shell";
+import { ACTIONS } from "../src/lib/chatActions";
 import { DEFAULT_ORDER, type WidgetId } from "../src/lib/homeLayout";
 
 const src = (p: string) => readFileSync(join(process.cwd(), "src", p), "utf8");
 const api = (p: string) => readFileSync(join(process.cwd(), "..", "api", p), "utf8");
+const viewTargets = ACTIONS.flatMap((a) => (a.target.kind === "view" ? [a.target.view] : []));
 
-test("ナビからたどれない画面が生まれていない", () => {
-  const reachable = new Set<string>([
-    RUN_VIEW,
-    ...MANAGE_SURFACES.map((s) => s.view),
-    ...MORE_SURFACES.map((s) => s.view),
-  ]);
+test("会話から呼べない画面が生まれていない", () => {
+  const reachable = new Set<string>(["chat", ...viewTargets]);
   const orphans = VIEWS.filter((v) => !reachable.has(v));
   expect(orphans, `どこからも開けない画面:\n${orphans.join(", ")}`).toEqual([]);
 });
 
 test("画面の一覧が1か所にしかない", () => {
-  // page.tsx が自前の並びを持ち直すと、片方だけ増えても型では気づけない。
-  // 実際それで「サーバーは案内するが、押しても開かない」画面が出た。
   expect(src("app/page.tsx")).not.toMatch(/type View =\s*"/);
   expect(src("app/page.tsx")).toContain("type View = ShellView");
 });
 
+test("行き先を選ばせるナビが、もう無い（入口は会話の「＋」1つ）", () => {
+  const page = src("app/page.tsx");
+  expect(page).not.toContain("function MobileNav");
+  expect(page).not.toContain("function ManageBar");
+  expect(page).not.toContain("function DesktopTabs");
+  expect(page).not.toMatch(/aria-label="画面の切り替え"/);
+});
+
 test("サーバーが案内する飛び先が、実在する画面である", () => {
-  // capabilities.py の "view" は画面側の名前をそのまま書いている。
-  // 実在しない名前でも例外にならず、押しても何も起きないだけなので、
-  // 気づかれずに残る（"files" が実際そうなっていた）。
-  const targets = [...api("capabilities.py").matchAll(/"view":\s*"([a-z]+)"/g)]
-    .map((m) => m[1]);
+  const targets = [...api("capabilities.py").matchAll(/"view":\s*"([a-z]+)"/g)].map((m) => m[1]);
   expect(targets.length, "capabilities.py の view が読めていない").toBeGreaterThan(3);
   const dead = [...new Set(targets)].filter((v) => !isView(v));
   expect(dead, `実在しない飛び先:\n${dead.join(", ")}`).toEqual([]);
 });
 
-test("下のナビは2タブ。実行は会話に行く", () => {
-  expect(TABS.map((t) => t.key)).toEqual(["run", "manage"]);
-  expect(RUN_VIEW).toBe("chat");
-  expect(tabOf("chat")).toBe("run");
-});
-
-test("会話以外はすべて管理タブに属する", () => {
-  // 「実行」に2つ以上入ると、話す場所が1つに決まらなくなる。
-  for (const v of VIEWS as readonly ShellView[]) {
-    if (v === RUN_VIEW) continue;
-    expect(tabOf(v), `${v} が実行タブに入っている`).toBe("manage");
-  }
-});
-
-test("管理タブの切り替えは、いま居る場所を指す", () => {
-  expect(surfaceOf("home")).toBe("today");
-  expect(surfaceOf("tasks")).toBe("tasks");
-  // 「もっと」の中の画面は、4つのどれでもない（null）。
-  // ここで嘘の場所を指すと、押していないタブが光る。
-  expect(surfaceOf("capture")).toBeNull();
-  expect(surfaceOf("chat")).toBeNull();
-});
-
-test("同じ画面が2か所に案内されていない", () => {
-  const all = [...MANAGE_SURFACES, ...MORE_SURFACES].map((s) => s.view);
-  expect(new Set(all).size, `重複:\n${all.join(", ")}`).toBe(all.length);
-  // 実行タブの会話が、管理の一覧にも顔を出していない
-  expect(all).not.toContain(RUN_VIEW);
+test("同じ画面が「できること」に2回載っていない・会話そのものは載っていない", () => {
+  expect(new Set(viewTargets).size, `重複:\n${viewTargets.join(", ")}`).toBe(viewTargets.length);
+  expect(viewTargets).not.toContain("chat");
 });
 
 test("「今日」に会話欄を置かない", () => {
-  // HOMEのエージェント欄と実行タブのチャットで、同じことを2か所で
-  // やっていた。会話は1つに寄せる。
   expect(TODAY_WIDGETS).not.toContain("agent" as WidgetId);
-  // 会話以外のウィジェットは全部載っている（畳んだ拍子に落ちていない）
-  expect(new Set(TODAY_WIDGETS)).toEqual(
-    new Set(DEFAULT_ORDER.filter((id) => id !== "agent")),
-  );
+  expect(new Set(TODAY_WIDGETS)).toEqual(new Set(DEFAULT_ORDER.filter((id) => id !== "agent")));
 });
 
-test("会話にかぶせて開く作業場は、管理からも開ける", () => {
-  // 実行タブから `#` で開ける重い画面（コード・ボード・つくる）は、
-  // `#` を知らない人のために管理側にも入口が要る。
-  const inManage = new Set([...MANAGE_SURFACES, ...MORE_SURFACES].map((s) => s.view));
-  for (const v of OVERLAY_VIEWS) {
-    expect(inManage.has(v), `${v} が管理からたどれない`).toBeTruthy();
-  }
+test("重い作業場（コード・ボード・つくる）も、会話から開ける", () => {
+  for (const v of OVERLAY_VIEWS) expect(viewTargets, `${v} が会話から開けない`).toContain(v);
 });
 
 test("持ち主だけの画面が、他の人に案内されない", () => {
-  // 副業（収益）は持ち主専用。ここが漏れると、他の人に押せない物が見える。
-  const income = MORE_SURFACES.find((m) => m.view === "income");
-  expect(income?.ownerOnly).toBeTruthy();
+  expect(ACTIONS.find((a) => a.target.kind === "view" && a.target.view === "income")?.ownerOnly).toBeTruthy();
+});
+
+/* ── 無くした入口で案内していないか ──────────────────────────────
+ *
+ * ナビを無くしたあとも、文言に「管理 → もっと →「連携」」が残っていた
+ * （鍵の入れ方・保存先の案内・作った物の在り処）。押す所が無い案内は、
+ * 案内が無いより悪い。サーバー側の文は api/test_screen_names.py で見ている。
+ * 数えるのは文字列だけ（コメントは経緯の記録なので外す）。 */
+const OLD_NAV = /管理\s?→|もっと\s?→|「管理」|「もっと」|管理タブ|下のナビ/;
+
+function withoutComments(code: string): string {
+  return code
+    .replace(/\/\*[\s\S]*?\*\//g, "")          // /* … */ と {/* … */}
+    .replace(/(^|[^:"'`])\/\/.*$/gm, "$1");     // // …（https:// は残す）
+}
+
+function sourceFiles(dir: string): string[] {
+  return readdirSync(dir).flatMap((name) => {
+    const p = join(dir, name);
+    if (statSync(p).isDirectory()) return sourceFiles(p);
+    return /\.(ts|tsx)$/.test(name) ? [p] : [];
+  });
+}
+
+test("画面の文言が、無くした入口（管理・もっと・下のナビ）を指していない", () => {
+  const bad: string[] = [];
+  const files = sourceFiles(join(process.cwd(), "src"));
+  expect(files.length, "読めたファイルが少ない（見張りが空振りしている）").toBeGreaterThan(50);
+  for (const file of files) {
+    withoutComments(readFileSync(file, "utf8")).split("\n").forEach((line, i) => {
+      if (OLD_NAV.test(line)) bad.push(`${file.replace(process.cwd() + "/", "")}:${i + 1}: ${line.trim().slice(0, 80)}`);
+    });
+  }
+  expect(bad, `無くした入口で案内している:\n${bad.join("\n")}`).toEqual([]);
+});
+
+test("見張りが空振りしていない", () => {
+  for (const s of ["管理 → もっと →「連携」", "管理 →「ボード」で確認できます", "下のナビの裏"]) {
+    expect(OLD_NAV.test(s), s).toBe(true);
+  }
+  for (const s of ["在庫管理アプリ", "「もっと〇〇して」", "入力欄の「＋」→「連携」"]) {
+    expect(OLD_NAV.test(s), s).toBe(false);
+  }
+  // コメントは数えない・文字列の中の https:// は消さない
+  expect(withoutComments('// 管理 → もっと\nconst a = "https://x";')).toBe('\nconst a = "https://x";');
 });

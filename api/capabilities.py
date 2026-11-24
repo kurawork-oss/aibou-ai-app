@@ -53,7 +53,7 @@ PACK_ORDER = ["core", "make", "share", "dev", "income"]
 # yomi  … 読み（かな）と英語。日本語入力はかなを通るので、これが無いと
 #          「#がぞう」と打った人が「画像」を見つけられない
 # tool  … 直行できる道具（tools._DISPATCH の名前）。無い物は画面を開くだけ
-# view  … 開く画面（管理タブの中身、または専用画面）
+# view  … 開く画面（会話の上に開く画面。webapp/src/lib/chatActions.ts）
 # needs … これが繋がっていないと使えない（oauth.PROVIDERS の名前 or 鍵の名前）
 # arg   … # のあとに続けて書く物。説明に出す
 CAPABILITIES: List[dict] = [
@@ -133,8 +133,8 @@ CAPABILITIES: List[dict] = [
 
     # 自動化・ゴール。以前は「開発（コード・GitHub）」に入っていて、既定で
     # 切ってあった。名前からは分からず、しかも画面（ボード・ゴール）は
-    # かたまりに関係なく管理タブにいつも出ている——**画面では使えるのに、
-    # 会話で頼むと道具が無い**。入口と同じ基準に揃える（shell.ts）。
+    # かたまりに関係なく会話の「＋」にいつも出ている——**画面では使えるのに、
+    # 会話で頼むと道具が無い**。入口と同じ基準に揃える（chatActions.ts）。
     {"cmd": "自動化", "yomi": "じどうか automation", "label": "自動化フローを作る", "pack": "core",
      "tool": "create_automation", "arg": "フロー名", "icon": "⚡"},
     {"cmd": "自動化実行", "yomi": "じどうかじっこう run automation", "label": "自動化フローを動かす", "pack": "core",

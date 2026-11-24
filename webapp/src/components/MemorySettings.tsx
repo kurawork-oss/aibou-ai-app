@@ -106,7 +106,7 @@ export default function MemorySettings() {
        理由を言う。理由なく消えると「保存できないアプリ」に見える。 */
     const secret = secretReason(text);
     if (secret) {
-      setNote(`⚠ ${secret}。記憶ではなく、管理 → もっと →「連携」の、その連携の欄に入れてください。`);
+      setNote(`⚠ ${secret}。記憶ではなく、入力欄の「＋」→「連携」の、その連携の欄に入れてください。`);
       return;
     }
     setBusy(true);

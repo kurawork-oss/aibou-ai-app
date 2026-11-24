@@ -145,27 +145,33 @@ def test_every_mode_has_a_screenshot_that_actually_ships():
 
 
 def _nav_labels() -> set:
-    """画面の入口に並んでいる名前（webapp/src/lib/shell.ts の管理・もっと）。"""
+    """画面の入口に並んでいる名前（会話の「＋」の一覧。webapp/src/lib/chatActions.ts の
+    ACTIONS のうち、画面を開く物）。ui-r126 で下のナビ（実行・管理・もっと）を無くし、
+    入口はここ1つになった。"""
     import re
     src = open(os.path.join(os.path.dirname(__file__), "..", "webapp", "src", "lib",
-                            "shell.ts"), encoding="utf-8").read()
-    block = src[src.index("export const MANAGE_SURFACES"):src.index("export function visibleSurfaces")]
-    return set(re.findall(r'label: "([^"]+)"', block))
+                            "chatActions.ts"), encoding="utf-8").read()
+    block = src[src.index("export const ACTIONS"):src.index("export const CONNECT_NAMES")]
+    out = set()
+    for entry in re.split(r"\n\s*\{ id: ", block)[1:]:
+        if 'kind: "view"' in entry:
+            out.add(re.search(r'label: "([^"]+)"', entry).group(1))
+    return out
 
 
 def test_every_screen_in_the_launcher_is_documented():
     """入口に並ぶ画面は、全部説明書にあること。**呼び名も入口と同じ**にする。
 
     以前は説明書の見出しが英語の札（CHAT・HOME・ARCHIVE…）で、その札は右上の
-    「Modes」の一覧にしか無かった。一覧を外して入口を 実行／管理 の1つにした
-    ので、説明書も入口の名前（今日・ボード・ファイル…）で引けるようにする。
+    「Modes」の一覧にしか無かった。入口を1つ（いまは会話の「＋」）にしたので、
+    説明書も入口の名前（今日・ボード・ファイル…）で引けるようにする。
     """
     documented = {m["label"] for m in guide.modes()}
     labels = _nav_labels() - {"説明書"}          # 説明書そのものは載せない
     assert len(labels) >= 12, f"入口の名前が読めていない: {labels}"
     missing = sorted(labels - documented)
     assert not missing, f"説明書に無い画面がある: {missing}"
-    assert "実行" in documented
+    assert "会話" in documented
 
 
 def test_guide_does_not_promise_features_that_do_not_exist():

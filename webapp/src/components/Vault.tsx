@@ -333,7 +333,7 @@ export default function Vault() {
             {storage === "none" && (
               <p className="mt-1 text-[10px] leading-relaxed" style={{ color: "#ff9b9b" }}>
                 ※ いま保存先が繋がっていないので、作っても残りません
-                （管理 → もっと →「連携」→ Supabase から繋いでください）。
+                （入力欄の「＋」→「連携」→ Supabase から繋いでください）。
               </p>
             )}
             {storage === "ok" && (

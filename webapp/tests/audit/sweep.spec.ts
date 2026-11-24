@@ -167,17 +167,13 @@ test("全画面を回って、苦情・重複・はみ出しを集める", async
     findings.push(...await inspect(page, where));
   }
 
-  // 管理タブの「もっと」
-  where = "管理/もっと";
-  await goScreen(page, "TASKS");
-  await page.waitForTimeout(1000);
-  const more = page.getByRole("button", { name: /もっと/ });
-  if (await more.count()) {
-    await more.first().click();
-    await page.waitForTimeout(500);
-    findings.push(...await inspect(page, where));
-    await more.first().click();
-  }
+  // 会話の「＋」（できること）の一覧
+  where = "会話/できること";
+  await goScreen(page, "CHAT");
+  await page.getByRole("button", { name: "できること", exact: true }).click();
+  await page.waitForTimeout(500);
+  findings.push(...await inspect(page, where));
+  await page.keyboard.press("Escape");
 
   await page.getByLabel("Settings").click();
   await page.waitForTimeout(1500);

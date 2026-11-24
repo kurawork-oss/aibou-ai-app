@@ -24,7 +24,7 @@
  *
  * 閉じても失われない
  * ------------------
- * 出た物は生成物として保存済みなので、閉じても「管理 → ファイル」から
+ * 出た物は生成物として保存済みなので、閉じても「ファイル」から
  * 開き直せる。**閉じると消える物は置かない**——消えるかもしれない物を
  * 前に置かれると、人は閉じられなくなる。
  *
@@ -85,7 +85,7 @@ export default function Canvas({
   items: MadeItem[];
   open: boolean;
   /**
-   * スマホで、下に空けておく高さ（入力欄と下のナビのぶん）。
+   * スマホで、下に空けておく高さ（入力欄のぶん）。
    *
    * ここを 0 にして画面いっぱいに出すと、見た直後にやりたい
    * 「直して」「もっと」のために、毎回閉じさせることになる。
@@ -214,7 +214,7 @@ export default function Canvas({
               onClick={() => { onClose(); onOpenFiles(); }}
               className="min-h-[44px] w-full rounded-forge border border-panel text-[11px] text-muted transition hover:text-fg-strong"
             >
-              閉じても「管理 → ファイル」に残ります（開く）
+              閉じても「ファイル」に残ります（開く）
             </button>
           </div>
         )}

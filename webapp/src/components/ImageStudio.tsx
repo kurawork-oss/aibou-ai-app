@@ -353,7 +353,7 @@ function Zoom({ images, index, prompt, onNavigate, onClose }: {
   const cur = images[index];
   useEffect(() => {
     const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") { e.preventDefault(); onClose(); }
       else if (e.key === "ArrowLeft") onNavigate((index - 1 + images.length) % images.length);
       else if (e.key === "ArrowRight") onNavigate((index + 1) % images.length);
     };

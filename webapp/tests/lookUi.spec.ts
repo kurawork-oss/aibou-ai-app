@@ -481,7 +481,7 @@ async function bodyContrast(page: Page, bg: string): Promise<number> {
 
   const probe = await page.evaluate(() => {
     const el = [...document.querySelectorAll("p,div,span")]
-      .find((e) => e.children.length === 0 && e.textContent?.includes("話しかけるか入力して"));
+      .find((e) => e.children.length === 0 && e.textContent?.includes("なんでも頼んでください"));
     if (!el) return null;
     const r = el.getBoundingClientRect();
     const color = getComputedStyle(el).color;

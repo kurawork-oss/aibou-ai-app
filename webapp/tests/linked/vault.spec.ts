@@ -15,7 +15,7 @@
  */
 
 import { test, expect, type Page } from "@playwright/test";
-import { enterApp, mockBackend, type Backend } from "./backend";
+import { enterApp, mockBackend, type Backend, openManage } from "./backend";
 
 /** 入れ物を1つ持っている状態にする。 */
 function withVault(be: Backend) {
@@ -30,9 +30,7 @@ function withVault(be: Backend) {
 
 /** 資料の画面を開いて、入れ物を選ぶところまで。 */
 async function openNotebook(page: Page) {
-  await page.getByLabel("Mobile navigation").getByText("管理", { exact: true }).click();
-  await page.getByRole("button", { name: /もっと/ }).click();
-  await page.getByRole("button", { name: /資料/ }).click();
+  await openManage(page, "資料");
   await expect(page.getByText("資料 とは")).toBeVisible({ timeout: 10_000 });
   // 入れ物は押せる物として並ぶ（説明文にも同じ言葉が出るので、押せる方を取る）
   await page.getByRole("button", { name: /社内規程/ }).first().click();
@@ -166,9 +164,7 @@ test("答えられなかったときは、そう言う（黙って空にしな�
 });
 
 async function openVaultEmpty(page: Page) {
-  await page.getByLabel("Mobile navigation").getByText("管理", { exact: true }).click();
-  await page.getByRole("button", { name: /もっと/ }).click();
-  await page.getByRole("button", { name: /資料/ }).click();
+  await openManage(page, "資料");
   await expect(page.getByText("資料 とは")).toBeVisible({ timeout: 10_000 });
 }
 

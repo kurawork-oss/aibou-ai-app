@@ -427,7 +427,7 @@ def _do_board_add_note(params: dict) -> str:
     if isinstance(res, dict) and res.get("error"):
         return f"付箋の追加に失敗しました：{res['error']}"
     where = f"「{res.get('board')}」" if res.get("board") else "ホワイトボード"
-    return f"{where}に付箋を追加しました（現在 {res.get('count')}枚）。管理 →「ボード」で確認できます。"
+    return f"{where}に付箋を追加しました（現在 {res.get('count')}枚）。入力欄の「＋」→「ボード」で確認できます。"
 
 
 def _do_watch_report(params: dict) -> str:
@@ -1446,7 +1446,7 @@ def _do_create_automation(params: dict) -> str:
     if isinstance(flow, dict) and flow.get("error"):
         return f"自動化の作成に失敗しました：{flow['error']}"
     n = len(flow.get("steps") or [])
-    return f"自動化フロー「{name}」を作成しました（{n}ステップ）。管理 →「ボード」から実行・編集できます。"
+    return f"自動化フロー「{name}」を作成しました（{n}ステップ）。入力欄の「＋」→「ボード」から実行・編集できます。"
 
 
 def _do_run_automation(params: dict) -> str:
@@ -1481,7 +1481,7 @@ def _do_create_mission(params: dict) -> str:
     if isinstance(m, dict) and m.get("error"):
         return f"ミッションの作成に失敗しました：{m['error']}"
     n = len(m.get("steps") or [])
-    return f"オートパイロットのミッション「{goal}」を作成しました（{n}ステップに分解）。管理 → もっと →「ゴール」で進められます。"
+    return f"オートパイロットのミッション「{goal}」を作成しました（{n}ステップに分解）。入力欄の「＋」→「ゴール」で進められます。"
 
 
 # === 資料（保管庫）に聞く ================================================
@@ -1494,7 +1494,7 @@ def _pick_notebook(want: str, question: str):
     books = [b for b in (vault.list_notebooks() or []) if isinstance(b, dict) and b.get("id")]
     if not books:
         return None, ("資料の保管庫に、まだノートブックがありません。"
-                      "管理 → もっと →「資料」でノートブックを作って資料を入れると、ここから聞けます。")
+                      "入力欄の「＋」→「資料」でノートブックを作って資料を入れると、ここから聞けます。")
     want = (want or "").strip()
     if want:
         exact = [b for b in books if b.get("name") == want]
@@ -1528,7 +1528,7 @@ def _do_ask_vault(params: dict) -> str:
     name = nb.get("name") or "無題"
     if not nb.get("doc_count"):
         return (f"ノートブック「{name}」には、まだ資料が入っていません。"
-                "管理 → もっと →「資料」で資料を入れてから聞いてください。")
+                "入力欄の「＋」→「資料」で資料を入れてから聞いてください。")
     res = vault.query(nb["id"], question)
     if not isinstance(res, dict) or res.get("error"):
         err = res.get("error") if isinstance(res, dict) else "応答が読めません"
@@ -1568,7 +1568,7 @@ def _do_vault_list(_params: dict) -> str:
     books = [b for b in (vault.list_notebooks() or []) if isinstance(b, dict) and b.get("id")]
     if not books:
         return ("資料の保管庫に、まだノートブックがありません。"
-                "管理 → もっと →「資料」でノートブックを作ると、資料を入れて聞けるようになります。")
+                "入力欄の「＋」→「資料」でノートブックを作ると、資料を入れて聞けるようになります。")
     lines = [f"資料の保管庫にあるノートブック（{len(books)}件）："]
     for i, b in enumerate(books[:20]):
         head = f"- 「{b.get('name')}」資料{b.get('doc_count', 0)}件"
@@ -1698,7 +1698,7 @@ def _do_sns_draft(params: dict) -> str:
                 else f"{post.get('length')}字")
         lines.append(f"案{i}（{size}）: {post.get('text')}" + (f" {tags}" if tags else ""))
         parts.append(f"### 案{i}（{size}）\n\n{post.get('text')}" + (f"\n\n{tags}" if tags else ""))
-    lines.append("投稿するときは、管理 → もっと →「SNS」で中身を確かめてから押してください"
+    lines.append("投稿するときは、入力欄の「＋」→「SNS」で中身を確かめてから押してください"
                  "（自動では投稿しません）。")
     _present({"kind": "document", "title": f"{label}の投稿文の案",
               "content": "\n\n---\n\n".join(parts)})
@@ -1728,7 +1728,7 @@ def _make_site(params: dict, kind: str) -> str:
     _present({"kind": "site", "artifact_id": (meta or {}).get("id", ""), "title": title,
               "html": html, "app": kind == "app"})
     how = "実際に操作できます" if kind == "app" else "そのまま表示しています"
-    saved = "管理 →「ファイル」に残りました。" if (meta or {}).get("id") else "（保存はできませんでした）"
+    saved = "「ファイル」に残りました（入力欄の「＋」から開けます）。" if (meta or {}).get("id") else "（保存はできませんでした）"
     return (f"{what}「{title}」を作りました（1枚で完結するHTML・{len(html):,}字）。"
             f"会話の隣で{how}。{saved}")
 
@@ -1792,7 +1792,7 @@ def _do_screen_look(params: dict) -> str:
         return "画面の画像が返ってきませんでした。"
     model = config.get_gemini_model()
     if model is None:
-        return "画面を読むには Gemini の鍵が要ります（管理 → もっと →「連携」→ Gemini）。"
+        return "画面を読むには Gemini の鍵が要ります（入力欄の「＋」→「連携」→ Gemini）。"
     try:
         resp = model.generate_content([
             _SCREEN_ASK + question,
@@ -1830,7 +1830,7 @@ def _do_seo_pages(params: dict) -> str:
     failed = res.get("failed") or []
     if failed:
         lines.append(f"作れなかった物が{len(failed)}件あります（{failed[0].get('error')}）。")
-    lines.append("公開するときは、管理 → もっと →「副業」→「SEOページ」で中身を確かめてから切り替えてください。")
+    lines.append("公開するときは、入力欄の「＋」→「副業」→「SEOページ」で中身を確かめてから切り替えてください。")
     return "\n".join(lines)
 
 
@@ -1849,7 +1849,7 @@ def _do_newsletter_draft(params: dict) -> str:
     _present({"kind": "document", "title": f"ニュースレター「{res.get('subject')}」（下書き）",
               "content": body})
     return (f"ニュースレター「{res.get('subject')}」の下書きを作りました（{len(body)}字・送っていません）。"
-            "配信するときは、管理 → もっと →「副業」→「ニュースレター」で中身を確かめてから押してください。")
+            "配信するときは、入力欄の「＋」→「副業」→「ニュースレター」で中身を確かめてから押してください。")
 
 
 def _do_run_workflow(params: dict) -> str:
@@ -1860,7 +1860,7 @@ def _do_run_workflow(params: dict) -> str:
         return "流すワークフローの名前が空です。"
     flows = [w for w in (studio.list_workflows() or []) if isinstance(w, dict) and w.get("id")]
     if not flows:
-        return "ワークフローはまだありません。管理 → もっと →「つくる」→「AI STUDIO」で作れます。"
+        return "ワークフローはまだありません。入力欄の「＋」→「つくる」→「AI STUDIO」で作れます。"
     exact = [w for w in flows if (w.get("name") or "") == want]
     part = [w for w in flows if want in (w.get("name") or "")]
     hits = exact if len(exact) == 1 else part
@@ -1968,7 +1968,7 @@ _TOOLS_THAT_PERSIST = {
 
 _NO_STORAGE_MSG = (
     "保存先がつながっていないため、保存できませんでした。"
-    "管理 → もっと →「連携」→ Supabase から自分のデータベースを接続してください。"
+    "入力欄の「＋」→「連携」→ Supabase から自分のデータベースを接続してください。"
     "接続するまで、作ったものは残りません。"
 )
 

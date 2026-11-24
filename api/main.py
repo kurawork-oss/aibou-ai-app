@@ -401,7 +401,7 @@ async def require_storage(_db: str = Depends(use_own_database)) -> None:
     raise HTTPException(
         status_code=409,
         detail="保存先がつながっていないため、保存できませんでした。"
-               "管理 → もっと →「連携」→ Supabase から自分のデータベースを接続してください。"
+               "入力欄の「＋」→「連携」→ Supabase から自分のデータベースを接続してください。"
                "接続するまで、作ったものは残りません。",
     )
 
@@ -1172,7 +1172,7 @@ def _storage_report(bearer: str, x_supabase: str) -> dict:
                 "保存される": True}
     return {"状態": "保存先が未接続です。作ったものは保存されません",
             "保存される": False,
-            "対処": "管理 → もっと →「連携」→ Supabase から自分のデータベースを接続してください"}
+            "対処": "入力欄の「＋」→「連携」→ Supabase から自分のデータベースを接続してください"}
 
 
 @app.get("/diagnose")
@@ -1300,7 +1300,7 @@ async def chat(req: ChatRequest, _auth: None = Depends(require_auth)):
     # AIプロバイダ（Gemini か HuggingFace）が1つも無ければ crash させず案内。
     if llm.active_provider() == "none":
         async def err_stream():
-            yield _sse({"error": "AI未設定です。管理 → もっと →「連携」→ Gemini（または HuggingFace）で鍵を入れてください。"})
+            yield _sse({"error": "AI未設定です。入力欄の「＋」→「連携」→ Gemini（または HuggingFace）で鍵を入れてください。"})
             yield _sse({"done": True})
         return _sse_response(err_stream())
 
@@ -1489,7 +1489,7 @@ async def agent_act(req: AgentActRequest, _auth: None = Depends(require_auth)):
     繰り返し、進捗を data:{"phase":...} で実況、最後に final→done を送る。"""
     if llm.active_provider() == "none":
         async def err_stream():
-            yield _sse({"phase": "error", "detail": "AI未設定です。管理 → もっと →「連携」→ Gemini（または HuggingFace）で鍵を入れてください。"})
+            yield _sse({"phase": "error", "detail": "AI未設定です。入力欄の「＋」→「連携」→ Gemini（または HuggingFace）で鍵を入れてください。"})
             yield _sse({"phase": "done", "steps": 0})
         return _sse_response(err_stream())
 
@@ -2279,7 +2279,7 @@ async def guide(_auth: None = Depends(require_auth), claims: dict = Depends(curr
 
     2つめが長いあいだ抜けていた。既定では 発信・開発・副業 が切ってあるので、
     初期状態の人は説明書で「コードを書く」「投稿案」を読み、そこへ行こうと
-    して**管理タブのどこにも入口が無い**ことに気づく。案内だけあって行き先が
+    して**入口がどこにも無い**ことに気づく。案内だけあって行き先が
     無いのは、機能が無いより悪い。
     """
     owner = is_owner_claims(claims)
@@ -2517,7 +2517,7 @@ async def life_chat(req: ChatRequest, _auth: None = Depends(require_auth)):
     通常 /chat と違いツール実行は無し — 純粋な相談相手として振る舞う。"""
     if llm.active_provider() == "none":
         async def err_stream():
-            yield _sse({"error": "AI未設定です。管理 → もっと →「連携」→ Gemini（または HuggingFace）で鍵を入れてください。"})
+            yield _sse({"error": "AI未設定です。入力欄の「＋」→「連携」→ Gemini（または HuggingFace）で鍵を入れてください。"})
             yield _sse({"done": True})
         return _sse_response(err_stream())
 

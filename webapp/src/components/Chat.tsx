@@ -41,6 +41,11 @@ import { useApproval } from "@/lib/approvalPref";
 import { usePhone } from "@/lib/usePhone";
 import { enterSends, enterSubmits } from "@/lib/enterKey";
 import CommandPalette, { readHashInput } from "@/components/CommandPalette";
+import ActionMenu from "@/components/ActionMenu";
+import {
+  actionById, actionVerb, filterActions, matchAction, readSlashInput, visibleActions,
+  type ActionTarget, type ChatAction,
+} from "@/lib/chatActions";
 import Canvas, { pushItem } from "@/components/Canvas";
 import { PACKS_CHANGED } from "@/lib/shell";
 import { useSpeechRecognition } from "@/lib/voice";
@@ -138,6 +143,11 @@ interface Message {
   await?: PendingAct;
   /** 承認して押したブラウザ操作（手順として残せる）。 */
   savable?: Savable;
+  /**
+   * 会話から開いた画面・設定・つなぐ先（lib/chatActions.ts）。
+   * 押せば、あとからでも同じ所が開く。AIの返事ではないので、再生成は出さない。
+   */
+  card?: { action?: string; connect?: { service: string; label: string } };
 }
 
 export interface ChatProps {
@@ -154,6 +164,14 @@ export interface ChatProps {
    * ここは実際に開く。
    */
   onOpenView?: (view: string) => void;
+  /**
+   * 「できること」（＋・/・短い頼み）で選ばれた行き先を開く。画面・設定の
+   * タブ・つなぐ先・カメラ操作。page.tsx が持つ（画面を開けるのはそこだけ）。
+   */
+  onAction?: (target: ActionTarget) => void;
+  /** 持ち主かどうか・使う機能（「できること」の一覧を絞る）。分からなければ null。 */
+  isOwner?: boolean | null;
+  packs?: string[] | null;
 }
 
 const HISTORY_LIMIT = 12;
@@ -204,7 +222,9 @@ function saveConvos(convos: Convo[]): void {
   }
 }
 
-export default function Chat({ settings, onStateChange, voiceReplies = true, onOpenView }: ChatProps) {
+export default function Chat({
+  settings, onStateChange, voiceReplies = true, onOpenView, onAction, isOwner = null, packs = null,
+}: ChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -252,7 +272,7 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
     if (!el || typeof ResizeObserver === "undefined") return;
     const measure = () => {
       const r = el.getBoundingClientRect();
-      // 画面の下端から入力欄の上端までの高さ（下のナビも含まれる）
+      // 画面の下端から入力欄の上端までの高さ
       setComposerH(Math.max(0, Math.round(window.innerHeight - r.top)));
     };
     measure();
@@ -931,6 +951,46 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
      AIへ回す。ここが崩れると「呪文を覚えないと使えないアプリ」になる。 */
   const hash = readHashInput(input);
 
+  /* ── 「できること」（＋・/・短い頼み） ───────────────────────────
+     画面を選ばせる入口を、会話の中に1つだけ置く（lib/chatActions.ts）。 */
+  const slash = readSlashInput(input);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const actions = useMemo(() => visibleActions(undefined, { isOwner, packs }), [isOwner, packs]);
+  const slashHits = slash.active ? filterActions(actions, slash.query) : [];
+
+  /**
+   * 行き先を開く。言葉で頼まれたとき（asked あり）だけ、会話にも
+   * 「開いた」とカードを残す（あとから押し直せるように）。「＋」や「/」で
+   * 選んだだけなら残さない——開くたびに履歴に会話が1つ増えて散らかるので。
+   * 入力欄は、頼んだ文（「タスク見せて」「/たす」）のときだけ空にする。
+   * 「＋」から選んだときは書きかけの文を消さない。
+   */
+  const runAction = useCallback((
+    target: ActionTarget, card: Message["card"], said: string, asked?: string, clearInput = true,
+  ) => {
+    setMenuOpen(false);
+    if (clearInput) setInput("");
+    setNote("");
+    if (!onAction) return;
+    if (asked) {
+      pinnedRef.current = true;
+      gestureAtRef.current = 0;
+      setMessages((prev) => [
+        ...prev,
+        { id: uid(), role: "user" as const, content: asked },
+        { id: uid(), role: "assistant" as const, content: said, card },
+      ]);
+    }
+    onAction(target);
+  }, [onAction]);
+
+  const pickAction = useCallback((a: ChatAction, asked?: string, clearInput = true) => {
+    const said = a.target.kind === "settings" ? `設定の「${a.label}」を開きました。`
+      : a.target.kind === "camera" ? "カメラ操作を始めます。右上の小窓に手の線が出れば動いています。"
+        : `「${a.label}」を開きました。終わったら「会話に戻る」で、ここに戻れます。`;
+    runAction(a.target, { action: a.id }, said, asked, clearInput);
+  }, [runAction]);
+
   const runShortcut = useCallback(async (text: string): Promise<boolean> => {
     let res: CommandResult;
     try {
@@ -953,7 +1013,7 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
         setNote("");
         onOpenView(res.view);
       } else {
-        setNote(`「${res.label}」は管理タブから開けます。`);
+        setNote(`「${res.label}」は、入力欄の「＋」から開けます。`);
       }
       return true;
     }
@@ -1023,6 +1083,22 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
       if (await runShortcut(text)) return;
     }
 
+    // 「タスク見せて」「声を変えて」「Gmail とつないで」だけの短い頼みは、
+    // AIに回さずその場で開く（それ以外の文は、今まで通りAIへ）。
+    if (!pendingImage && onAction) {
+      const hit = matchAction(text, { isOwner, packs });
+      if (hit?.kind === "action") { pickAction(hit.action, text); return; }
+      if (hit?.kind === "connect") {
+        runAction(
+          { kind: "connect", service: hit.service },
+          { connect: { service: hit.service, label: hit.label } },
+          `${hit.label} とつなぐ画面を開きました。つなぎ終わったら、続きをここで頼んでください。`,
+          text,
+        );
+        return;
+      }
+    }
+
     if (listening) stopMic();
     resetMic();
     stopReply();
@@ -1049,7 +1125,7 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
     const history = buildHistory();
     await runTurn(text, image ? { base64: image.base64, mime: image.mime } : null, assistantMsg.id, history);
   }, [input, pendingImage, streaming, listening, stopMic, resetMic, buildHistory,
-      runTurn, stopReply, runShortcut]);
+      runTurn, stopReply, runShortcut, onAction, isOwner, packs, pickAction, runAction]);
 
   /** 会話モード開始：マイクを開き、以後は 無音→自動送信→読み上げ→再びマイク のループ。 */
   const enterVoiceMode = useCallback(() => {
@@ -1216,12 +1292,14 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
       // Enter で送る。変換を確定する Enter（Safari の keyCode 229 を含む）と、
       // 指で打つ端末の Enter（改行。送るのは ➤）は送らない。Ctrl/Cmd+Enter は
       // どこでも送る。決まりは lib/enterKey.ts の1か所。
+      // 「できること」の一覧が出ている間の Enter は、一覧の選択（ActionMenu が拾う）
+      if ((slash.active && slashHits.length > 0) || menuOpen) return;
       if (enterSends(e)) {
         e.preventDefault();
         void send();
       }
     },
-    [send],
+    [send, slash.active, slashHits.length, menuOpen],
   );
 
   const canSend = (input.trim().length > 0 || !!pendingImage) && !streaming;
@@ -1295,6 +1373,11 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
               } : undefined}
               onSaveRecipe={m.savable && !m.savable.saved
                 ? (name) => void saveAsRecipe(m.id, m.savable!, name) : undefined}
+              onCard={m.card && onAction ? () => {
+                const a = m.card?.action ? actionById(m.card.action) : undefined;
+                if (a) onAction(a.target);
+                else if (m.card?.connect) onAction({ kind: "connect", service: m.card.connect.service });
+              } : undefined}
             />
           ))}
         </AnimatePresence>
@@ -1422,18 +1505,19 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
         )}
 
         <div className="panel relative flex items-end gap-1.5 p-2">
-          {/* Image attach */}
+          {/* ＋ … できること（画面・設定・つなぐ・カメラ）と、画像をつける。
+              行き先を選ぶ入口は、ここ1つ（下のナビ・管理タブは無くした）。 */}
           <button
             type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-lg text-muted transition hover:bg-white/5 hover:text-fg-strong"
-            aria-label="Attach image"
-            title="Attach image"
+            data-action-menu-toggle
+            onClick={() => setMenuOpen((v) => !v)}
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-[22px] leading-none text-muted transition hover:bg-white/5 hover:text-fg-strong"
+            aria-label="できること"
+            aria-expanded={menuOpen}
+            title="できること（画面・設定・つなぐ・画像）"
+            style={menuOpen ? { color: "var(--fg-strong)", background: "var(--btn-bg)" } : undefined}
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 8.5A2.5 2.5 0 0 1 5.5 6h1.2l1-1.6A1.5 1.5 0 0 1 9 3.7h6a1.5 1.5 0 0 1 1.3.7l1 1.6h1.2A2.5 2.5 0 0 1 21 8.5v8A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z" />
-              <circle cx="12" cy="12" r="3.2" />
-            </svg>
+            ＋
           </button>
           <input
             ref={fileInputRef}
@@ -1442,6 +1526,18 @@ export default function Chat({ settings, onStateChange, voiceReplies = true, onO
             className="hidden"
             onChange={onPickImage}
           />
+
+          {/* できること: ＋ で開く一覧、または先頭の / で打ちながら絞る */}
+          {(menuOpen || slash.active) && (
+            <ActionMenu
+              items={actions}
+              query={slash.active ? slash.query : ""}
+              /* 「/」で選んだときは打った「/たす」を消す。「＋」なら書きかけを残す */
+              onPick={(a) => pickAction(a, undefined, slash.active)}
+              onClose={() => { setMenuOpen(false); if (slash.active) setInput(""); }}
+              onAttach={menuOpen && !slash.active ? () => { setMenuOpen(false); fileInputRef.current?.click(); } : undefined}
+            />
+          )}
 
           {/* # の候補。打ちながら絞る（一覧メニューにしない）。 */}
           {hash.active && commands.length > 0 && (
@@ -1890,8 +1986,10 @@ function MicIcon() {
   );
 }
 
-function MessageBubble({ message, onRegenerate, onApprove, onReject, onAlways, onSaveRecipe }: {
+function MessageBubble({ message, onRegenerate, onApprove, onReject, onAlways, onSaveRecipe, onCard }: {
   message: Message;
+  /** 会話から開いた所を、もう一度開く。 */
+  onCard?: () => void;
   onRegenerate?: () => void;
   onApprove?: () => void;
   onReject?: () => void;
@@ -2073,10 +2171,12 @@ function MessageBubble({ message, onRegenerate, onApprove, onReject, onAlways, o
             <Markdown text={message.content} />
           </div>
         )}
+
+        {message.card && <ActionCardRow card={message.card} onOpen={onCard} />}
       </div>
 
       {/* Assistant message actions — copy (ChatGPT parity) + regenerate on the last turn. */}
-      {settled && (
+      {settled && !message.card && (
         <div className="mt-1 flex items-center gap-3 px-1">
           {!message.error && <CopyButton text={message.content} />}
           {onRegenerate && (
@@ -2094,6 +2194,32 @@ function MessageBubble({ message, onRegenerate, onApprove, onReject, onAlways, o
       )}
       </div>
     </motion.div>
+  );
+}
+
+/** 会話から開いた画面・設定・つなぐ先のカード。押せば、もう一度そこが開く。 */
+function ActionCardRow({ card, onOpen }: { card: NonNullable<Message["card"]>; onOpen?: () => void }) {
+  const a = card.action ? actionById(card.action) : undefined;
+  const title = a ? a.label : card.connect ? card.connect.label : "";
+  const hint = a ? a.hint : "つなぐと、会話から使えるようになります";
+  const mark = a ? a.mark : "⇄";
+  const verb = a ? actionVerb(a.target) : "つなぐ";
+  if (!title) return null;
+  return (
+    <div className="mt-2 flex items-center gap-2.5 rounded-forge border border-panel p-2" data-action-card={card.action ?? card.connect?.service}>
+      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-panel text-[14px] text-fg" aria-hidden>{mark}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[13px] text-fg-strong">{title}</span>
+        <span className="block truncate text-[11px] text-muted">{hint}</span>
+      </span>
+      {onOpen && (
+        <button type="button" onClick={onOpen}
+          className="shrink-0 rounded-forge border px-3 py-1.5 text-[12px] text-fg-strong"
+          style={{ borderColor: "var(--accent)", background: "var(--btn-bg)" }}>
+          {verb}
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -2179,9 +2305,16 @@ function EmptyState({ name }: { name: string }) {
       className="flex h-full flex-col items-center justify-center px-6 text-center"
     >
       <p className="label-mono text-glow text-sm text-fg-strong">{`${name} ONLINE`}</p>
-      <p className="mt-2 max-w-xs text-xs leading-relaxed text-muted">
-        話しかけるか入力して始めてください。画像を添付すればコアが解析します。マイクでハンズフリー会話もできます。
+      <p className="mt-2 max-w-sm text-xs leading-relaxed text-muted">
+        なんでも頼んでください。画面や設定も、ここから開けます。
       </p>
+      {/* 画面を選ぶナビは無い（ui-r126）。頼み方の例を、最初にだけ見せる */}
+      <ul className="mt-3 flex max-w-sm flex-wrap justify-center gap-1.5" aria-label="頼み方の例">
+        {["タスク見せて", "Gmail とつないで", "声を変えて", "明日の予定を教えて"].map((t) => (
+          <li key={t} className="rounded-full border border-panel px-2.5 py-1 text-[11px] text-fg">{t}</li>
+        ))}
+      </ul>
+      <p className="mt-3 text-[11px] text-muted">入力欄の「＋」で、できることの一覧が出ます。</p>
     </motion.div>
   );
 }
