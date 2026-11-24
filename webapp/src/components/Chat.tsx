@@ -22,6 +22,7 @@ import {
   type ChangeEvent,
   type ClipboardEvent,
   type KeyboardEvent,
+  type ReactNode,
 } from "react";
 import { coreStateOf, COMPLETED_MS, type CoreState } from "@/lib/coreState";
 import AgentTrace, { type AgentStep as TraceStep } from "@/components/AgentTrace";
@@ -172,6 +173,8 @@ export interface ChatProps {
   /** 持ち主かどうか・使う機能（「できること」の一覧を絞る）。分からなければ null。 */
   isOwner?: boolean | null;
   packs?: string[] | null;
+  /** 入力欄の上の列の右端に置く物（ペット。components/Pet.tsx）。 */
+  petSlot?: ReactNode;
 }
 
 const HISTORY_LIMIT = 12;
@@ -224,6 +227,7 @@ function saveConvos(convos: Convo[]): void {
 
 export default function Chat({
   settings, onStateChange, voiceReplies = true, onOpenView, onAction, isOwner = null, packs = null,
+  petSlot = null,
 }: ChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -987,7 +991,8 @@ export default function Chat({
   const pickAction = useCallback((a: ChatAction, asked?: string, clearInput = true) => {
     const said = a.target.kind === "settings" ? `設定の「${a.label}」を開きました。`
       : a.target.kind === "camera" ? "カメラ操作を始めます。右上の小窓に手の線が出れば動いています。"
-        : `「${a.label}」を開きました。終わったら「会話に戻る」で、ここに戻れます。`;
+        : a.target.kind === "pet" ? "ペットを選ぶ窓を開きました。"
+          : `「${a.label}」を開きました。終わったら「会話に戻る」で、ここに戻れます。`;
     runAction(a.target, { action: a.id }, said, asked, clearInput);
   }, [runAction]);
 
@@ -1088,6 +1093,11 @@ export default function Chat({
     if (!pendingImage && onAction) {
       const hit = matchAction(text, { isOwner, packs });
       if (hit?.kind === "action") { pickAction(hit.action, text); return; }
+      if (hit?.kind === "pet-hide") {
+        runAction({ kind: "pet", hide: true }, { action: hit.action.id },
+          "ペットを隠しました。また出すときは、このカードか「＋」の「ペット」から選べます。", text);
+        return;
+      }
       if (hit?.kind === "connect") {
         runAction(
           { kind: "connect", service: hit.service },
@@ -1438,11 +1448,16 @@ export default function Chat({
             <>
               {/* 確認の出し方は設定 →「基本」の1か所で決める（ここに切り替えは置かない）。
                   道具の数は書かない——足すたびに古くなる（「30種」のまま45種になっていた）。 */}
-              <span className="text-[11px] text-muted">
+              {/* いつも次の行に回す。同じ行に並べると、右端のペットが
+                  押し出されて、列が1段増えていた */}
+              <span className="order-last basis-full text-[11px] text-muted">
                 タスク・予定・資料作成・メール・検索などの道具を使って実際に動きます
               </span>
             </>
           )}
+          {/* ペット。**浮かせずに**この列の右端に並べる（上の「作った物」と
+              同じ理由: 浮かせると、切り替えや入力欄に重なって押せなくなる）。 */}
+          {petSlot && <div className="ml-auto flex items-center">{petSlot}</div>}
         </div>
 
         {pendingImage && (

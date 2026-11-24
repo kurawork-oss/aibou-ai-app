@@ -16,7 +16,9 @@ import { EXTENSIONS } from "../src/lib/extensions";
 const hit = (t: string, ctx = {}) => {
   const m = matchAction(t, ctx);
   if (!m) return null;
-  return m.kind === "action" ? m.action.id : `connect:${m.service}`;
+  if (m.kind === "action") return m.action.id;
+  if (m.kind === "pet-hide") return "pet-hide";
+  return `connect:${m.service}`;
 };
 
 test("画面を開く短い頼みは、その場で開く", () => {

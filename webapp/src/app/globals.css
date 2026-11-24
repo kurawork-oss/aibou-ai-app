@@ -1264,3 +1264,57 @@ html[data-skin="custom"] {
     font-size: 16px !important;
   }
 }
+
+/* ── ペット（components/Pet.tsx・lib/pets.ts）───────────────────────
+   動きで様子を見せる。遠目でも区別が付くように、様子ごとに動きの種類を
+   変える（速さだけ変えると、見分けられない）。
+     待機 … ゆっくり息をする / 聞いている … 首をかしげる
+     作業中 … 弾む＋点が流れる / 確認待ち … 跳ねて「！」が脈打つ
+     できた … 2回はねて止まる / 困った … しょんぼり傾く
+   動きを減らす設定では、止まった絵にする（.pet-still と下の media）。 */
+.pet-art .pet-body { transform-box: fill-box; transform-origin: 50% 100%; }
+.pet-art .pet-shadow,
+.pet-art .pet-eye,
+.pet-art .pet-mark { transform-box: fill-box; transform-origin: 50% 50%; }
+.pet-art .pet-eye { animation: pet-blink 4.2s infinite; }
+.pet-art .pet-antenna { animation: pet-glow 1.4s ease-in-out infinite; }
+.pet-art[data-mood="idle"] .pet-body { animation: pet-breathe 3.6s ease-in-out infinite; }
+.pet-art[data-mood="listening"] .pet-body { animation: pet-tilt 1.6s ease-in-out infinite; }
+.pet-art[data-mood="running"] .pet-body { animation: pet-bounce 0.7s ease-in-out infinite; }
+.pet-art[data-mood="running"] .pet-shadow { animation: pet-shadow 0.7s ease-in-out infinite; }
+.pet-art[data-mood="running"] .pet-dots circle { animation: pet-dot 1.05s ease-in-out infinite; }
+.pet-art[data-mood="running"] .pet-dots circle:nth-child(2) { animation-delay: 0.15s; }
+.pet-art[data-mood="running"] .pet-dots circle:nth-child(3) { animation-delay: 0.3s; }
+.pet-art[data-mood="needs_input"] .pet-body { animation: pet-hop 1.1s ease-in-out infinite; }
+.pet-art[data-mood="needs_input"] .pet-mark { animation: pet-pulse 1.1s ease-in-out infinite; }
+.pet-art[data-mood="ready"] .pet-body { animation: pet-cheer 0.9s ease-out 2; }
+.pet-art[data-mood="blocked"] .pet-body { animation: pet-droop 2.4s ease-in-out infinite; }
+
+@keyframes pet-breathe { 0%, 100% { transform: scale(1, 1); } 50% { transform: scale(1.03, 0.97); } }
+@keyframes pet-tilt { 0%, 100% { transform: rotate(-4deg); } 50% { transform: rotate(4deg); } }
+@keyframes pet-bounce {
+  0%, 100% { transform: translateY(0) scale(1.03, 0.97); }
+  50% { transform: translateY(-5px) scale(0.98, 1.02); }
+}
+@keyframes pet-shadow { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(0.8); opacity: 0.6; } }
+@keyframes pet-dot { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
+@keyframes pet-hop {
+  0%, 55%, 100% { transform: translateY(0); }
+  20% { transform: translateY(-8px); }
+  35% { transform: translateY(0) scale(1.05, 0.95); }
+}
+@keyframes pet-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.18); } }
+@keyframes pet-cheer {
+  0% { transform: translateY(0); }
+  30% { transform: translateY(-9px) rotate(-6deg); }
+  60% { transform: translateY(0) rotate(4deg); }
+  100% { transform: none; }
+}
+@keyframes pet-droop { 0%, 100% { transform: translateY(2px) rotate(-3deg); } 50% { transform: translateY(3px) rotate(-6deg); } }
+@keyframes pet-blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(0.1); } }
+@keyframes pet-glow { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+
+.pet-still, .pet-still * { animation: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  .pet-art, .pet-art * { animation: none !important; }
+}
